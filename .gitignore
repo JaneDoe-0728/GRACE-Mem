@@ -1,0 +1,63 @@
+# Python cache — all subdirectories
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+models
+KG/storage/artifacts
+.claude/skills
+.codex/skills
+experiment/locomo/output
+experiment/longmem/script_data
+experiment/longmem/output
+experiment/locomo/data
+experiment/longmem/sample
+experiment/longmem/old longmem result
+experiment/longmem/sample_question
+experiment/plus_multisample_runs/
+experiment/longmem/longmem_missing_data/
+experiment/logs
+experiment/data
+experiment/vdb_cache
+experiment/longmem/error_analysis
+experiment/docs/
+experiment/temp
+logs/
+assets/
+KG/artifacts
+.pytest_cache
+.venv
+.claude
+*.zip
+*.log
+*.jsonl
+*.json
+.codex/
+experiment/sample
+experiment/old longmem result
+experiment/sample_question
+logs/
+test/logs/
+# AutoResearch evolve state (run-time, not architecture)
+experiment/locomo/autoresearch/findings.md
+experiment/locomo/autoresearch/progress.md
+experiment/locomo/autoresearch/leaderboard.csv
+experiment/locomo/autoresearch/research_log.jsonl
+experiment/locomo/autoresearch/controller_log.jsonl
+experiment/locomo/autoresearch/iteration_counter.json
+experiment/locomo/autoresearch/best_score.json
+experiment/locomo/autoresearch/hypotheses.md
+experiment/locomo/autoresearch/diagnosis.md
+experiment/locomo/autoresearch/.outer_controller.lock
+experiment/locomo/autoresearch/controller_logs/
+experiment/locomo/autoresearch/patches/
+experiment/locomo/autoresearch/oss-20b-0515/
+experiment/longmem/ablation/results
+test/fixed_output/results/
+
+# 實驗資料產物(勿入版控)
+experiment/locomo/_iterlogs/
+experiment/locomo/autoresearch/experiment/
+
+# Local secrets — never commit
+.env

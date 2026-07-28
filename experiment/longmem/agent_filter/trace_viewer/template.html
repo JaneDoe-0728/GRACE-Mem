@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grep-Agent Trace Viewer</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --surface:#ffffff; --surface2:#f0f2f5; --border:#dfe3e8;
+    --ink:#1b1f24; --ink2:#4a5259; --muted:#8a929b;
+    --good:#1a7f4b; --good-bg:#e5f3ec; --crit:#c0362c; --crit-bg:#fbe9e7;
+    --warn:#9a6400; --warn-bg:#f7edd8; --info:#245ea8; --info-bg:#e5eefb;
+    --drop:#8a929b; --drop-bg:#eceef1;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#15181c; --surface:#1e2228; --surface2:#252a31; --border:#333a43;
+      --ink:#e8ebee; --ink2:#aeb6bf; --muted:#79828c;
+      --good:#43c98a; --good-bg:#153025; --crit:#ff7a6b; --crit-bg:#331d1a;
+      --warn:#e2ab4c; --warn-bg:#302713; --info:#79b2ff; --info-bg:#16233a;
+      --drop:#79828c; --drop-bg:#262b31;
+    }
+  }
+  :root[data-theme="light"]{color-scheme:light;
+    --bg:#f6f7f9;--surface:#fff;--surface2:#f0f2f5;--border:#dfe3e8;--ink:#1b1f24;--ink2:#4a5259;--muted:#8a929b;
+    --good:#1a7f4b;--good-bg:#e5f3ec;--crit:#c0362c;--crit-bg:#fbe9e7;--warn:#9a6400;--warn-bg:#f7edd8;--info:#245ea8;--info-bg:#e5eefb;--drop:#8a929b;--drop-bg:#eceef1;}
+  :root[data-theme="dark"]{color-scheme:dark;
+    --bg:#15181c;--surface:#1e2228;--surface2:#252a31;--border:#333a43;--ink:#e8ebee;--ink2:#aeb6bf;--muted:#79828c;
+    --good:#43c98a;--good-bg:#153025;--crit:#ff7a6b;--crit-bg:#331d1a;--warn:#e2ab4c;--warn-bg:#302713;--info:#79b2ff;--info-bg:#16233a;--drop:#79828c;--drop-bg:#262b31;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,"Segoe UI",Roboto,"Noto Sans TC",sans-serif}
+  a{color:var(--info)}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px 16px 80px}
+  header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  header.top h1{font-size:18px;margin:0;font-weight:650}
+  .sub{color:var(--muted);font-size:12.5px}
+  .spacer{flex:1}
+  .btn{border:1px solid var(--border);background:var(--surface);color:var(--ink);border-radius:8px;
+    padding:6px 11px;font-size:13px;cursor:pointer}
+  .btn:hover{background:var(--surface2)}
+  input[type=file]{display:none}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 13px}
+  .kpi .lbl{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  .kpi .val{font-size:22px;font-weight:680;margin-top:3px;font-variant-numeric:tabular-nums}
+  .kpi .val small{font-size:13px;font-weight:500;color:var(--ink2)}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  select,input[type=search]{border:1px solid var(--border);background:var(--surface);color:var(--ink);
+    border-radius:8px;padding:6px 9px;font-size:13px}
+  input[type=search]{min-width:200px;flex:1}
+  .chiptog{border:1px solid var(--border);background:var(--surface);color:var(--ink2);border-radius:999px;
+    padding:5px 12px;font-size:12.5px;cursor:pointer;user-select:none}
+  .chiptog.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .count{color:var(--muted);font-size:12.5px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:11px;margin-bottom:10px;overflow:hidden}
+  .card>summary{list-style:none;cursor:pointer;padding:11px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .card>summary::-webkit-details-marker{display:none}
+  .card>summary:hover{background:var(--surface2)}
+  .qtext{flex:1;min-width:220px;font-weight:560}
+  .badge{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;
+    padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .b-good{background:var(--good-bg);color:var(--good)}
+  .b-crit{background:var(--crit-bg);color:var(--crit)}
+  .b-warn{background:var(--warn-bg);color:var(--warn)}
+  .b-info{background:var(--info-bg);color:var(--info)}
+  .b-cat{background:var(--surface2);color:var(--ink2)}
+  .mono{font-family:var(--mono);font-size:12px}
+  .body{padding:4px 14px 14px;border-top:1px solid var(--border)}
+  .kv{display:grid;grid-template-columns:96px 1fr;gap:4px 12px;margin:10px 0}
+  .kv .k{color:var(--muted);font-size:12px;padding-top:1px}
+  .kv .v{color:var(--ink)}
+  .sec-title{font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin:14px 0 6px}
+  .meter{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .bar{position:relative;height:8px;width:200px;background:var(--surface2);border-radius:5px;overflow:hidden}
+  .bar .seg{position:absolute;top:0;left:0;height:100%;border-radius:5px}
+  .seg-seed{background:var(--drop);opacity:.55}
+  .seg-final-up{background:var(--good)}
+  .seg-final-down{background:var(--crit)}
+  .rk{font-variant-numeric:tabular-nums;font-weight:600}
+  .sids{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
+  .sid{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:6px;background:var(--surface2);color:var(--ink2);border:1px solid var(--border)}
+  .sid.kept{background:var(--good-bg);color:var(--good);border-color:transparent}
+  .sid.grep-kept{background:var(--info-bg);color:var(--info);border-color:transparent;font-weight:650}
+  .sid.adj-kept{background:rgba(106,75,176,.14);color:#6a4bb0;border-color:transparent;font-weight:650}
+  .sid.adj-kept-gold{background:var(--crit-bg);color:var(--crit);border-color:var(--crit);font-weight:700}
+  .sid.added{background:var(--info-bg);color:var(--info);border-color:transparent}
+  .sid.dropped{background:var(--drop-bg);color:var(--drop);border-color:transparent}
+  .sid.dropgold{background:var(--crit-bg);color:var(--crit);border-color:transparent;font-weight:600}
+  .step{border:1px solid var(--border);border-radius:9px;margin:6px 0;overflow:hidden;background:var(--surface)}
+  .step>summary{list-style:none;cursor:pointer;padding:8px 11px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .step>summary::-webkit-details-marker{display:none}
+  .step>summary:hover{background:var(--surface2)}
+  .cmd{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px}
+  .c-GREP{background:var(--info-bg);color:var(--info)}
+  .c-READ{background:var(--good-bg);color:var(--good)}
+  .c-FINAL,.c-FINALforced{background:#e8e0f7;color:#6a4bb0}
+  .c-PARSE_FAIL,.c-REPEAT_BREAK{background:var(--warn-bg);color:var(--warn)}
+  @media (prefers-color-scheme:dark){.c-FINAL,.c-FINALforced{background:#2a2340;color:#b79df0}}
+  :root[data-theme="dark"] .c-FINAL,:root[data-theme="dark"] .c-FINALforced{background:#2a2340;color:#b79df0}
+  .arg{font-family:var(--mono);font-size:12px;color:var(--ink);flex:1;min-width:120px;word-break:break-word}
+  .ms{color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .step .detail{padding:0 11px 10px}
+  .reply,.result{white-space:pre-wrap;word-break:break-word;font-size:12.5px;
+    background:var(--surface2);border-radius:7px;padding:8px 10px;margin:6px 0}
+  .reply{color:var(--ink2)}
+  .result{font-family:var(--mono);font-size:11.5px}
+  .lbltiny{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:2px}
+  .errbox{white-space:pre-wrap;font-family:var(--mono);font-size:11.5px;background:var(--crit-bg);
+    color:var(--crit);border-radius:7px;padding:9px 11px;margin-top:6px}
+  .suff{border-left:3px solid var(--warn);padding:4px 0 4px 10px;margin:5px 0;font-size:12.5px}
+  /* adjudication 逐條軌跡 */
+  .adjtrace{display:flex;flex-direction:column;gap:3px;margin:4px 0 8px}
+  .adjrow{display:grid;grid-template-columns:52px minmax(120px,auto) 1fr;gap:8px;align-items:baseline;
+    padding:5px 8px;border-radius:6px;background:var(--surface2);font-size:12px}
+  .adjrow.adj-keep{border-left:3px solid var(--good)}
+  .adjrow.adj-drop{border-left:3px solid var(--drop)}
+  .adjrow.adj-gold{background:var(--crit-bg)}
+  .adjv{font-weight:700;font-size:11px;letter-spacing:.02em;text-align:center;border-radius:4px;padding:1px 0}
+  .adjv-keep{color:var(--good);background:var(--good-bg)}
+  .adjv-drop{color:var(--drop);background:var(--drop-bg)}
+  .adjrow.src-grep,.adjrow.src-adj,.adjrow.src-other{grid-template-columns:72px minmax(120px,auto) 1fr}
+  .adjrow.src-grep{border-left:3px solid var(--good)}
+  .adjrow.src-adj{border-left:3px solid #6a4bb0}
+  .adjrow.src-other{border-left:3px solid var(--muted)}
+  .srcv{font-weight:700;font-size:10px;letter-spacing:.01em;text-align:center;border-radius:4px;padding:1px 4px;white-space:nowrap}
+  .srcv.src-grep{color:var(--good);background:var(--good-bg)}
+  .srcv.src-adj{color:#6a4bb0;background:rgba(106,75,176,.14)}
+  .srcv.src-other{color:var(--muted);background:var(--drop-bg)}
+  .prov{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:7px;margin:8px 0 10px}
+  .prov-item{border:1px solid var(--border);border-radius:8px;padding:7px 9px;background:var(--surface2)}
+  .prov-item.grep{border-left:4px solid var(--info)}
+  .prov-item.adj{border-left:4px solid #6a4bb0}
+  .prov-item.rescue{border-left:4px solid var(--good)}
+  .prov-label{font-size:11px;color:var(--muted)}
+  .prov-value{font-size:17px;font-weight:700;margin-top:1px}
+  .prov-note{font-size:11px;color:var(--ink2)}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin:5px 0 10px;color:var(--ink2);font-size:11.5px}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:3px}
+  .legend .lg-grep{background:var(--info)} .legend .lg-adj{background:#6a4bb0}
+  .legend .lg-gold{background:var(--crit)}
+  @media (prefers-color-scheme:dark){.adjrow.src-adj{border-left-color:#b79df0}.srcv.src-adj{color:#b79df0;background:rgba(183,157,240,.16)}}
+  .adjsid{font-family:var(--mono);font-size:11px;color:var(--ink2);word-break:break-all}
+  .adjrow.adj-gold .adjsid{color:var(--crit);font-weight:600}
+  .adjwhy{color:var(--ink2)}
+  .adjreply{margin-top:2px}
+  .adjreply summary{cursor:pointer;color:var(--info);font-size:12px;margin-bottom:4px}
+  .adjreply .errbox{background:var(--surface2);color:var(--ink2)}
+  .empty{text-align:center;color:var(--muted);padding:40px}
+  /* diagnosis */
+  .diag{border-radius:9px;padding:10px 12px;margin:10px 0}
+  .diag.info{background:var(--info-bg)}
+  .diag.warn{background:var(--warn-bg)}
+  .diag.crit{background:var(--crit-bg)}
+  .diag .stage{font-weight:680;font-size:13px}
+  .diag.info .stage{color:var(--info)} .diag.warn .stage{color:var(--warn)} .diag.crit .stage{color:var(--crit)}
+  .diag ul{margin:6px 0 0;padding-left:18px}
+  .diag li{font-size:12.5px;color:var(--ink);margin:2px 0}
+  /* candidate table */
+  .ctab-wrap{overflow-x:auto;margin-top:4px}
+  table.ctab{border-collapse:collapse;width:100%;font-size:12px}
+  table.ctab th,table.ctab td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+  table.ctab th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+  table.ctab td.sidcell{max-width:230px;overflow:hidden;text-overflow:ellipsis}
+  tr.crow:hover{background:var(--surface2)}
+  tr.rowbad td{background:var(--crit-bg)}
+  tr.rawrow td.rawcell{white-space:pre-wrap;font-size:11.5px;color:var(--ink2);background:var(--surface2);
+    padding:8px 12px;border-radius:0 0 7px 7px}
+  .dec{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:5px}
+  .d-good{background:var(--good-bg);color:var(--good)} .d-info{background:var(--info-bg);color:var(--info)}
+  .d-drop{background:var(--drop-bg);color:var(--drop)} .d-crit{background:var(--crit-bg);color:var(--crit)}
+  .d-adj{background:rgba(106,75,176,.14);color:#6a4bb0}
+  .d-mut{background:var(--surface2);color:var(--muted)}
+  details.candbox>summary{cursor:pointer;font-size:11.5px;color:var(--info);margin:6px 0}
+  details.candbox>summary::-webkit-details-marker{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Grep-Agent Trace Viewer</h1>
+    <span class="sub" id="srcname">—</span>
+    <span class="spacer"></span>
+    <label class="btn">載入 jsonl…<input type="file" id="file" accept=".jsonl,.json,.txt"></label>
+    <button class="btn" id="theme">切換深/淺</button>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="filters">
+    <select id="fcat"></select>
+    <span class="chiptog" data-flag="abs">只看 abs 題</span>
+    <span class="chiptog" data-flag="jdiff">只看 judge 不一致</span>
+    <span class="chiptog" data-flag="wrong">只看答錯</span>
+    <span class="chiptog" data-flag="fb">只看 fallback</span>
+    <span class="chiptog" data-flag="rdrop">只看 recall 下降</span>
+    <input type="search" id="fsearch" placeholder="搜尋 question / sample / sid…">
+    <span class="count" id="count"></span>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<script type="application/x-ndjson" id="embedded">
+__NDJSON_DATA__
+</script>
+
+<script>
+const E=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e};
+const esc=s=>String(s==null?"":s).replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));
+const pct=x=>x==null?"—":(x*100).toFixed(1)+"%";
+let DATA=[];
+
+function parseNDJSON(text){
+  const out=[];
+  for(const line of text.split(/\r?\n/)){
+    const s=line.trim(); if(!s)continue;
+    try{out.push(JSON.parse(s));}catch(e){console.warn("skip bad line",e);}
+  }
+  return out;
+}
+function isWrong(r){return r.correctness!=null && Number(r.correctness)<1;}
+function isAbs(r){return /(?:^|_)abs$/i.test(String(r.sample||""));}
+function judgeDisagree(r){
+  const s=r.judge_scores||{};
+  return s["4o-mini"]!=null && s["oss-20b"]!=null && Number(s["4o-mini"])!==Number(s["oss-20b"]);
+}
+function judgeVerdict(model,value){
+  const ok=Number(value)>=1;
+  return `${model}: ${ok?"✓ 正確":"✗ 錯誤"}`;
+}
+function recallDrop(r){return r.seed_recall!=null && r.final_recall!=null && r.final_recall<r.seed_recall-1e-9;}
+
+function renderKPIs(){
+  const n=DATA.length;
+  const scored=DATA.filter(r=>r.correctness!=null);
+  const corr=scored.filter(r=>Number(r.correctness)>=1).length;
+  const fb=DATA.filter(r=>r.fallback).length;
+  const withR=DATA.filter(r=>r.seed_recall!=null&&r.final_recall!=null);
+  const mSeed=withR.length?withR.reduce((a,r)=>a+r.seed_recall,0)/withR.length:null;
+  const mFinal=withR.length?withR.reduce((a,r)=>a+r.final_recall,0)/withR.length:null;
+  const drops=DATA.filter(recallDrop).length;
+  const fn=DATA.filter(r=>{const g=new Set(r.gold_sids||[]);return (r.dropped||[]).some(s=>g.has(s));}).length;
+  const lowR=DATA.filter(r=>r.correctness!=null&&Number(r.correctness)>=1&&r.final_recall!=null&&r.final_recall<0.5).length;
+  const avgMs=n?DATA.reduce((a,r)=>a+(r.agent_ms||0),0)/n:0;
+  const avgCmd=n?DATA.reduce((a,r)=>a+((r.commands||[]).length),0)/n:0;
+  const K=(lbl,val)=>{const e=E("div","kpi");e.appendChild(E("div","lbl",lbl));e.appendChild(E("div","val",val));return e;};
+  const box=document.getElementById("kpis");box.innerHTML="";
+  box.appendChild(K("題數",n));
+  box.appendChild(K("正確率",scored.length?`${pct(corr/scored.length)} <small>${corr}/${scored.length}</small>`:"未評分"));
+  box.appendChild(K("Fallback 率",`${pct(fb/Math.max(n,1))} <small>${fb}</small>`));
+  box.appendChild(K("Agent 砍到 gold",`${fn} <small>false neg</small>`));
+  box.appendChild(K("答對但 recall<50%",`${lowR} <small>分母偏誤?</small>`));
+  box.appendChild(K("Recall 下降題",`${drops} <small>題</small>`));
+  box.appendChild(K("Recall seed→final",mSeed==null?"—":`${pct(mSeed)}→${pct(mFinal)}`));
+  box.appendChild(K("平均 agent 耗時",`${(avgMs/1000).toFixed(2)}s <small>${avgCmd.toFixed(1)} 步</small>`));
+}
+
+const flags={abs:false,jdiff:false,wrong:false,fb:false,rdrop:false};
+function passFilters(r){
+  const cat=document.getElementById("fcat").value;
+  if(cat!=="__all__"&&r.category!==cat)return false;
+  if(flags.abs&&!isAbs(r))return false;
+  if(flags.jdiff&&!judgeDisagree(r))return false;
+  if(flags.wrong&&!isWrong(r))return false;
+  if(flags.fb&&!r.fallback)return false;
+  if(flags.rdrop&&!recallDrop(r))return false;
+  const q=document.getElementById("fsearch").value.trim().toLowerCase();
+  if(q){
+    const hay=(r.question+" "+r.sample+" "+(r.seed_sids||[]).join(" ")).toLowerCase();
+    if(!hay.includes(q))return false;
+  }
+  return true;
+}
+function initCats(){
+  const sel=document.getElementById("fcat");
+  const cats=[...new Set(DATA.map(r=>r.category))].sort();
+  sel.innerHTML="";
+  sel.appendChild(E("option",null,"全部類別"));sel.firstChild.value="__all__";
+  for(const c of cats){const o=E("option",null,c);o.value=c;sel.appendChild(o);}
+}
+
+const STOP=new Set("the a an of to in on for and or is are was were did do i my me you your our how many much long often we he she it they them this that with about since between at as be been being have has had what when where who which a not no".split(" "));
+function toks(s){return (String(s==null?"":s).toLowerCase().match(/[a-z0-9]{3,}/g)||[]).filter(w=>!STOP.has(w));}
+function grepTerms(arg){return String(arg==null?"":arg).split(/[|,()\\s]+/).map(t=>t.trim()).filter(Boolean);}
+function driftWarnings(r){
+  const q=new Set(toks(r.question));const w=[];
+  (r.commands||[]).forEach(c=>{
+    if(c.cmd!=="GREP")return;
+    const terms=grepTerms(c.arg).flatMap(toks);
+    if(!terms.length)return;
+    if(!terms.some(t=>q.has(t)))w.push(c.arg);
+  });
+  return w;
+}
+function actionMap(r){
+  const m={};
+  (r.commands||[]).forEach(c=>{
+    if(c.cmd==="GREP"&&c.result){
+      (c.result.match(/\[sid=([^\]\s]+)\]/g)||[]).forEach(x=>{const s=x.slice(5,-1);m[s]=(m[s]||"")+"grep✓ ";});
+    }else if(c.cmd==="READ"&&c.arg){const s=String(c.arg).split(/\s+/)[0];m[s]=(m[s]||"")+"read ";}
+  });
+  return m;
+}
+function diagnosis(r){
+  const g=new Set(r.gold_sids||[]),seed=new Set(r.seed_sids||[]),
+        ctx=new Set(r.context_sids||r.final_sids||[]),dropped=new Set(r.dropped||[]);
+  const corr=r.correctness, notes=[]; let stage=null, sev="info";
+  const goldInSeed=[...g].filter(s=>seed.has(s));
+  const goldInFinal=[...g].filter(s=>ctx.has(s));
+  const goldDropped=[...g].filter(s=>dropped.has(s));
+  const cap=r.final_before_cap, finN=(r.final_sids||[]).length;
+  if(g.size===0){stage="無標註 gold(abstention / 未標)";sev="info";}
+  else if(!goldInSeed.length){stage="initial retrieval miss";sev="crit";
+    notes.push("gold turn 完全不在 rerank 16 條 seed 內 — 檢索源頭就漏,非 agent 的錯。");}
+  else if(goldDropped.length){stage="agent filter false negative";sev="crit";
+    notes.push(`agent 把 ${goldDropped.length} 條在 seed 內的 gold turn 砍掉了。`);}
+  else if(cap&&finN>0&&cap.length>finN&&[...g].some(s=>cap.indexOf(s)>=finN)){
+    stage="top-k truncation";sev="warn";notes.push("gold 在截斷前候選內,但被 max_sids 切掉。");}
+  else if((r.sufficiency||[]).length&&!(r.sufficiency[r.sufficiency.length-1]||{}).sufficient){
+    stage="sufficiency 補搜失敗";sev="warn";notes.push("verifier 判證據不足,補搜後仍未補齊。");}
+  else if(goldInFinal.length){stage="context 已含 gold";sev="info";}
+  if(r.fallback){
+    notes.push("agent fallback:"+r.fallback+"(context 維持原檢索結果,agent 未生效)");
+    if(stage==="—"||stage===null||stage==="context 已含 gold")stage="fallback: "+r.fallback;
+    if(r.fallback==="exception")sev="crit";
+  }
+  if(corr!=null){
+    if(Number(corr)<1&&goldInFinal.length){
+      notes.push("⚠ final context 已含 gold 但答錯 → 問題在答題/推理端,不是檢索。");
+      if(sev==="info"){stage="context 有 gold 但 generation 答錯";sev="crit";}}
+    if(Number(corr)>=1&&r.final_recall!=null&&r.final_recall<0.5)
+      notes.push("答案正確但 strict gold recall 偏低 — gold_sids 可能過寬(整個 session 都算 gold);對照 session recall 判讀。");
+  }
+  const drift=driftWarnings(r);
+  if(drift.length)notes.push("GREP 詞與 query 語意偏離:"+drift.map(a=>"「"+a+"」").join("、"));
+  return {stage:stage||"—",sev,notes,drift};
+}
+function diagEl(r){
+  const dg=diagnosis(r);
+  const box=E("div","diag "+dg.sev);
+  box.appendChild(E("div","stage","診斷:"+esc(dg.stage)));
+  if(dg.notes.length){
+    const ul=E("ul");dg.notes.forEach(n=>ul.appendChild(E("li",null,esc(n))));box.appendChild(ul);
+  }
+  return box;
+}
+function candTable(r){
+  const seed=r.seed_sids||[], ctx=r.context_sids||r.final_sids||[];
+  const g=new Set(r.gold_sids||[]),kept=new Set(r.kept||[]),dropped=new Set(r.dropped||[]),addedS=new Set(r.added||[]);
+  const adj=(r.adjudication&&typeof r.adjudication==="object"&&!r.adjudication.error)?r.adjudication:null;
+  const adjKept=new Set((adj&&adj.kept)||[]);
+  const scores=r.seed_scores||{},act=actionMap(r),sidtext=r.sid_text||{};
+  const added=(r.added||[]).filter(s=>seed.indexOf(s)<0);
+  const rows=seed.map(s=>({s,src:"rerank",sr:seed.indexOf(s)+1})).concat(added.map(s=>({s,src:"grep",sr:null})));
+  const tbl=E("table","ctab");
+  tbl.innerHTML="<thead><tr><th>SID</th><th>Source</th><th>Seed#</th><th>Action</th><th>Score</th><th>Final#</th><th>Gold</th><th>Decision</th></tr></thead>";
+  const tb=E("tbody");
+  rows.forEach(({s,src,sr})=>{
+    const fr=ctx.indexOf(s);
+    const dec=addedS.has(s)?"grep added":adjKept.has(s)?"裁決 keep":kept.has(s)?"grep keep":dropped.has(s)?"grep drop":(fr>=0?"final":"—");
+    const dcl=dec==="grep drop"?(g.has(s)?"d-crit":"d-drop"):dec==="grep added"?"d-info":dec==="裁決 keep"?"d-adj":dec==="grep keep"?"d-info":dec==="final"?"d-good":"d-mut";
+    const tr=E("tr","crow"+(g.has(s)&&dropped.has(s)?" rowbad":""));
+    tr.innerHTML=`<td class="mono sidcell" title="${esc(sidtext[s]||"")}">${esc(s)}</td>`
+      +`<td>${src}</td><td>${sr||"—"}</td>`
+      +`<td class="mono">${esc((act[s]||"").trim()||"—")}</td>`
+      +`<td>${scores[s]!=null?Number(scores[s]).toFixed(3):"—"}</td>`
+      +`<td>${fr>=0?fr+1:"—"}</td><td>${g.has(s)?"✓":""}</td>`
+      +`<td><span class="dec ${dcl}">${dec}</span></td>`;
+    if(sidtext[s]){tr.style.cursor="pointer";tr.addEventListener("click",()=>{
+      const nx=tr.nextElementSibling;
+      if(nx&&nx.classList.contains("rawrow")){nx.remove();return;}
+      const rr=E("tr","rawrow");rr.innerHTML=`<td colspan="8" class="rawcell">${esc(sidtext[s])}</td>`;tr.after(rr);
+    });}
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+  const wrap=E("div","ctab-wrap");wrap.appendChild(tbl);return wrap;
+}
+function sidChips(list,cls,goldSet,sidtext){
+  const box=E("div","sids");
+  (list||[]).forEach(s=>{
+    let c=cls;
+    if(cls==="dropped"&&goldSet&&goldSet.has(s))c="dropgold";
+    if(cls==="adj-kept"&&goldSet&&goldSet.has(s))c="adj-kept-gold";
+    const el=E("span","sid "+c,esc(s)+(goldSet&&goldSet.has(s)?" ⚠gold":""));
+    if(sidtext&&sidtext[s])el.title=sidtext[s];
+    box.appendChild(el);
+  });
+  if(!list||!list.length)box.appendChild(E("span","sid","(none)"));
+  return box;
+}
+function stepEl(c){
+  const d=E("details","step");
+  const sum=E("summary");
+  const kind=(c.cmd||"").replace(/[()]/g,"").replace(/\s/g,"");
+  sum.appendChild(E("span","cmd c-"+kind,esc(c.cmd)));
+  sum.appendChild(E("span","arg",esc(c.arg||"")));
+  if(c.result_chars!=null)sum.appendChild(E("span","ms",c.result_chars+" 字"));
+  if(c.ms!=null)sum.appendChild(E("span","ms",c.ms+"ms"));
+  if(c.content_empty)sum.appendChild(E("span","ms","⚠ content 空"));
+  if(c.finish_reason&&c.finish_reason!=="stop")sum.appendChild(E("span","ms","finish="+esc(c.finish_reason)));
+  d.appendChild(sum);
+  const det=E("div","detail");
+  if(c.reply){det.appendChild(E("div","lbltiny","模型回覆 (content)"));det.appendChild(E("div","reply",esc(c.reply)));}
+  if(c.reasoning){det.appendChild(E("div","lbltiny","reasoning channel (content 之外)"));det.appendChild(E("div","reply",esc(c.reasoning)));}
+  if(c.tool_calls&&c.tool_calls.length){det.appendChild(E("div","lbltiny","原生 tool_calls"));det.appendChild(E("div","reply",esc(JSON.stringify(c.tool_calls))));}
+  if(c.result){det.appendChild(E("div","lbltiny","撈回內容 (result)"));det.appendChild(E("div","result",esc(c.result)));}
+  if(c.content_empty)det.appendChild(E("div","reply","⚠ message.content 為空;message 欄位:"+esc((c.message_keys||[]).join(", "))+(c.reasoning?" — 輸出落在 reasoning channel":" — reasoning 也為空(真空回覆或 adapter 丟欄位)")));
+  if(!c.reply&&!c.result&&!c.reasoning&&!c.content_empty)det.appendChild(E("div","reply","(此步無 reply/result — 常見於 PARSE_FAIL / REPEAT_BREAK)"));
+  d.appendChild(det);
+  return d;
+}
+function provenanceEl(r){
+  const adj=(r.adjudication&&typeof r.adjudication==="object"&&!r.adjudication.error)?r.adjudication:null;
+  const grep=new Set(r.kept||[]), adjKeep=new Set((adj&&adj.kept)||[]);
+  const overlap=[...grep].filter(s=>adjKeep.has(s)).length;
+  const rescue=[...adjKeep].filter(s=>!grep.has(s)).length;
+  const box=E("div");
+  box.appendChild(E("div","sec-title","Keep 來源對照（先看這裡可還原每條 evidence 的進場路徑）"));
+  const grid=E("div","prov");
+  const item=(cls,label,value,note)=>{
+    const el=E("div","prov-item "+cls);
+    el.appendChild(E("div","prov-label",label));
+    el.appendChild(E("div","prov-value",String(value)));
+    el.appendChild(E("div","prov-note",note));
+    grid.appendChild(el);
+  };
+  item("grep","grep filter keep",grep.size,"filter agent 自己在 FINAL 保留");
+  item("adj","裁決版 KEEP",adj?adjKeep.size:"—",adj?"獨立裁決從被丟 seed 撿回":"此題未觸發裁決");
+  item("rescue","裁決新增救援",adj?rescue:"—",adj?`不在 grep keep、但進入裁決版 final${overlap?` · overlap ${overlap}`:""}`:"—");
+  box.appendChild(grid);
+  const legend=E("div","legend");
+  legend.innerHTML='<span><i class="lg-grep"></i>藍色＝grep filter keep</span><span><i class="lg-adj"></i>紫色＝裁決版 KEEP</span><span><i class="lg-gold"></i>紅色標記＝gold evidence</span>';
+  box.appendChild(legend);
+  return box;
+}
+function card(r){
+  const goldSet=new Set(r.gold_sids||[]);
+  const d=E("details","card");
+  const sum=E("summary");
+  if(r.correctness!=null){
+    const ok=Number(r.correctness)>=1;
+    sum.appendChild(E("span","badge "+(ok?"b-good":"b-crit"),(ok?"✓ 正確":"✗ 答錯")));
+  }else sum.appendChild(E("span","badge b-cat","? 未評分"));
+  if(r.judge_scores){
+    Object.entries(r.judge_scores).forEach(([model,value])=>{
+      const ok=Number(value)>=1;
+      sum.appendChild(E("span","badge "+(ok?"b-good":"b-crit"),judgeVerdict(model,value)));
+    });
+  }else if(r.judge_model){
+    sum.appendChild(E("span","badge b-info","Judge model: "+esc(r.judge_model)));
+  }
+  sum.appendChild(E("span","badge b-cat",esc(r.category)));
+  sum.appendChild(E("span","badge b-cat mono",esc(r.sample)));
+  if(isAbs(r))sum.appendChild(E("span","badge b-info","abs"));
+  if(judgeDisagree(r))sum.appendChild(E("span","badge b-warn","Judge disagreement"));
+  if(r.fallback)sum.appendChild(E("span","badge b-warn","⚠ "+esc(r.fallback)));
+  if(r.seed_recall!=null){
+    const drop=recallDrop(r);
+    sum.appendChild(E("span","badge "+(drop?"b-crit":"b-good"),
+      `recall ${pct(r.seed_recall)}${drop?" ↓ ":"→"}${pct(r.final_recall)}`));
+  }
+  const _dg=diagnosis(r);
+  if(_dg.sev!=="info")sum.appendChild(E("span","badge "+(_dg.sev==="crit"?"b-crit":"b-warn"),"⚑ "+esc(_dg.stage)));
+  else if(_dg.drift.length)sum.appendChild(E("span","badge b-warn","⚑ query/action drift"));
+  sum.appendChild(E("span","qtext",esc(r.question)));
+  sum.appendChild(E("span","ms",`${((r.agent_ms||0)/1000).toFixed(2)}s · ${(r.commands||[]).length} 步`));
+  d.appendChild(sum);
+
+  const body=E("div","body");
+  const kv=E("div","kv");
+  const row=(k,v)=>{kv.appendChild(E("div","k",k));kv.appendChild(E("div","v",v));};
+  row("正確答案",esc(r.gold));
+  row("模型答案",esc(r.answer));
+  if(r.skills&&r.skills.length)row("skills",r.skills.map(s=>`<span class="sid">${esc(s)}</span>`).join(" "));
+  row("mode",`<span class="mono">${esc(r.mode||"")}</span>`);
+  if(r.judge_scores){
+    const scores=Object.entries(r.judge_scores).map(([m,v])=>{
+      const ok=Number(v)>=1;
+      return `<span class="badge ${ok?"b-good":"b-crit"}">${esc(judgeVerdict(m,v))}</span> ${pct(v)}`;
+    }).join("　");
+    row("judge scores",scores);
+  }
+  body.appendChild(kv);
+
+  // Diagnosis(自動錯誤階段判斷)
+  body.appendChild(diagEl(r));
+
+  if(r.seed_recall!=null||r.session_recall!=null){
+    body.appendChild(E("div","sec-title","Recall（strict gold turn｜有 "+(r.gold_sids||[]).length+" 條 gold turn）"));
+    if(r.seed_recall!=null){
+      const m=E("div","meter");
+      const bar=E("div","bar");
+      const seed=E("div","seg seg-seed");seed.style.width=(r.seed_recall*100)+"%";
+      const fin=E("div","seg "+(recallDrop(r)?"seg-final-down":"seg-final-up"));fin.style.width=(r.final_recall*100)+"%";
+      bar.appendChild(seed);bar.appendChild(fin);
+      m.appendChild(bar);
+      m.appendChild(E("span","rk",`strict seed ${pct(r.seed_recall)} → final ${pct(r.final_recall)}`));
+      body.appendChild(m);
+    }
+    if(r.session_recall!=null)
+      body.appendChild(E("div","rk","session recall(final 含 gold session 的比例):"+pct(r.session_recall)
+        +`　<span class="lbltiny" style="text-transform:none">分母窄=strict turn、寬=整個 gold session</span>`));
+    const ctx=r.context_sids||r.final_sids||[];
+    const missed=(r.gold_sids||[]).filter(s=>!ctx.includes(s));
+    if(missed.length){
+      body.appendChild(E("div","lbltiny","final context 漏掉的 gold turn(點看原文)"));
+      body.appendChild(sidChips(missed,"dropgold",null,r.sid_text));
+    }
+  }
+
+  body.appendChild(provenanceEl(r));
+
+  // ── 最終 context 逐條來源:每條 final seed 是誰放進去的 ──
+  //   agent FINAL   = final_before_cap（agent 自己選的,截斷前）
+  //   裁決撿回      = adjudication.kept（獨立 LLM call 從被丟 seed 撿回,附理由）
+  //   evidence-floor = evidence_floor_padded（agent 選太少,portfolio-pad 盲補）
+  //   min-keep      = min_keep_padded（彙整題補滿）
+  // 用真實 provenance 欄位判定,不猜。優先序:裁決 > floor > min-keep > agent FINAL。
+  {
+    const adj=(r.adjudication&&typeof r.adjudication==="object"&&!r.adjudication.error)?r.adjudication:null;
+    const finalCtx=r.final_sids||r.context_sids||r.kept||[];
+    const agentFinal=new Set(r.final_before_cap||[]);
+    const adjKeep=new Set((adj&&!adj.keep_all)?(adj.kept||[]):[]);
+    const adjKeepAll=new Set((adj&&adj.keep_all)?(adj.kept||[]):[]);
+    const floorPad=new Set(r.evidence_floor_padded||(r.evidence_coverage&&r.evidence_coverage.added)||[]);
+    const minKeepPad=new Set(r.min_keep_padded||[]);
+    const reasons=(adj&&adj.reasons)||{};
+    const adjFired=!!adj;
+    if(finalCtx.length){
+      const nAgent=finalCtx.filter(s=>agentFinal.has(s)&&!adjKeep.has(s)&&!adjKeepAll.has(s)).length;
+      const nAdj=finalCtx.filter(s=>adjKeep.has(s)||adjKeepAll.has(s)).length;
+      const nFloor=finalCtx.filter(s=>floorPad.has(s)&&!adjKeep.has(s)&&!adjKeepAll.has(s)&&!agentFinal.has(s)).length;
+      const parts=["agent FINAL "+nAgent];
+      if(adjFired)parts.push("裁決撿回 "+nAdj); else parts.push("（此題未觸發裁決）");
+      if(nFloor)parts.push("floor 盲補 "+nFloor);
+      body.appendChild(E("div","sec-title","最終 context 逐條來源（"+finalCtx.length+" 條 · "+parts.join(" · ")+"）"));
+      const box=E("div","adjtrace");
+      finalCtx.forEach(s=>{
+        const isGold=goldSet&&goldSet.has(s);
+        let src,cls,why="";
+        if(adjKeep.has(s)){src="裁決撿回";cls="src-adj";why=reasons[s]?String(reasons[s]).replace(/^(KEEP|DROP):\s*/i,""):"獨立裁決 call 撿回（此 run 未存逐條理由）";}
+        else if(adjKeepAll.has(s)){src="裁決撿回";cls="src-adj";why="類別級 KEEP-all（未經 LLM 逐條）";}
+        else if(agentFinal.has(s)){src="agent FINAL";cls="src-grep";why="agent 自己選入 FINAL";}
+        else if(floorPad.has(s)){src="floor 盲補";cls="src-other";why="agent 選太少,evidence-floor portfolio-pad 依 rerank 補入（非裁決）";}
+        else if(minKeepPad.has(s)){src="min-keep";cls="src-other";why="彙整題 min-keep 補滿（非裁決）";}
+        else{src="?";cls="src-other";why="來源不明（無 provenance 欄位）";}
+        const row=E("div","adjrow "+cls+(isGold?" adj-gold":""));
+        row.appendChild(E("span","srcv "+cls,src));
+        const sid=E("span","adjsid",s+(isGold?" ⚠gold":""));
+        if(r.sid_text&&r.sid_text[s])sid.title=r.sid_text[s];
+        row.appendChild(sid);
+        row.appendChild(E("span","adjwhy",why));
+        box.appendChild(row);
+      });
+      body.appendChild(box);
+      if(!adjFired)body.appendChild(E("div","lbltiny","此題 agent 交 FINAL 後未觸發裁決（agent 自己夠有把握或已達上限）—— 裁決只在 agent 選得比上限少時才對被丟 seed 逐條 KEEP/DROP"));
+    }
+  }
+
+  body.appendChild(E("div","sec-title","證據進出（seed "+(r.seed_sids||[]).length+" → kept/added/dropped）"));
+  if(r.kept&&r.kept.length){body.appendChild(E("div","lbltiny","grep filter keep（agent FINAL 自己保留）"));body.appendChild(sidChips(r.kept,"grep-kept",null,r.sid_text));}
+  if(r.added&&r.added.length){body.appendChild(E("div","lbltiny","補撈 added"));body.appendChild(sidChips(r.added,"added",null,r.sid_text));}
+  if(r.dropped&&r.dropped.length){body.appendChild(E("div","lbltiny","砍掉 dropped（紅=砍到 gold）"));body.appendChild(sidChips(r.dropped,"dropped",goldSet,r.sid_text));}
+
+  // 裁決（adjudication）：agent FINAL 之後,獨立 answer-blind LLM call 對被丟 seed
+  // 逐條判 KEEP(撿回)/DROP(維持丟棄)。r.adjudication:{kept,dropped,unjudged,
+  // reasons(sid→理由),reply(原始回覆),reply_chars,ms}。keep_all=類別級全補回(未經
+  // LLM),只顯示摘要不展開逐條軌跡。沒 fire → 不顯示這段。
+  if(r.adjudication&&typeof r.adjudication==="object"&&!r.adjudication.error){
+    const a=r.adjudication;
+    const ak=a.kept||[],ad=a.dropped||[],au=a.unjudged||[];
+    const reasons=a.reasons||{};
+    body.appendChild(E("div","sec-title","裁決 adjudication（agent FINAL 後,獨立 answer-blind LLM call 對被丟 seed 逐條 KEEP/DROP）"));
+    const head=E("div","suff");
+    const akGold=ak.filter(s=>goldSet&&goldSet.has(s)).length;
+    const adGold=ad.filter(s=>goldSet&&goldSet.has(s)).length;
+    if(a.keep_all){
+      head.innerHTML=`類別級全補回 KEEP-all（未經 LLM 逐條裁決）· 補回 <b>${ak.length}</b> 條`+(akGold?`（含 gold ${akGold}）`:"");
+      body.appendChild(head);
+      if(ak.length){body.appendChild(E("div","lbltiny","裁決版 KEEP-all 補回 final"));body.appendChild(sidChips(ak,"adj-kept",goldSet,r.sid_text));}
+    }else{
+      head.innerHTML=`裁決補回 KEEP <b>${ak.length}</b> 條`+(akGold?`（含 gold ${akGold}）`:"")+
+        ` · 確認 DROP <b>${ad.length}</b> 條`+(adGold?`（<span style="color:var(--crit)">砍到 gold ${adGold}</span>）`:"")+
+        (au.length?` · 未判 ${au.length}`:"")+
+        ` · reply ${a.reply_chars||0} chars · ${((a.ms||0)/1000).toFixed(2)}s`;
+      body.appendChild(head);
+      // 逐條裁決軌跡:每個被丟 seed 一列(KEEP 綠/DROP 灰/gold 紅),附 LLM 理由與原文
+      const order=[...ak.map(s=>[s,"KEEP"]),...ad.map(s=>[s,"DROP"]),...au.map(s=>[s,"—"])];
+      if(order.length){
+        body.appendChild(E("div","lbltiny","逐條裁決軌跡（sid · verdict · LLM 理由）"));
+        const box=E("div","adjtrace");
+        order.forEach(([s,v])=>{
+          const isGold=goldSet&&goldSet.has(s);
+          const row=E("div","adjrow adj-"+v.toLowerCase()+(isGold?" adj-gold":""));
+          const vtag=E("span","adjv adjv-"+v.toLowerCase(),v);
+          const sid=E("span","adjsid",s+(isGold?" ⚠gold":""));
+          if(r.sid_text&&r.sid_text[s])sid.title=r.sid_text[s];
+          const why=reasons[s]?String(reasons[s]).replace(/^(KEEP|DROP):\s*/i,""):"";
+          const rz=E("span","adjwhy",why||(v==="—"?"（LLM 回覆截斷未判到）":"（此 run 未存逐條理由）"));
+          row.appendChild(vtag);row.appendChild(sid);row.appendChild(rz);
+          box.appendChild(row);
+        });
+        body.appendChild(box);
+      }
+      // 裁決 call 原始回覆(可折疊)
+      if(a.reply){
+        const rbox=E("details","adjreply");
+        rbox.appendChild(E("summary",null,"▸ 裁決 call 原始回覆（"+(a.reply_chars||a.reply.length)+" chars）"));
+        rbox.appendChild(E("div","errbox",a.reply));
+        body.appendChild(rbox);
+      }
+    }
+  }
+
+  // 候選明細表(SID | Source | Seed# | Action | Score | Final# | Gold | Decision)
+  const cbox=E("details","candbox");
+  cbox.appendChild(E("summary",null,"▸ 候選明細表（"+((r.seed_sids||[]).length+(r.added||[]).filter(s=>(r.seed_sids||[]).indexOf(s)<0).length)+" 條，點列看原文）"));
+  cbox.appendChild(candTable(r));
+  body.appendChild(cbox);
+
+  body.appendChild(E("div","sec-title","Agent 步驟（"+(r.commands||[]).length+" 步）"));
+  (r.commands||[]).forEach(c=>body.appendChild(stepEl(c)));
+
+  if(r.sufficiency&&r.sufficiency.length){
+    body.appendChild(E("div","sec-title","Sufficiency verify 補搜"));
+    r.sufficiency.forEach(s=>{
+      const el=E("div","suff");
+      el.innerHTML=`第 ${s.round} 輪 · ${s.sufficient?"✓ 足夠":"✗ 不足"}`+
+        (s.missing?` — 缺:${esc(s.missing)}`:"")+
+        (s.added&&s.added.length?` — 補入 ${s.added.map(esc).join(", ")}`:"")+
+        (s.vector_cands?` — 向量候選 ${s.vector_cands.length}`:"");
+      body.appendChild(el);
+    });
+  }
+  if(r.error){body.appendChild(E("div","sec-title","例外 traceback"));body.appendChild(E("div","errbox",esc(r.error)));}
+
+  d.appendChild(body);
+  return d;
+}
+
+function render(){
+  const list=document.getElementById("list");list.innerHTML="";
+  const rows=DATA.filter(passFilters);
+  document.getElementById("count").textContent=`顯示 ${rows.length} / ${DATA.length}`;
+  if(!rows.length){list.appendChild(E("div","empty",DATA.length?"沒有符合條件的題目":"尚無資料 — 用右上「載入 jsonl」開啟一份 _grep_agent_traces.jsonl"));return;}
+  rows.forEach(r=>list.appendChild(card(r)));
+}
+function loadData(rows,name){
+  DATA=rows;
+  document.getElementById("srcname").textContent=name;
+  initCats();renderKPIs();render();
+}
+
+document.querySelectorAll(".chiptog").forEach(el=>el.addEventListener("click",()=>{
+  const f=el.dataset.flag;flags[f]=!flags[f];el.classList.toggle("on",flags[f]);render();
+}));
+document.getElementById("fcat").addEventListener("change",render);
+document.getElementById("fsearch").addEventListener("input",render);
+document.getElementById("file").addEventListener("change",ev=>{
+  const f=ev.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>loadData(parseNDJSON(rd.result),f.name);
+  rd.readAsText(f);
+});
+document.getElementById("theme").addEventListener("click",()=>{
+  const cur=document.documentElement.getAttribute("data-theme");
+  const next=cur==="dark"?"light":cur==="light"?"dark":
+    (matchMedia("(prefers-color-scheme: dark)").matches?"light":"dark");
+  document.documentElement.setAttribute("data-theme",next);
+});
+
+const _emb=parseNDJSON(document.getElementById("embedded").textContent);
+loadData(_emb,_emb.length?"__RUN_NAME__":"（尚無資料）");
+</script>
+</body>
+</html>

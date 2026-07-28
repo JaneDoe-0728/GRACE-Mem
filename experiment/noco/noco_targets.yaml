@@ -1,0 +1,18 @@
+targets:
+  locomo:
+    noco_url: http://localhost:8081/
+    org: noco
+    datasets:
+      - locomo
+      - locomo10
+      - locomo-plus
+      - locomo_failed_cases
+    project_id: p6bqc9upzxvtibe
+
+  longmem:
+    noco_url: http://localhost:8081/
+    org: noco
+    datasets:
+      - longmem
+      - longmem_failed_cases
+    project_id: pqky495vwahg2u9

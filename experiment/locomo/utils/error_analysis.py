@@ -1,0 +1,36 @@
+# Re-exports from KG so existing locomo imports continue to work unchanged.
+from KG.utils.error_analysis import (
+    append_analysis_record,
+    append_pretty_block,
+    build_bridge_label,
+    build_top_miss_snapshot,
+    coerce_bool,
+    coerce_float,
+    compact_json,
+    derive_anomaly_flags,
+    derive_drop_reasons,
+    derive_failure_type,
+    extract_context_session_ids,
+    is_temporal_question,
+    read_reranker_rows,
+    render_failure_digest,
+    timestamp_now,
+)
+
+__all__ = [
+    "append_analysis_record",
+    "append_pretty_block",
+    "build_bridge_label",
+    "build_top_miss_snapshot",
+    "coerce_bool",
+    "coerce_float",
+    "compact_json",
+    "derive_anomaly_flags",
+    "derive_drop_reasons",
+    "derive_failure_type",
+    "extract_context_session_ids",
+    "is_temporal_question",
+    "read_reranker_rows",
+    "render_failure_digest",
+    "timestamp_now",
+]

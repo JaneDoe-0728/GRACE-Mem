@@ -1,0 +1,110 @@
+import dataclasses
+from pathlib import Path
+from typing import Any, Sequence
+
+
+def skipped_judge_stats(*, exclude_adversarial: bool) -> dict[str, Any]:
+    return {
+        "avg_correctness": None,
+        "avg_correctness_percent": None,
+        "avg_f1": None,
+        "avg_bleu1": None,
+        "by_category": {},
+        "exclude_adversarial": exclude_adversarial,
+        "skipped_due_to_adversarial_filter": True,
+    }
+
+
+def configure_retriever(retriever: Any, *, adaptive: bool, tau: float) -> None:
+    if not adaptive:
+        return
+    retriever.cfg = dataclasses.replace(
+        retriever.cfg,
+        enable_adaptive_search=True,
+        tau_confidence=tau,
+    )
+
+
+def run_ingest_stage_for_locomo(
+    *,
+    ingest_module: Any,
+    ingestor: Any,
+    dataset: str,
+    dataset_json: str | Path,
+    sessions_jsonl: str | Path | None,
+    sample_index: int,
+    prev_k: int,
+    entity_sim_topk: int,
+    entity_sim_threshold: float,
+) -> dict[str, Any]:
+    sessions = ingest_module.load_sessions(
+        dataset=dataset,
+        sessions_jsonl=sessions_jsonl,
+        dataset_json=dataset_json,
+    )
+    df = ingest_module.sessions_to_one_turn_df(
+        sessions,
+        make_session_uid=True,
+        sample_filter=sample_index,
+    )
+    if df.empty:
+        raise RuntimeError(f"No sessions found for sample_index={sample_index}")
+    return ingest_module.ingest_by_session_one_turn(
+        ingestor,
+        df,
+        prev_k=prev_k,
+        entity_sim_topk=entity_sim_topk,
+        entity_sim_threshold=entity_sim_threshold,
+    )
+
+
+def run_ingest_stage_for_records(
+    *,
+    ingest_module: Any,
+    ingestor: Any,
+    records: Sequence[dict[str, Any]],
+    conv_id: str,
+    prev_k: int,
+    entity_sim_topk: int,
+    entity_sim_threshold: float,
+) -> dict[str, Any]:
+    df = ingest_module.session_records_to_df(list(records), conv_id=conv_id)
+    return ingest_module.ingest_by_session_one_turn(
+        ingestor,
+        df,
+        prev_k=prev_k,
+        entity_sim_topk=entity_sim_topk,
+        entity_sim_threshold=entity_sim_threshold,
+    )
+
+
+def build_eval_rows(
+    *,
+    qa_eval_module: Any,
+    qa_items: Sequence[dict[str, Any]],
+    simplify_gold_evidence: bool,
+) -> list[dict[str, Any]]:
+    return qa_eval_module.evaluate_items(
+        list(qa_items),
+        simplify_evidence=simplify_gold_evidence,
+    )
+
+
+def run_judge_stage(
+    *,
+    judge_module: Any,
+    input_csv: str | Path,
+    output_csv: str | Path,
+    sample_index: int | None,
+    dataset_json: str | Path,
+    dataset: str,
+    exclude_adversarial: bool,
+) -> dict[str, Any]:
+    return judge_module.llm_as_judge_singlemode(
+        input_csv=str(input_csv),
+        output_csv=str(output_csv),
+        sample_index=sample_index,
+        dataset_json=str(dataset_json),
+        dataset=dataset,
+        exclude_adversarial=exclude_adversarial,
+    )

@@ -1,0 +1,55 @@
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: falkordb
+    ports:
+      - "6379:6379"
+      - "3000:3000"
+    environment:
+      - REDIS_ARGS=--requirepass falkordb
+    restart: unless-stopped
+    volumes:
+      - falkordb-data:/data
+
+  falkordb-2:
+    image: falkordb/falkordb:latest
+    container_name: falkordb-2
+    ports:
+      - "6380:6379"
+      - "3001:3000"
+    environment:
+      - REDIS_ARGS=--requirepass falkordb
+    restart: unless-stopped
+    volumes:
+      - falkordb-2-data:/data
+
+  falkordb-3:
+    image: falkordb/falkordb:latest
+    container_name: falkordb-3
+    ports:
+      - "6381:6379"
+      - "3002:3000"
+    environment:
+      - REDIS_ARGS=--requirepass falkordb
+    restart: unless-stopped
+    volumes:
+      - falkordb-3-data:/data
+
+  falkordb-4:
+    image: falkordb/falkordb:latest
+    container_name: falkordb-4
+    ports:
+      - "6382:6379"
+      - "3003:3000"
+    environment:
+      - REDIS_ARGS=--requirepass falkordb
+    restart: unless-stopped
+    volumes:
+      - falkordb-4-data:/data
+
+
+volumes:
+  falkordb-data:
+  falkordb-2-data:
+  falkordb-3-data:
+  falkordb-4-data:
