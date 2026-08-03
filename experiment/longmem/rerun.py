@@ -8,7 +8,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from experiment_config import RETRIEVAL_PARAMS, RERANKER_PARAMS
+from experiment_config import INGEST_PARAMS, RETRIEVAL_PARAMS, RERANKER_PARAMS
+
+# LongMem-only: must match the value used when these artifacts were ingested.
+USE_SPLIT_SUMMARY = bool(INGEST_PARAMS.get("use_split_summary", True))
 from experiment.longmem.aggregate import update_all_answers_csv, update_progress_rows
 from experiment.longmem.helpers.args import add_data_args, add_rerun_args, add_run_args, resolve_stages
 from experiment.longmem.helpers.datasets import get_question_info, select_dataset_names
@@ -85,14 +88,17 @@ class LongMemRerun:
             restore_graph_from_cache(self.graph, mgr.cache)
             setup_retrieval_loggers(dataset_name, log_dir)
 
-            # LongMem uses the :u/:a split scheme (rebuild_split_summaries.py),
-            # not the LoCoMo single-entry-raw flow — force the flag off here,
-            # mirroring the processor.py override (shared config keeps True for LoCoMo).
-            # Ablation I:KG_ABLATION_NO_SPLIT=1 → 保持 single-entry pair 模式
+            # Mirror the processor.py coupling: INGEST_PARAMS["use_split_summary"]
+            # decides whether these artifacts have :u/:a entries, so retrieval must
+            # follow the same flag (shared config keeps True for LoCoMo).
+            # Ablation I:KG_ABLATION_NO_SPLIT=1 → 強制保持 single-entry pair 模式
             # (搭配 pair 條目 summaries_chroma;split path 其餘機制不變)。
             import os as _os
             _no_split = _os.getenv("KG_ABLATION_NO_SPLIT", "0").lower() not in ("0", "", "false")
-            _longmem_reranker_params = {**RERANKER_PARAMS, "split_single_entry_raw": _no_split}
+            _longmem_reranker_params = {
+                **RERANKER_PARAMS,
+                "split_single_entry_raw": _no_split or not USE_SPLIT_SUMMARY,
+            }
             retriever = Retriever(
                 llm=self.llm,
                 graph=self.graph,

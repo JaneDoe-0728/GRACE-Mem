@@ -17,15 +17,14 @@ At its core the repo builds and queries a Knowledge Graph (KG):
 
 ## Setup
 
-### 1. Get the source (with submodule)
-
-The repo uses a `noco-db-uploader` submodule:
+### 1. Get the source
 
 ```bash
-git clone --recurse-submodules <REPO_URL>
-# If already cloned without the submodule, or the parent updated the pointer:
-git submodule update --init --recursive
+git clone <REPO_URL>
 ```
+
+Everything, including `noco-db-uploader/`, is vendored directly in the repo — there
+are no git submodules to initialize.
 
 ### 2. Configure the LLM endpoint
 
@@ -55,7 +54,47 @@ Field descriptions live in the comments of `.env.example` (LLM, Judge, Agent fil
 bash setup_env.sh
 ```
 
-Runs, in order: `uv sync` (install deps) → `docker compose up -d` (start FalkorDB) → `download_model.py` (download embedding / reranker models, skipped if present) → verify FalkorDB is reachable and model files are in place.
+Runs, in order: `uv sync` (install deps) → `docker compose up -d falkordb` (start FalkorDB) → `download_model.py` (download embedding / reranker models, skipped if present) → verify FalkorDB is reachable and model files are in place. It uses plain `docker` when your user can reach the daemon and falls back to `sudo` only if needed.
+
+### 5. Get the benchmark data
+
+**The benchmark datasets are not included in this repo** — both data directories are
+gitignored, so a fresh clone has none of them and the commands under "Running
+experiments" will fail with a missing-file error until you populate them. Download each
+benchmark from its official release and lay the files out as below.
+
+#### LoCoMo → `experiment/locomo/data/`
+
+| File | Required | Notes |
+|---|---|---|
+| `locomo10.json` | yes | the LoCoMo QA/conversation file; `locomo.json` is also accepted |
+| `locomo_by_session.jsonl` | no | one session per line. If absent it is derived from `locomo10.json` automatically |
+
+For `--dataset locomo-plus` the expected names are `unified_input_samples_v2.json` and
+`locomo_plus_by_session.jsonl` instead. Override any of these per run with
+`--dataset-json` / `--sessions-jsonl`.
+
+#### LongMemEval → `experiment/longmem/script_data/<type>/`
+
+`<type>` is the question category you pass to `--type`, e.g. `single_session_user`,
+`single_session_assistant`, `single_session_preference`, `multi_session`,
+`temporal_reasoning`. Each category directory holds one **CSV per question** (discovered
+with `--file-pattern`, default `*.csv`).
+
+This is a **preprocessed** layout, not the raw LongMemEval release, and **no conversion
+script ships with this repo** — you have to produce these CSVs yourself. Each file needs
+these columns:
+
+| Column | Purpose |
+|---|---|
+| `session_id` | groups turns into a session |
+| `turn_index` | ordering within the session; user/assistant turns are paired in this order |
+| `role` | `user` or `assistant` |
+| `content` | the turn text |
+| `dialogue_datetime` | when the turn happened; drives relative-time resolution |
+| `question` | the question for this file (rename via `question_column`) |
+| `answer` | optional gold answer, used by the judge |
+| `question_date` | optional; falls back to `dialogue_datetime` / `date` / `timestamp` |
 
 ---
 
@@ -93,30 +132,43 @@ KG/
 ├── graph/
 │   └── falkordb.py          # FalkorDB connection, schema, upsert, subgraph queries
 ├── llm/
-│   ├── client.py            # LLM API wrapper (keyword extraction, entity-ops decisions, etc.)
-│   └── prompts.py           # Manages and stores the prompts used to call the LLM
+│   ├── client.py            # LLM API wrapper (keyword extraction, extraction calls, etc.)
+│   └── prompts/             # Prompt package (keyword / extraction / entity_ops sub-modules)
 ├── services/
-│   ├── EntityManager.py     # Entity normalization, similarity search, ADD/UPDATE, embedding, caching
-│   ├── RelationshipManager.py # Relationship alignment, dedup, merge, embedding
+│   ├── entity_manager.py    # Entity normalization, similarity search, ADD/UPDATE, embedding, caching
+│   ├── relationship_manager.py # Relationship alignment, dedup, merge, embedding
 │   └── provenance.py        # Unified tracking and merging of entity/relationship provenance (summary/session/message)
 ├── storage/
-│   ├── manager.py           # Unified entry point for VDB / BM25 / cache with async persistence
-│   ├── chroma_manager.py    # ChromaDB manager (collection lifecycle / embedding binding)
+│   ├── chroma_manager.py    # VDBManager: unified entry point for VDB / BM25 / cache with async persistence
 │   ├── chroma_vdb.py        # ChromaDB vector store wrapper (entities / relationships / summaries)
 │   ├── bm25.py              # Dual BM25 index over entity name/desc
-│   └── cache.py             # Load/save cache for entities / relationships
+│   ├── cache.py             # Load/save cache for entities / relationships
+│   └── paths.py             # Resolve the working artifacts dir (honors KG_ARTIFACTS_DIR)
 ├── utils/
-│   ├── utils.py             # Data models (Entity, Relationship, ExtractionResult), ID generation, tokenization
+│   ├── common.py            # Data models (Entity, Relationship, ExtractionResult), ID generation, tokenization
 │   ├── reranker.py          # LLM reranker (Qwen3-Reranker-0.6B) for relevance scoring
-│   ├── query_time_parser.py # Time-expression parsing (relative time → absolute date)
+│   ├── temporal/            # Shared temporal core (parsing / resolution / normalization)
+│   ├── query_time_parser.py # Compatibility layer over utils/temporal
 │   └── logger_config.py     # Logging utilities (JSONL event logs, timers)
 ```
+
+> The tree lists the modules this document describes, not every file in the package.
 
 ---
 
 ## FalkorDB (Docker)
 
-The project root ships a `docker-compose.yml`; start it directly:
+The project root ships a `docker-compose.yml` defining **four** FalkorDB services —
+`falkordb` (6379 / UI 3000) plus `falkordb-2` … `falkordb-4` (6380-6382 / UI 3001-3003),
+so several experiment runs can be kept on separate graphs at once.
+
+Start just the one the default `.env` points at:
+
+```bash
+sudo docker compose up -d falkordb
+```
+
+Or start all four (this is what `setup_env.sh` does):
 
 ```bash
 sudo docker compose up -d
@@ -125,8 +177,11 @@ sudo docker compose up -d
 Confirm it is running:
 ```bash
 sudo docker ps | grep falkordb
-redis-cli -p 6379 -a falkordb ping   # should return PONG
+sudo docker exec falkordb redis-cli -a falkordb ping   # should return PONG
 ```
+
+(The `docker exec` form needs no `redis-cli` on the host. If you have one installed,
+`redis-cli -p 6379 -a falkordb ping` works too.)
 
 View logs:
 ```bash
@@ -166,6 +221,8 @@ Takes a user query as input and outputs structured KG context text.
    - Rerank filtered-out entities/relationships and recover relevant items by `reranker_threshold`
 5. **Evidence retrieval**:
    - Fetch the corresponding spans from summaries tracked via provenance
+   - Candidates are scored and selected at **VDB-entry level** (`use_split_embeddings=True`,
+     the default — the same path the benchmark pipelines take)
    - Use LLMlingua-compressed summary text as evidence
    - Supports full summary or fallback to raw turn
 6. **Temporal relevance**:
@@ -179,7 +236,10 @@ Takes a user query as input and outputs structured KG context text.
 - `filter_rel_topk`, `filter_rel_threshold`: post-filter relationship top-K and threshold
 - `use_reranker`, `reranker_threshold`, `reranker_topk`: reranker settings
 - `summary_topk_per_item`, `summary_vec_threshold`: evidence retrieval settings
-- `use_full_summary`, `fallback_to_raw`: summary text handling
+- `use_split_embeddings` (default `True`), `split_single_entry_raw` (default `True`): evidence
+  selection granularity — see [Two artifact layouts](#two-artifact-layouts) below
+- `use_full_summary`, `fallback_to_raw`: summary text handling on the legacy turn-level
+  evidence path (`use_split_embeddings=False`)
 
 **Example:**
 ```python
@@ -244,6 +304,45 @@ results = ingestor.summarize_and_ingest_turn(
 )
 ```
 
+### 3. Two artifact layouts
+
+The summaries vector store can hold one of two things, and **retrieval must be told which
+one it is looking at**. Getting this wrong fails silently: retrieval looks up entry ids
+that were never written, every provenance candidate scores `None`, and the evidence block
+quietly degrades to direct-vector hits only — no error is raised.
+
+| | **Single entry** (default) | **`:u` / `:a` pairs** |
+|---|---|---|
+| Who writes it | `Ingestor.summarize_and_ingest_turn` | `experiment/longmem/rebuild_split_summaries.py`, run **after** ingest |
+| Entry ids | one per turn: `<session_id>:<message_id>` | two per turn: `…:u` (user raw) and `…:a` (assistant compressed) |
+| Retrieval setting | `split_single_entry_raw=True` | `split_single_entry_raw=False` |
+| Used by | the `build_pipeline()` default, and **LoCoMo** | **LongMem** only |
+
+**`Ingestor` never produces `:u` / `:a` entries.** They exist only as an optional
+post-processing pass, and only for LongMem. A single entry already carries *both* the
+LLMlingua-compressed summary and the raw turn text (`add_summary(..., raw_text=...)`), so
+the split is not what gives you access to the raw text — its only effect is that the user
+turn and the assistant turn compete as two independent retrieval candidates.
+
+For the experiment pipelines, one flag controls both halves:
+
+```python
+# experiment/experiment_config.py
+INGEST_PARAMS = dict(
+    use_split_summary=True,   # LongMem only
+    ...
+)
+```
+
+`use_split_summary=True` (the default) makes the LongMem pipeline run the rebuild
+automatically after ingest **and** sets `split_single_entry_raw=False` for retrieval;
+`False` skips the rebuild and keeps the single-entry layout. Because one flag drives both,
+the artifacts and the retrieval config cannot drift apart. LoCoMo ignores the flag and
+always uses the single-entry layout.
+
+If you use `build_pipeline()` directly (outside the experiment pipelines), you get the
+single-entry layout and need no rebuild.
+
 ## Component interactions
 ```mathematica
 [User Query]
@@ -300,8 +399,9 @@ Turns **Query → Keywords → Entities/Relationships → Context/Evidence**.
   - Delegates to `filtering.py` for subgraph assembly, secondary filtering (`filter_ent/rel_threshold`), and reranker recovery
   - Delegates to `temporal.py` to apply temporal relevance (LiCoMemory-style, currently optional)
   - Returns `(context_entities, context_relationships, context_text, query_vec)`
-- `build_evidence_block(context_entities, context_relationships, ...)`:
-  - Delegates to `evidence.py` to fetch **summary spans** as evidence by provenance
+- `self.evidence_builder.build_evidence_block(context_entities, context_relationships, ...)`
+  (defined on `EvidenceBuilder` in `evidence.py`, not on `Retriever`; `build_kg_context` calls it):
+  - Fetches **summary spans** as evidence by provenance
   - Two stages: score first → global sort for top-K → fetch text
   - Supports full summary or fallback to raw turn
 - `build_kg_context(question, *, ent_topk, rel_topk, filter_ent_topk, ...)`:
@@ -352,15 +452,16 @@ The main prompts and their tasks (actual content lives in `KG/llm/prompts/`):
   - Used by the **Ingestor**: extract entities only (including Event/Date/Time/Timespan) and resolve relative time via `dialogue_datetime`.
 - `relationship_extraction_only` (`KG/llm/prompts/extraction/two_step.py`)
   - Used by the **Ingestor**: build relationships over the extracted entity list; adding new entities is forbidden.
-- `ENTITY_OPS_RULES` / `ENTITY_OPS_RULES_V2` (`KG/llm/prompts/entity_ops/rules.py`)
+- `ENTITY_OPS_RULES_V2` (`KG/llm/prompts/entity_ops/rules.py`)
   - Used by the **EntityManager**: rules and merge strategy for ADD / UPDATE decisions.
-- `ENTITY_OPS_ONE_SHOT` / `ENTITY_OPS_FEW_SHOT` (`KG/llm/prompts/entity_ops/examples.py`)
-  - Provide examples to make the LLM's entity-ops output format and decisions more consistent.
+- `ENTITY_OPS_FEW_SHOT` (`KG/llm/prompts/entity_ops/examples.py`)
+  - Provides examples to make the LLM's entity-ops output format and decisions more consistent.
+  - `EntityManager` concatenates the two into one prompt (`ENTITY_OPS_RULES_V2` + `ENTITY_OPS_FEW_SHOT` + the entity block).
 
 ---
 
 
-### EntityManager (entities) (`services/EntityManager.py`)
+### EntityManager (entities) (`services/entity_manager.py`)
 Normalizes input entities, finds similar ones, performs ADD/UPDATE, and writes to the vector store / BM25.
 - `normalize_entities(entities)`: convert to `{entity_name, entity_type, entity_description}`.
 - `find_similar_for_hybrid(entities, top_k=5, threshold=0.6)`: merge similar-entity candidates, **BM25 first, then vector**.
@@ -369,7 +470,7 @@ Normalizes input entities, finds similar ones, performs ADD/UPDATE, and writes t
 
 ---
 
-### RelationshipManager (relationships) (`services/RelationshipManager.py`)
+### RelationshipManager (relationships) (`services/relationship_manager.py`)
 Aligns extracted relationships to entities, dedups, merges descriptions/keywords, writes to the vector store.
 - `upsert_from_extraction(result, provenance, input2resolved, sync_to_graph=False, ...)`:  
   align endpoints via `input2resolved` → **add or merge** → write to VDB (optionally sync FalkorDB).
@@ -378,12 +479,13 @@ Aligns extracted relationships to entities, dedups, merges descriptions/keywords
 
 ### Provenance (source tracking) (`services/provenance.py`)
 Unifies sources (summary/session/message) into an event list that can be merged.
+Both are `@staticmethod`s on the `Provenance` class — call them as `Provenance.prov_to_events(...)`.
 - `prov_to_events(prov)`: different formats → a **standardized event list**.
 - `merge_prov(old, new, max_events=50)`: **dedup/sort/truncate**, output `{"events":[...]}`.
 
 ---
 
-### VDBManager (index/cache management) (`storage/manager.py`)
+### VDBManager (index/cache management) (`storage/chroma_manager.py`)
 Centrally manages ChromaDB and BM25 for Entities/Relationships/Summaries, plus caches.
 - `get_entities_vdb(dim)` / `get_relationships_vdb(dim)` / `get_summaries_vdb(dim)`: get / lazily init an index.
 - `get_entities_bm25(load_if_empty=True)`: get the entity BM25 (dual name/desc index).
@@ -392,11 +494,32 @@ Centrally manages ChromaDB and BM25 for Entities/Relationships/Summaries, plus c
 
 ---
 
-### ChromaVDB (ChromaDB, `storage/chroma_vdb.py`)
-- `add(texts, metas, ids)`: add text, metadata, and optional IDs.
-- `query(query_texts, n_results, where={}, where_document={})`: similarity query with conditional filtering.
-- `get_by_ids(ids)`: fetch items by ID.
-- `delete_by_ids(ids)`: delete items by ID.
+### SimpleChromaVDB (ChromaDB wrapper, `storage/chroma_vdb.py`)
+A thin vector-store wrapper over a ChromaDB collection. It takes **pre-computed
+vectors**, not raw text — embedding happens in the caller (`embeddings.embedder`).
+IDs are not passed separately: each row's id is read from its metadata dict.
+
+Base class (`SimpleChromaVDB(dim, path, collection_name)`):
+- `add(vectors: np.ndarray, metadatas: list[dict])`: append rows; the id of each row comes from `metadatas[i]["id"]`.
+- `upsert(vectors, metadatas)`: same as `add`, overwriting rows whose id already exists.
+- `search(query_vec: np.ndarray, top_k=5, threshold=None)`: cosine similarity search; returns `[(meta, score), ...]`, dropping anything below `threshold`.
+- `batch_search(query_vecs, top_k=5, threshold=None)`: one result list per query vector.
+- `compare_by_id(mid, query_vec, threshold=0.0)`: score a *known* row against the query; returns `(meta, score)` or `None`.
+- `compare_by_id_raw(mid, query_vec, ...)`: same comparison returning the bare score, with no threshold applied.
+- `update(ids, vectors=None, metadatas=None)`: patch vectors and/or metadata in place.
+- `delete(ids: list[str])`: delete rows by id.
+- `rebuild(all_vectors, all_metadatas)`: drop and recreate the collection from scratch.
+- `save()` / `load()` / `close()`: persistence and connection lifecycle.
+- `size`: row count (**property**, not a method).
+- `export_metadatas_jsonl(output_path)`: dump all metadata to JSONL; returns the row count.
+
+Subclasses: `EntitiesVDB`, `RelationshipsVDB` (base behaviour only) and
+`SummariesVDB`, which adds the summary-specific helpers:
+- `add_summary(session_id, message_id, summary_text, dialogue_datetime=None, raw_text=None)`: write one entry per turn; returns the `summary_id` (`"<session_id>:<message_id>"`). This is what the Ingestor calls.
+- `add_split_turns(session_id, message_id, user_text, assistant_summary, dialogue_datetime=None)`: write the `:u` / `:a` entry pair used by the split-embedding evidence path (built offline by `experiment/longmem/rebuild_split_summaries.py`).
+- `get_text_by_entry_id(entry_id)` / `get_raw_turn_text_by_id(summary_id)` / `get_summary_text_by_id(summary_id)`: fetch stored text by id, in decreasing order of preference.
+- `get_summaries_by_ids(summary_ids, max_len=3000, top_n=10)`: batch fetch summary texts.
+- `get_recent_summaries(session_id, k=2, text_only=True)`: most recent summaries of a session.
 
 ---
 
@@ -425,7 +548,6 @@ Unified management of LLM chat, extraction, and entity-ops decisions.
   - Returns `(json_string, latency_sec)`
 - `generate_entity_ops(new_entities, similar_map)`:
   - Generate an ADD/UPDATE decision instruction block
-  - Includes `_validate_entity_ops_output` validation
   - Returns a structured operations list
 
 **Note:** summary generation now uses the LLMlingua-2 compressor; the LLM's `generate_llm_summary` is no longer used.
@@ -447,7 +569,7 @@ Handles FalkorDB connection, schema creation, data sync, and subgraph queries.
 
 ### Utils (`utils/`)
 
-#### Data models and helpers (`utils/utils.py`)
+#### Data models and helpers (`utils/common.py`)
 Defines core data structures and helper functions.
 - **Data models**:
   - `EntityType`: entity-type enum (Person, Event, Date, Time, Location, Organization, Product, etc.)
@@ -455,12 +577,11 @@ Defines core data structures and helper functions.
   - `Relationship(BaseModel)`: relationship structure (source_entity, target_entity, relationship_description, relationship_keywords)
   - `ExtractionResult(BaseModel)`: extraction result (entities, relationships)
   - `KeywordExtractionResult(BaseModel)`: keyword-extraction result (high_level_keywords, low_level_keywords)
-- **ID generation**:
-  - `canonical_entity_id(name, etype)`: generate an entity ID (format: `type::name`)
-  - `canonical_rel_id(src_id, tgt_id)`: generate a relationship ID (format: `src::tgt`)
+- **ID generation** (lowercased, non-alphanumerics collapsed to `_`):
+  - `canonical_entity_id(name, etype)`: entity ID, format `<type>_<name>` — e.g. `("AI Workshop", "Event")` → `event_ai_workshop`
+  - `canonical_rel_id(src_id, tgt_id)`: relationship ID, format `<src_id>_<tgt_id>`
 - **Tokenization and normalization**:
   - `tokenize_en(text)`: English tokenization
-  - `tokenize_zh(text)`: Chinese tokenization
 - **Pickle utilities**:
   - `pickle_dump(path, obj)` / `pickle_load(path, default=None)`
 
@@ -468,8 +589,9 @@ Defines core data structures and helper functions.
 An LLM-based pointwise reranker using Qwen3-Reranker-0.6B.
 - `LLMPointwiseReranker(model_name=None, device=None)`:
   - Initialize the reranker (defaults to the local Qwen3-Reranker-0.6B)
-  - `rank_pairs(query, texts, threshold=-3.0)`: score and sort query-text pairs
-  - Returns `[(idx, score), ...]`, dropping items below the threshold
+  - `rank_pairs(query, texts, threshold=None, doc_type="entity")`: score and sort query-text pairs
+  - Returns `[(idx, score), ...]`, dropping items below `threshold` when one is given
+  - `rerank(query, texts, ...)`: the batched variant used by the split-evidence path
 - `get_reranker()`: get the global reranker singleton (lazy initialization)
 
 #### Time parser (`utils/query_time_parser.py`)

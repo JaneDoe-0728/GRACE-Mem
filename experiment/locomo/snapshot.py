@@ -305,7 +305,11 @@ def _snapshot_builder(args) -> None:
             continue
 
         log_event("SNAP_BUILD", "Ingesting session", conv=conv_id, session=sess_id)
-        df = ingest.session_records_to_df([records_map[sess_id]], conv_id=conv_id)
+        # chunk_turns must match the run being snapshotted; a mismatch silently
+        # shifts every summary_id and the restored artifacts stop lining up.
+        df = ingest.session_records_to_df(
+            [records_map[sess_id]], conv_id=conv_id, chunk_turns=args.chunk_turns
+        )
         ingest.ingest_by_session_one_turn(
             ingestor,
             df,

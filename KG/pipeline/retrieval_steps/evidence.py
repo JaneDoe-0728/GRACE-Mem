@@ -542,8 +542,8 @@ class EvidenceBuilder:
                 # 2) Fetch summary text
                 if use_full_summary:
                     try:
-                        snippet = self.summaries_vdb.get_summary_text_by_id(summary_id, full=True)
-                    except AttributeError:
+                        snippet = self.summaries_vdb.get_summary_text_by_id(summary_id)
+                    except (AttributeError, TypeError):
                         xs = self.summaries_vdb.get_summaries_by_ids([summary_id], top_n=1)
                         snippet = xs[0] if xs else None
                 else:

@@ -47,6 +47,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--entity-sim-topk", type=int, default=INGEST_PARAMS.get("entity_sim_topk", 4))
     parser.add_argument("--entity-sim-threshold", type=float, default=INGEST_PARAMS.get("entity_sim_threshold", 0.5))
     parser.add_argument(
+        "--chunk-turns",
+        type=int,
+        default=INGEST_PARAMS.get("chunk_turns", 8),
+        help="Turns per ingest chunk. Each session is split into consecutive windows "
+        "of this many turns, each becoming its own summary (message_id = chunk index). "
+        "0 = one summary per whole session. Must match the run that produced any "
+        "artifacts reused via --artifact-dir.",
+    )
+    parser.add_argument(
         "--adaptive",
         action="store_true",
         help="Enable adaptive re-search retrieval",

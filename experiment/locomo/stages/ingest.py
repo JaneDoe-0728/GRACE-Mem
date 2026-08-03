@@ -3,7 +3,6 @@
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import os
 import sys
 import argparse
 
@@ -13,6 +12,7 @@ import pandas as pd
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 from locomo.helpers.dataset import build_session_records_from_json, normalize_dataset_name, resolve_dataset_path  # noqa: E402
 from locomo.utils.io import load_jsonl_records  # noqa: E402
+from experiment_config import INGEST_PARAMS  # noqa: E402
 
 
 # ========= Config: edit here =========
@@ -25,18 +25,29 @@ ENTITY_SIM_THRESHOLD = 0.5
 DIALOGUE_JOINER = "\n"              # keep each utterance on its own line
 PUT_SPEAKER_PREFIX = True           # keep "Caroline: ..." in text if present
 
-# Turns per summary chunk. 0 (default) = original behaviour: one summary per whole
-# session. When >0, each session is split into consecutive windows of this many
-# turns, each becoming its own summary/ingest unit (message_id = chunk index). This
-# gives a finer summary-retrieval pool so direct-vector + rerank have room to work.
-CHUNK_TURNS = int(os.environ.get("LOCOMO_CHUNK_TURNS", "0") or 0)
+# Turns per summary chunk. Single source of truth is INGEST_PARAMS["chunk_turns"] in
+# experiment/experiment_config.py; it is threaded down as an explicit argument (never
+# read from the environment) so the orchestrator, each worker subprocess and the
+# snapshot builder cannot silently disagree about the chunk size.
+CHUNK_TURNS = int(INGEST_PARAMS.get("chunk_turns", 8) or 0)
 
 
-def _iter_dialogue_chunks(dialogue: List[str]):
-    """Yield (message_id, chunk_lines). CHUNK_TURNS<=0 → whole session as one chunk."""
-    if CHUNK_TURNS and CHUNK_TURNS > 0:
-        for start in range(0, len(dialogue), CHUNK_TURNS):
-            yield start // CHUNK_TURNS, dialogue[start:start + CHUNK_TURNS]
+def _iter_dialogue_chunks(dialogue: List[str], chunk_turns: Optional[int] = None):
+    """Yield (message_id, chunk_lines).
+
+    chunk_turns > 0 → consecutive windows of that many turns, message_id = chunk index.
+    chunk_turns <= 0 → the whole session as one chunk (message_id = 0), i.e. the
+    pre-chunking behaviour. None falls back to the configured default.
+
+    Empty dialogue is the one place the two modes differ: chunked mode yields nothing
+    (no summary is written for a session with no turns), while chunk_turns<=0 yields a
+    single empty chunk. That asymmetry is deliberate — chunk_turns<=0 exists to
+    reproduce pre-chunking runs byte for byte, so its behaviour is frozen.
+    """
+    n = CHUNK_TURNS if chunk_turns is None else int(chunk_turns)
+    if n > 0:
+        for start in range(0, len(dialogue), n):
+            yield start // n, dialogue[start:start + n]
     else:
         yield 0, dialogue
 
@@ -85,13 +96,14 @@ def sessions_to_one_turn_df(
     *,
     make_session_uid: bool = True,
     sample_filter: Optional[int] = None,
+    chunk_turns: Optional[int] = None,
 ) -> pd.DataFrame:
     """
-    每個 session -> 一個 turn：
+    每個 session -> 一個或多個 chunk，每個 chunk 一個 turn：
       - session_id: 唯一（建議 sample_index__session_id）
-      - message_id: 固定 0
+      - message_id: chunk 索引（chunk_turns<=0 時固定 0，即整個 session 一塊）
       - dialogue_datetime: date_time
-      - user_text: 整段 dialogue (A/B 兩人對話原樣串起來)
+      - user_text: 該 chunk 的 dialogue (A/B 兩人對話原樣串起來)
       - assistant_text: 空字串
     """
     rows: List[Dict[str, Any]] = []
@@ -101,7 +113,7 @@ def sessions_to_one_turn_df(
             continue
         sess_id = s.get("session_id")
         dialogue = ["" if x is None else str(x) for x in (s.get("dialogue", []) or [])]
-        for message_id, chunk in _iter_dialogue_chunks(dialogue):
+        for message_id, chunk in _iter_dialogue_chunks(dialogue, chunk_turns):
             rows.append(
                 {
                     "session_id": _session_uid(sample_index, sess_id, make_session_uid),
@@ -123,17 +135,20 @@ def session_records_to_df(
     records: List[Dict[str, Any]],
     *,
     conv_id: str,
+    chunk_turns: Optional[int] = None,
 ) -> pd.DataFrame:
-    """Build a one-turn-per-session DataFrame from a list of session record dicts.
+    """Build a one-turn-per-chunk DataFrame from a list of session record dicts.
 
     Session UIDs are ``<conv_id>__<session_id>`` so they are unique per conversation
-    and do not collide across different source conversations.
+    and do not collide across different source conversations. ``chunk_turns`` must
+    match the value used by the run that produced the artifacts being restored,
+    otherwise the resulting summary_ids will not line up.
     """
     rows: List[Dict[str, Any]] = []
     for rec in records:
         sess_id = rec.get("session_id")
         dialogue = ["" if x is None else str(x) for x in (rec.get("dialogue", []) or [])]
-        for message_id, chunk in _iter_dialogue_chunks(dialogue):
+        for message_id, chunk in _iter_dialogue_chunks(dialogue, chunk_turns):
             rows.append(
                 {
                     "session_id": f"{conv_id}__{sess_id}",
@@ -201,6 +216,7 @@ class IngestStage:
         entity_sim_topk: Optional[int] = None,
         entity_sim_threshold: Optional[float] = None,
         make_session_uid: bool = True,
+        chunk_turns: Optional[int] = None,
     ) -> None:
         self.ingestor = ingestor
         self.dataset = dataset
@@ -211,6 +227,7 @@ class IngestStage:
         self.entity_sim_topk = entity_sim_topk
         self.entity_sim_threshold = entity_sim_threshold
         self.make_session_uid = make_session_uid
+        self.chunk_turns = chunk_turns
 
     def run(self) -> dict:
         sessions = load_sessions(
@@ -222,6 +239,7 @@ class IngestStage:
             sessions,
             make_session_uid=self.make_session_uid,
             sample_filter=self.sample_index,
+            chunk_turns=self.chunk_turns,
         )
         if df.empty:
             raise RuntimeError(f"No sessions found for sample_index={self.sample_index}")
@@ -243,6 +261,8 @@ def main() -> None:
     parser.add_argument("--prev-k", type=int, default=PREV_K)
     parser.add_argument("--entity-sim-topk", type=int, default=ENTITY_SIM_TOPK)
     parser.add_argument("--entity-sim-threshold", type=float, default=ENTITY_SIM_THRESHOLD)
+    parser.add_argument("--chunk-turns", type=int, default=CHUNK_TURNS,
+                        help="Turns per ingest chunk (0 = whole session as one chunk)")
     parser.add_argument("--no-session-uid", action="store_true")
     args = parser.parse_args()
 
@@ -260,6 +280,7 @@ def main() -> None:
         sessions,
         make_session_uid=not args.no_session_uid,
         sample_filter=args.sample_index,
+        chunk_turns=args.chunk_turns,
     )
     if df.empty:
         raise SystemExit(f"No sessions found for sample_index={args.sample_index}")

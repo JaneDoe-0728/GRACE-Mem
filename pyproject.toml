@@ -42,3 +42,7 @@ torchvision = { index = "pytorch-cu128" }
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["test"]
+markers = [
+    "integration: needs a live FalkorDB, an LLM endpoint and the downloaded models; skips itself when they are absent",
+    "slow: spawns a subprocess (e.g. a pipeline --help) and takes seconds rather than milliseconds",
+]

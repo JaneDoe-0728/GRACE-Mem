@@ -37,7 +37,11 @@ sys.path.insert(0, str(_EXP))
 from KG.storage import CacheStore, VDBManager
 from KG.pipeline.ingestor import Ingestor
 from KG.pipeline.retriever import Retriever, RetrieverConfig
-from experiment_config import RERANKER_PARAMS
+from experiment_config import INGEST_PARAMS, RERANKER_PARAMS
+
+# LongMem-only: whether summaries are rebuilt into :u/:a entry pairs after ingest.
+# Drives both the rebuild step and the matching retrieval setting.
+USE_SPLIT_SUMMARY = bool(INGEST_PARAMS.get("use_split_summary", True))
 from KG.llm import LLMClient, token_tracker
 from KG.graph.falkordb import graph_from_env
 from embeddings import embedder
@@ -103,6 +107,12 @@ class MultiDatasetProcessor:
         self.llm = None
         self.graph = None
         self.embedder = None
+
+        # Split-summary rebuild helpers. Expensive to construct (raw-context index +
+        # llmlingua model) and stateless across datasets, so they are built once on
+        # first use and deliberately NOT reset by _cleanup_current_dataset().
+        self._split_lookup = None
+        self._split_compressor = None
 
         # Dataset-specific components (reinitialized per dataset)
         self.current_mgr: Optional[VDBManager] = None
@@ -307,6 +317,55 @@ class MultiDatasetProcessor:
             self.current_mgr.flush_persist()
 
         return results
+
+    def _maybe_rebuild_split_summaries(self) -> None:
+        """Rebuild this dataset's summaries_chroma into :u/:a entry pairs.
+
+        Runs right after ingest when INGEST_PARAMS["use_split_summary"] is True, so the
+        artifacts on disk match what the retriever is configured to look for
+        (split_single_entry_raw=False). Without this step retrieval would query
+        {sid}:u / {sid}:a entries that the Ingestor never writes, and the whole
+        provenance channel would silently drop to zero candidates.
+
+        rebuild_artifact() is idempotent — it skips an artifact dir that already has a
+        summaries_chroma_bak backup — so reruns and resumed runs are safe.
+        """
+        if not USE_SPLIT_SUMMARY:
+            return
+        if self.current_mgr is None:
+            return
+
+        artifact_dir = Path(self.current_mgr.ART)
+        try:
+            from experiment.longmem.rebuild_split_summaries import (
+                SCRIPT_DATA_DIR,
+                get_compressor,
+                rebuild_artifact,
+            )
+
+            if self._split_lookup is None:
+                from KG.utils.raw_context_lookup import RawContextLookup
+
+                print(f"[SPLIT] Loading raw context from {SCRIPT_DATA_DIR} ...")
+                self._split_lookup = RawContextLookup(SCRIPT_DATA_DIR)
+                self._split_lookup._ensure_loaded()
+            if self._split_compressor is None:
+                print("[SPLIT] Loading llmlingua compressor ...")
+                self._split_compressor = get_compressor()
+
+            result = rebuild_artifact(
+                artifact_dir, self._split_lookup, self._split_compressor, False
+            )
+            status = result.get("status")
+            print(f"[SPLIT] {artifact_dir.name}: {status}"
+                  + (f" — {result.get('reason')}" if result.get("reason") else ""))
+            if status not in ("ok", "skip"):
+                print(f"[SPLIT][WARN] unexpected rebuild status for {artifact_dir}: {result}")
+        except Exception as exc:
+            # Do not kill the run: report loudly and let the caller decide. Retrieval
+            # will fall back to the direct-vector channel only.
+            print(f"[SPLIT][ERROR] split-summary rebuild failed for {artifact_dir}: {exc}")
+            traceback.print_exc()
 
     def _build_context(self, question: str, config: DatasetConfig, query_time: str | None = None) -> str:
         retrieval_params = {
@@ -550,12 +609,16 @@ class MultiDatasetProcessor:
         # ── Benchmark split: LongMem vs LoCoMo retrieval semantics ──────────────
         # The shared experiment_config.py sets split_single_entry_raw=True for the
         # LoCoMo rerank16 flow (one entry per summary_id, no :u/:a suffix, fed the
-        # raw turn text). LongMem uses the longmem-summary scheme instead: each turn
-        # is split into :u (user raw) and :a (assistant compressed summary) entries
-        # (built by rebuild_split_summaries.py). Force split_single_entry_raw=False
-        # here so LongMem always takes the :u/:a path, independent of the shared
-        # config; LoCoMo keeps the config value via its own workers.py path.
-        _longmem_reranker_params = {**RERANKER_PARAMS, "split_single_entry_raw": False}
+        # raw turn text). LongMem can additionally split each turn into :u (user raw)
+        # and :a (assistant compressed) entries, which are built by the
+        # _maybe_rebuild_split_summaries() step right after ingest.
+        # Both sides are driven by the SAME flag so the artifact layout and the
+        # retrieval config can never disagree: use_split_summary=True means the
+        # rebuild runs AND retrieval looks for :u/:a; False means neither.
+        _longmem_reranker_params = {
+            **RERANKER_PARAMS,
+            "split_single_entry_raw": not USE_SPLIT_SUMMARY,
+        }
         self.current_retriever = Retriever(
             llm=self.llm,
             graph=self.graph,
@@ -771,6 +834,7 @@ class MultiDatasetProcessor:
                 else:
                     raise ValueError(f"Unknown ingest_mode: {config.ingest_mode}")
                 print(f"\n[INGEST] Completed! Processed {len(ingest_results)} sessions")
+                self._maybe_rebuild_split_summaries()
             else:
                 print(f"\n[INGEST] Skipped for dataset {config.name}")
 

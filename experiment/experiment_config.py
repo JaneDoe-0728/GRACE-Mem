@@ -18,6 +18,26 @@ INGEST_PARAMS = dict(
     prev_k=2,
     entity_sim_topk=3,
     entity_sim_threshold=0.6,
+    # ── LoCoMo only: turns per ingest chunk ────────────────────────────────
+    # Each session is split into consecutive windows of this many turns, and each
+    # window becomes its own summary/ingest unit (message_id = chunk index), giving
+    # a finer summary-retrieval pool. 0 = one summary per whole session (the pre-
+    # chunking behaviour; set this to reproduce older runs).
+    # NOTE: the evidence knobs in RERANKER_PARAMS below (summary_direct_vector_topn,
+    # summary_rerank_topk) were tuned against whole-session summaries. Changing
+    # chunk_turns changes the candidate pool size, so re-sweep them if you tune.
+    chunk_turns=8,
+    # ── LongMem only: :u/:a split summaries ────────────────────────────────
+    # True  → after ingest, each artifact's summaries_chroma is rebuilt into
+    #         {sid}:u (user raw) + {sid}:a (assistant compressed) entry pairs, and
+    #         retrieval scores them as independent candidates.
+    # False → keep what the Ingestor wrote (one entry per summary_id) and skip the
+    #         rebuild entirely.
+    # This single flag drives BOTH the rebuild step and the matching retrieval
+    # setting (split_single_entry_raw = not use_split_summary), so the artifact
+    # layout and the retrieval config can never disagree. LoCoMo ignores it and
+    # always uses one entry per summary_id.
+    use_split_summary=True,
 )
 
 # ── Parameters passed to build_kg_context() per call ──────────────────────
@@ -113,9 +133,11 @@ RERANKER_PARAMS = dict(
     summary_rerank_topk=16,
     summary_rerank_cosine_only=False,
     # rerank16: one entry per summary_id (no :u/:a), feed raw turn text.
-    # 此共用值供 LoCoMo 使用(True);LongMem 在 processor.py/rerun.py 強制覆寫為
-    # False(:u/:a split 路徑,artifacts 需先跑 rebuild_split_summaries.py,
-    # oss-20b-0427 已於 2026-07-04 重建完成)。
+    # 此共用值供 LoCoMo 使用(True,LoCoMo 永遠是單筆 entry)。
+    # LongMem 在 processor.py / rerun.py 依 INGEST_PARAMS["use_split_summary"]
+    # 覆寫為 (not use_split_summary):預設 True → 覆寫成 False,走 :u/:a split,
+    # 對應的 artifacts 由同一個旗標驅動的 rebuild 步驟自動產生。
+    # 不要在這裡單獨改成 False —— 那會讓檢索去找沒人保證存在的 :u/:a entry。
     split_single_entry_raw=True,
 )
 

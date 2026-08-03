@@ -761,6 +761,7 @@ def run_locomo_worker(args) -> None:
                 prev_k=args.prev_k,
                 entity_sim_topk=args.entity_sim_topk,
                 entity_sim_threshold=args.entity_sim_threshold,
+                chunk_turns=args.chunk_turns,
             )
             MGR.flush_persist()
         else:
@@ -1212,6 +1213,7 @@ def run_locomo_plus_worker(args) -> None:
                 prev_k=args.prev_k,
                 entity_sim_topk=args.entity_sim_topk,
                 entity_sim_threshold=args.entity_sim_threshold,
+                chunk_turns=args.chunk_turns,
             )
             MGR.flush_persist()
         elif run_ingest:

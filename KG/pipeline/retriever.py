@@ -279,10 +279,15 @@ class RetrieverConfig:
     # Path to the script_data directory containing raw CSV conversation files.
     # Required when use_raw_context=True or use_split_embeddings=True.
     raw_context_data_dir: str = ""
-    # When True, VDB stores :u (user raw) and :a (assistant compressed) entries per turn.
-    # Each is scored independently; top-K selection operates at entry level, not turn level.
-    # Mutually exclusive with use_raw_context.
-    use_split_embeddings: bool = False
+    # When True, evidence is selected at VDB-entry level rather than turn level, via
+    # EvidenceBuilder._build_evidence_split. Mutually exclusive with use_raw_context.
+    # Entry granularity is controlled by split_single_entry_raw below: one entry per
+    # summary_id (the default, matching what Ingestor writes), or :u (user raw) /
+    # :a (assistant compressed) pairs built by rebuild_split_summaries.py.
+    # Defaults to True so build_pipeline() takes the same evidence path the benchmark
+    # pipelines take (experiment_config.RERANKER_PARAMS sets this too); the legacy
+    # turn-level branch is kept for artifacts that predate split selection.
+    use_split_embeddings: bool = True
     # Direct summary vector retrieval (split-embedding mode only). When > 0, the top-N
     # summaries by raw query similarity are pulled straight from the VDB and merged into
     # the evidence candidate pool, in parallel with entity/relationship spreading
@@ -305,7 +310,14 @@ class RetrieverConfig:
     # text (raw_text metadata) instead of the compressed summary. Lets the rerank16
     # flow (direct-vector + cross-encoder rerank) run on datasets that don't use the
     # user/assistant split embedding scheme.
-    split_single_entry_raw: bool = False
+    # Defaults to True because Ingestor.summarize_and_ingest_turn writes exactly one
+    # entry per summary_id and never writes :u/:a. Those pairs are a LongMem-only
+    # post-processing pass (experiment/longmem/rebuild_split_summaries.py), so only the
+    # LongMem pipeline sets this to False — and it derives the value from
+    # INGEST_PARAMS["use_split_summary"], the same flag that decides whether the rebuild
+    # ran at all. Setting False against artifacts that were never rebuilt makes every
+    # provenance candidate miss silently.
+    split_single_entry_raw: bool = True
     # ── HyDE summary retrieval ────────────────────────────────────────────────
     # Generate hypothetical answer sentences, embed them, and blend their summary
     # similarity with the query similarity: score = (1-w)*sim_query + w*sim_hyde.

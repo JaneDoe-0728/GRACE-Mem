@@ -20,7 +20,9 @@ class VDBManager:
     def __init__(self, artifacts_dir: Path) -> None:
         """Set up artifact locations and lazy handles for all vector stores."""
         self.ART = artifacts_dir
-        self.ART.mkdir(exist_ok=True)
+        # parents=True: per-sample artifact paths are nested (e.g. <run>/sample_0/artifacts),
+        # and callers should not have to pre-create the intermediate directories.
+        self.ART.mkdir(parents=True, exist_ok=True)
 
         # ChromaDB directories
         self.ENT_CHROMA_DIR = self.ART / "entities_chroma"

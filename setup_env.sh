@@ -17,6 +17,25 @@ while [[ ! -f "${REPO_ROOT}/pyproject.toml" && "${REPO_ROOT}" != "/" ]]; do
     REPO_ROOT="$(cd "${REPO_ROOT}/.." && pwd)"
 done
 
+# ── Docker invocation ─────────────────────────────────────────────────────────
+# Use plain `docker` when the current user can already reach the daemon (i.e. is
+# in the docker group), and fall back to sudo only when it is actually needed.
+# Unconditionally calling sudo breaks non-interactive shells and machines with no
+# sudo at all, and `set -e` would abort the whole script.
+if docker info >/dev/null 2>&1; then
+    DOCKER="docker"
+elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null && sudo docker info >/dev/null 2>&1; then
+    DOCKER="sudo docker"
+elif command -v sudo >/dev/null 2>&1; then
+    echo "  Docker needs sudo; you may be prompted for your password."
+    DOCKER="sudo docker"
+else
+    echo "FAIL: cannot reach the Docker daemon, and sudo is unavailable." >&2
+    echo "      Start Docker, add yourself to the 'docker' group, or point" >&2
+    echo "      NEO4J_URI in .env at an existing FalkorDB and skip this script." >&2
+    exit 1
+fi
+
 # ── 1. Python deps ────────────────────────────────────────────────────────────
 
 echo "[1/4] uv sync"
@@ -27,7 +46,9 @@ echo "      OK"
 # ── 2. FalkorDB ───────────────────────────────────────────────────────────────
 
 echo "[2/4] docker compose up -d (FalkorDB)"
-sudo docker compose up -d --force-recreate
+# Only the primary container is needed; docker-compose.yml also defines
+# falkordb-2..4 on 6380-6382 for running several experiments side by side.
+${DOCKER} compose up -d --force-recreate falkordb
 echo "      OK"
 
 # ── 3. Download models ────────────────────────────────────────────────────────
@@ -41,12 +62,12 @@ echo "      OK"
 echo "[4/4] verifying..."
 
 # FalkorDB — prefer docker exec (works without redis-cli on host)
-PONG=$(sudo docker exec falkordb redis-cli -a falkordb ping 2>/dev/null \
+PONG=$(${DOCKER} exec falkordb redis-cli -a falkordb ping 2>/dev/null \
        || redis-cli -p 6379 -a falkordb ping 2>/dev/null \
        || true)
 if [[ "${PONG}" != *"PONG"* ]]; then
     echo "  FAIL: FalkorDB not reachable (got: '${PONG}')" >&2
-    echo "        Try: sudo docker compose up -d" >&2
+    echo "        Try: ${DOCKER} compose up -d falkordb" >&2
     exit 1
 fi
 echo "  FalkorDB: OK"

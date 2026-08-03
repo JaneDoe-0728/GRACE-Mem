@@ -5,7 +5,7 @@ This document covers the full flow (ingest → retrieve → answer → judge) fo
 1. **LongMemEval** (`longmem/watchdog.py`)
 2. **LoCoMo** (`locomo/pipeline.py`)
 
-> Prerequisite: complete the Setup in the root [readme.md](../readme.md) first (start FalkorDB, set the LLM endpoint in `.env`, run `setup_env.sh`). All ingest / retrieve / reranker parameters live in [experiment_config.py](experiment_config.py) (single source of truth).
+> Prerequisite: complete the Setup in the root [readme.md](../readme.md) first (start FalkorDB, set the LLM endpoint in `.env`, run `setup_env.sh`, **and put the benchmark data in place** — neither dataset ships with the repo, see [Get the benchmark data](../readme.md#5-get-the-benchmark-data)). All ingest / retrieve / reranker parameters live in [experiment_config.py](experiment_config.py) (single source of truth).
 
 ---
 
@@ -45,6 +45,10 @@ uv run python experiment/longmem/watchdog.py \
 
 - `watchdog.py` checks whether each dataset's output is complete
 - If incomplete, it runs `run_batch.py` → `processor.py`
+- After each dataset's ingest, if `INGEST_PARAMS["use_split_summary"]` is true (the
+  default), `processor.py` rebuilds that dataset's `summaries_chroma` into `:u` / `:a`
+  entry pairs. The step is idempotent — an artifact dir that already has a
+  `summaries_chroma_bak` backup is skipped — so resumed and rerun ingests are safe.
 - Default data root is `./experiment/longmem/script_data/`; it actually reads `./experiment/longmem/script_data/<type>/`
 - Default output goes to `experiment/longmem/output/<run_tag>/<category>/`
 - For each dataset, in order:
@@ -120,6 +124,12 @@ Module layout:
 Common parameters:
 
 - `--dataset {locomo,locomo-plus}`: default `locomo`
+- `--chunk-turns`: turns per ingest chunk, default from `INGEST_PARAMS["chunk_turns"]` (**8**).
+  Each session is split into consecutive windows of this many turns, and each window
+  becomes its own summary (`message_id` = chunk index), giving a finer summary-retrieval
+  pool. `0` = one summary per whole session, i.e. the pre-chunking behaviour — use it to
+  reproduce older runs. Must match the run that produced any artifacts reused via
+  `--artifact-dir`, otherwise the `summary_id`s will not line up.
 - `--sessions-jsonl`: default `experiment/locomo/data/locomo_by_session.jsonl`
 - `--dataset-json`: for `locomo`, default `experiment/locomo/data/locomo10.json`
 - `--out-root`: default base `experiment/locomo/output`
@@ -145,7 +155,8 @@ For `locomo-plus`:
 
 - **Orchestrator**: parse `--sample-ids` → launch one clean Python subprocess per sample → back up artifacts/logs on success, then call `refresh_system.py` to clean the environment
 - **Worker (per sample)**:
-  1. **Ingest**: read JSONL → convert to single-turn data → ingest into KG/VDB
+  1. **Ingest**: read JSONL → split each session into `--chunk-turns` windows → ingest each
+     window into KG/VDB as its own summary
   2. **Eval**: load LoCoMo questions → RAG answer → write eval CSV
   3. **Judge**: call the LLM judge → produce correctness stats and a judge CSV
 
@@ -166,12 +177,13 @@ To rerun / debug aggregation on its own:
 ```bash
 uv run python experiment/locomo/aggregate.py \
   --dataset locomo \
-  --run-root experiment/locomo/output/standard/<run_tag>
+  --root experiment/locomo/output/standard/<run_tag>
 ```
 
 - Reads `_judge_merged.csv` and `_correctness_aggregate.json` under the run root first
 - Produces overall and per-sample correctness / f1 / bleu1, plus category breakdowns
-- Skips adversarial questions by default; add `--adv` on the pipeline to include them
+- Skips adversarial questions by default; pass `--include-adversarial` here (or `--adv`
+  on `pipeline.py`) to include them
 
 ---
 
@@ -182,12 +194,15 @@ uv run python experiment/locomo/aggregate.py \
 ```python
 # experiment/experiment_config.py
 REPRODUCIBILITY_PARAMS = dict(seed=42, deterministic=True)
-INGEST_PARAMS   = dict(ingest_mode="turn_pairs", prev_k=2, ...)
+INGEST_PARAMS   = dict(ingest_mode="turn_pairs", prev_k=2, chunk_turns=8,
+                       use_split_summary=True, ...)
 RETRIEVAL_PARAMS = dict(ent_topk=20, filter_ent_topk=15, ...)
 RERANKER_PARAMS  = dict(use_reranker=True, reranker_topk=10, ...)
 ```
 
 - **Ingest params** (`prev_k`, `entity_sim_topk`, `entity_sim_threshold`): edit `INGEST_PARAMS`; for LoCoMo you can also override on `pipeline.py` with `--prev-k`, `--entity-sim-topk`, `--entity-sim-threshold`.
+- **`chunk_turns`** (**LoCoMo only**, default 8): turns per ingest chunk; override per run with `--chunk-turns`. Note that `summary_direct_vector_topn` / `summary_rerank_topk` in `RERANKER_PARAMS` were tuned against whole-session summaries, so changing `chunk_turns` changes the candidate-pool size and those values are worth re-sweeping.
+- **`use_split_summary`** (**LongMem only**, default `True`): when true, the LongMem pipeline rebuilds each artifact's `summaries_chroma` into `:u` / `:a` entry pairs right after ingest, and retrieval is set to `split_single_entry_raw=False` to match. Set it to `False` to keep what the Ingestor wrote and skip the rebuild. One flag drives both halves on purpose — see [Two artifact layouts](../readme.md#two-artifact-layouts). Do not set `split_single_entry_raw` by hand.
 - **Retrieval params** (`ent_topk`, `rel_topk`, `*_threshold`, `filter_*`, `summary_*`): edit `RETRIEVAL_PARAMS`; read by `rag_answer()` in `qa_eval.py`.
 - **Reranker params** (`use_reranker`, `reranker_threshold`, `reranker_topk`): edit `RERANKER_PARAMS`; applied when building the retriever.
 

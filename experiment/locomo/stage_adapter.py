@@ -36,6 +36,7 @@ def run_ingest_stage_for_locomo(
     prev_k: int,
     entity_sim_topk: int,
     entity_sim_threshold: float,
+    chunk_turns: int,
 ) -> dict[str, Any]:
     sessions = ingest_module.load_sessions(
         dataset=dataset,
@@ -46,6 +47,7 @@ def run_ingest_stage_for_locomo(
         sessions,
         make_session_uid=True,
         sample_filter=sample_index,
+        chunk_turns=chunk_turns,
     )
     if df.empty:
         raise RuntimeError(f"No sessions found for sample_index={sample_index}")
@@ -67,8 +69,11 @@ def run_ingest_stage_for_records(
     prev_k: int,
     entity_sim_topk: int,
     entity_sim_threshold: float,
+    chunk_turns: int,
 ) -> dict[str, Any]:
-    df = ingest_module.session_records_to_df(list(records), conv_id=conv_id)
+    df = ingest_module.session_records_to_df(
+        list(records), conv_id=conv_id, chunk_turns=chunk_turns
+    )
     return ingest_module.ingest_by_session_one_turn(
         ingestor,
         df,
