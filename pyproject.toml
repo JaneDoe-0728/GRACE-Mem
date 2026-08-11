@@ -1,7 +1,7 @@
 [project]
-name = "ai"
+name = "grace-mem"
 version = "0.1.0"
-description = "Add your description here"
+description = "Graph-based long-term conversational memory research framework"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 dependencies = [
@@ -19,6 +19,7 @@ dependencies = [
     "nltk>=3.9.2",
     "openai>=1.100.1",
     "pandas>=2.3.3",
+    "python-dotenv>=1.1.1",
     "pytest>=9.0.2",
     "rank-bm25>=0.2.2",
     "sentence-transformers>=2.7.0",

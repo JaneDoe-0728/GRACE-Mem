@@ -28,61 +28,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ai"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "accelerate" },
-    { name = "chromadb" },
-    { name = "dateparser" },
-    { name = "diffusers" },
-    { name = "faiss-cpu" },
-    { name = "falkordb" },
-    { name = "flask" },
-    { name = "httpx" },
-    { name = "huggingface-hub" },
-    { name = "llmlingua" },
-    { name = "neo4j" },
-    { name = "nltk" },
-    { name = "openai" },
-    { name = "pandas" },
-    { name = "pytest" },
-    { name = "rank-bm25" },
-    { name = "sentence-transformers" },
-    { name = "torch" },
-    { name = "torchaudio" },
-    { name = "torchvision" },
-    { name = "tqdm" },
-    { name = "transformers" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "accelerate", specifier = ">=1.10.0" },
-    { name = "chromadb", specifier = ">=1.0.20" },
-    { name = "dateparser", specifier = ">=1.2.2" },
-    { name = "diffusers", specifier = ">=0.35.1" },
-    { name = "faiss-cpu", specifier = ">=1.13.2" },
-    { name = "falkordb", specifier = ">=1.6.0" },
-    { name = "flask", specifier = ">=3.1.1" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "huggingface-hub", specifier = ">=0.23.0" },
-    { name = "llmlingua", specifier = ">=0.2.2" },
-    { name = "neo4j", specifier = ">=6.0.3" },
-    { name = "nltk", specifier = ">=3.9.2" },
-    { name = "openai", specifier = ">=1.100.1" },
-    { name = "pandas", specifier = ">=2.3.3" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "rank-bm25", specifier = ">=0.2.2" },
-    { name = "sentence-transformers", specifier = ">=2.7.0" },
-    { name = "torch", specifier = ">=2.8.0", index = "https://download.pytorch.org/whl/cu128" },
-    { name = "torchaudio", specifier = ">=2.8.0", index = "https://download.pytorch.org/whl/cu128" },
-    { name = "torchvision", specifier = ">=0.23.0", index = "https://download.pytorch.org/whl/cu128" },
-    { name = "tqdm", specifier = ">=4.67.1" },
-    { name = "transformers", specifier = ">=4.41.0" },
-]
-
-[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -605,6 +550,63 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/39/24/33db22342cf4a2ea27c9955e6713140fedd51e8b141b5ce5260897020f1a/googleapis_common_protos-1.70.0.tar.gz", hash = "sha256:0e1b44e0ea153e6594f9f394fef15193a68aaaea2d843f83e2742717ca753257", size = 145903, upload-time = "2025-04-14T10:17:02.924Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/86/f1/62a193f0227cf15a920390abe675f386dec35f7ae3ffe6da582d3ade42c7/googleapis_common_protos-1.70.0-py3-none-any.whl", hash = "sha256:b8bfcca8c25a2bb253e0e0b0adaf8c00773e5e6af6fd92397576680b807e0fd8", size = 294530, upload-time = "2025-04-14T10:17:01.271Z" },
+]
+
+[[package]]
+name = "grace-mem"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "accelerate" },
+    { name = "chromadb" },
+    { name = "dateparser" },
+    { name = "diffusers" },
+    { name = "faiss-cpu" },
+    { name = "falkordb" },
+    { name = "flask" },
+    { name = "httpx" },
+    { name = "huggingface-hub" },
+    { name = "llmlingua" },
+    { name = "neo4j" },
+    { name = "nltk" },
+    { name = "openai" },
+    { name = "pandas" },
+    { name = "pytest" },
+    { name = "python-dotenv" },
+    { name = "rank-bm25" },
+    { name = "sentence-transformers" },
+    { name = "torch" },
+    { name = "torchaudio" },
+    { name = "torchvision" },
+    { name = "tqdm" },
+    { name = "transformers" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "accelerate", specifier = ">=1.10.0" },
+    { name = "chromadb", specifier = ">=1.0.20" },
+    { name = "dateparser", specifier = ">=1.2.2" },
+    { name = "diffusers", specifier = ">=0.35.1" },
+    { name = "faiss-cpu", specifier = ">=1.13.2" },
+    { name = "falkordb", specifier = ">=1.6.0" },
+    { name = "flask", specifier = ">=3.1.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "huggingface-hub", specifier = ">=0.23.0" },
+    { name = "llmlingua", specifier = ">=0.2.2" },
+    { name = "neo4j", specifier = ">=6.0.3" },
+    { name = "nltk", specifier = ">=3.9.2" },
+    { name = "openai", specifier = ">=1.100.1" },
+    { name = "pandas", specifier = ">=2.3.3" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "python-dotenv", specifier = ">=1.1.1" },
+    { name = "rank-bm25", specifier = ">=0.2.2" },
+    { name = "sentence-transformers", specifier = ">=2.7.0" },
+    { name = "torch", specifier = ">=2.8.0", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "torchaudio", specifier = ">=2.8.0", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "torchvision", specifier = ">=0.23.0", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "transformers", specifier = ">=4.41.0" },
 ]
 
 [[package]]

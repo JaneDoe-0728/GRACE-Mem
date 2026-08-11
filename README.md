@@ -1,226 +1,181 @@
 # GRACE-Mem
 
-GRACE-Mem is a research framework for graph-based long-term conversational
-memory, with reproducible pipelines for LoCoMo and LongMemEval experiments.
+GRACE-Mem is a graph-based long-term conversational memory framework with
+reproducibility-oriented pipelines for LoCoMo and LongMemEval.
 
 [Overview](#overview) | [Architecture](#architecture) | [Quick Start](#quick-start) |
-[Benchmarks](#benchmarks) | [Agent Filter](#agent-filter) |
-[Documentation](#documentation)
+[Benchmarks](#benchmarks) | [Documentation](#documentation)
 
 ## Overview
 
-GRACE-Mem addresses long-context conversational memory: given many dialogue
-turns across sessions, it builds a persistent memory that can later answer
-questions with evidence rather than relying only on the prompt window. The
-repository is designed for research experiments, benchmark reproduction, and
-retrieval diagnostics rather than as a hosted memory service.
+GRACE-Mem builds persistent memory from dialogue so later questions can be
+answered with retrieved evidence instead of relying only on the prompt window.
+It is research software for memory experiments and retrieval diagnostics, not a
+hosted memory service.
 
-The memory contains compressed dialogue records, extracted entities,
-relationships, temporal information, provenance links back to source turns, and
-vector indexes for semantic retrieval. The graph representation is useful
-because conversational facts are often distributed across turns: a later
-question may require resolving entities, following relationships, and grounding
-the final context in the turns where the evidence appeared.
+The memory stores compressed dialogue records, entities, relationships,
+temporal information, and provenance links to source turns. A knowledge graph
+connects facts that may be distributed across sessions, while vector and lexical
+indexes provide semantic and exact-match discovery.
 
-Retrieval combines query analysis, dense and lexical candidate discovery,
-relationship retrieval, graph expansion, filtering, reranking, and
-provenance-backed evidence selection. The selected evidence is then used for
-answer generation and optional benchmark judging.
-
-Agent Filter is an optional post-retrieval evidence-refinement layer. It starts
-from an existing retrieved context and uses GREP, READ, and VECTOR tools over the
-question corpus to verify seed evidence, recover missed facts, and fall back to
-the original context if refinement fails.
+At query time, GRACE-Mem combines entity and relationship retrieval, graph
+expansion, direct evidence retrieval, filtering, and reranking. The resulting
+context can optionally pass through Agent Filter, which uses GREP, READ, and an
+optional VECTOR search to refine evidence before answer generation.
 
 ## Architecture
 
 ![GRACE-Mem architecture](docs/architecture/flow.png)
 
-The repository has three layers:
+The Evidence Curation Agent shown in the retrieval panel is optional; the
+standard pipeline can send reranked evidence directly to answer generation.
 
-- **Core GRACE-Mem (`KG/`)**: ingestion, retrieval, graph synchronization,
-  vector and lexical storage, LLM calls, provenance handling, and runtime
-  helpers.
-- **Benchmark layer (`experiment/`)**: LoCoMo and LongMemEval orchestration,
-  shared judging/scoring utilities, artifact management, and run metadata.
-- **Optional analysis and refinement**: Agent Filter, offline retrieval
-  diagnostics, gold-recall analysis, trace inspection, and replay tools.
+- **Core (`KG/`)**: ingestion, retrieval, graph synchronization, storage, LLM
+  access, temporal handling, and provenance.
+- **Benchmarks (`experiment/`)**: LoCoMo and LongMemEval orchestration, shared
+  judging/scoring, artifacts, and run metadata.
+- **Optional tools**: Agent Filter, replay utilities, and offline diagnostics.
 
-Dependency direction is intentionally one way:
+Dependency direction is one way:
 
 ```text
 benchmarks / analysis / tools
         -> experiment orchestration
         -> KG pipeline facades
-        -> KG services, storage, graph, LLM utilities
+        -> KG services, storage, graph, and LLM utilities
 ```
 
-The core `KG/` package does not depend on benchmark-specific LoCoMo or LongMem
-code.
+The core `KG/` package does not depend on benchmark-specific code.
 
 ## Workflow
 
 ### Ingestion
 
-The benchmark and core pipeline code support the following memory-building flow:
-
 ```text
 dialogue turns
   -> temporal normalization
-  -> dialogue compression / summary representation
-  -> entity extraction
-  -> entity reconciliation
+  -> compression / summary representation
+  -> entity extraction and reconciliation
   -> relationship extraction
   -> vector and BM25 storage
   -> FalkorDB graph synchronization
 ```
 
-Each stored item keeps provenance so retrieved answers can be traced back to
-source dialogue context. Benchmark runs write self-contained artifact sets that
-can be reused for retrieval-only reruns when the artifact layout matches the
-configuration used to create them.
+Stored evidence retains provenance back to source dialogue. Benchmark runs keep
+artifacts and metadata so retrieval-only reruns can reuse a compatible ingest.
 
 ### Retrieval
-
-The retrieval path is:
 
 ```text
 question + query time
   -> query analysis
-  -> hybrid entity retrieval
-  -> relationship retrieval
-  -> graph expansion
-  -> compressed-record evidence retrieval
+  -> hybrid entity and relationship retrieval
+  -> graph expansion and direct evidence retrieval
   -> filtering and reranking
   -> optional Agent Filter
   -> answer generation
 ```
 
-The retriever combines graph-linked evidence with direct compressed-record
-retrieval. Reranking and evidence selection are configured in
-[`experiment/experiment_config.py`](experiment/experiment_config.py) for
-benchmark runs.
-
 ## Key Features
 
-- Graph-based conversational memory over entities, relationships, summaries, and
-  provenance.
-- Hybrid dense and BM25 candidate retrieval for entities and stored evidence.
-- FalkorDB-backed graph expansion with Chroma-backed vector stores.
-- Two-stage filtering/reranking and provenance-aware evidence construction.
-- Optional Agent Filter for post-retrieval evidence verification and recovery.
-- LoCoMo and LongMemEval benchmark runners with staged ingest, QA, and judge
-  execution.
-- Reusable artifact directories, run metadata, checkpoints, and offline
-  diagnostic tools.
+- Graph-based conversational memory with temporal and provenance information.
+- Hybrid dense and BM25 retrieval with graph expansion and reranking.
+- Optional post-retrieval evidence verification and recovery.
+- Staged LoCoMo and LongMemEval runners with reusable artifacts.
+- Shared judge, scoring, oracle, and offline diagnostic entrypoints.
 
 ## Installation
 
 ### Requirements
 
-| Requirement | Purpose |
-|---|---|
-| Python `>=3.10,<3.14` | Project runtime |
-| [uv](https://docs.astral.sh/uv/) | Dependency and virtual environment management |
-| Docker | Local FalkorDB via `docker-compose.yml` |
-| OpenAI-compatible endpoint | Ingestion, retrieval-time LLM calls, answering, and judging |
-| Local model storage | Qwen embedding and reranker weights downloaded by setup |
+- Python `3.10` through `3.13`.
+- [uv](https://docs.astral.sh/uv/) for dependency management.
+- An OpenAI-compatible endpoint for LLM-backed pipeline stages.
+- FalkorDB, either from the included Docker Compose service or an external URI.
+- Disk space for the Qwen embedding and reranker weights.
 
-### Setup
+The lockfile currently selects PyTorch CUDA 12.8 wheels. A compatible NVIDIA
+runtime is the documented setup; CPU-only installations must select an
+appropriate PyTorch source before `uv sync`.
+
+### Local FalkorDB Setup
+
+This is the shortest complete setup when Docker is available:
 
 ```bash
 git clone https://github.com/JaneDoe-0728/GRACE-Mem.git
 cd GRACE-Mem
 cp .env.example .env
-uv sync
-```
-
-Edit `.env` before running the system. If you want the repository to start
-FalkorDB and download the local embedding/reranker models for you, run:
-
-```bash
+# Edit .env and configure the LLM and judge endpoints.
 bash tools/setup_env.sh
 ```
 
-The setup script runs `uv sync`, starts the primary `falkordb` container,
-downloads `Qwen/Qwen3-Embedding-0.6B` and `Qwen/Qwen3-Reranker-0.6B` into
-`models/`, and verifies the expected files.
+The script runs `uv sync`, starts the primary FalkorDB container, downloads the
+pinned embedding and reranker snapshots, and verifies the database and model
+files. The database listens on port `6379`; its browser UI is available at
+`http://localhost:3000`.
 
-To manage FalkorDB manually:
+### External FalkorDB Setup
+
+Docker is not required when an existing FalkorDB instance is available:
 
 ```bash
-docker compose up -d falkordb
-docker compose logs -f falkordb
-docker compose down
+git clone https://github.com/JaneDoe-0728/GRACE-Mem.git
+cd GRACE-Mem
+cp .env.example .env
+# Set NEO4J_URI and the endpoint variables in .env.
+uv sync
+uv run python tools/download_models.py
 ```
-
-The bundled container uses Redis port `6379` and exposes the browser UI on
-`http://localhost:3000`.
 
 ## Configuration
 
-Configuration is split between `.env` for runtime endpoints and
-`experiment/experiment_config.py` for benchmark parameters.
+Runtime endpoints belong in `.env`; experiment defaults belong in
+[`experiment/experiment_config.py`](experiment/experiment_config.py).
 
 ### LLM
 
-Set these in `.env`:
-
 | Variable | Purpose |
 |---|---|
-| `LLM_API` | OpenAI-compatible base URL used by the KG pipeline |
+| `LLM_API` | OpenAI-compatible base URL used by the KG and answer pipeline |
 | `MODEL_NAME` | Model served by `LLM_API` |
-| `JUDGE_LLM_API` | OpenAI-compatible base URL used by benchmark judging |
+| `JUDGE_LLM_API` | Base URL used by benchmark judging |
 | `JUDGE_MODEL_NAME` | Judge model name |
+| `GREP_AGENT_LLM_API` | Optional Agent Filter endpoint override |
+| `GREP_AGENT_MODEL_NAME` | Optional Agent Filter model override |
 
-The defaults in `.env.example` point to a local OpenAI-compatible server and are
-placeholders until you run such a server.
+The values in `.env.example` are local placeholders, not hosted services.
 
 ### FalkorDB
-
-The bundled Docker service works with the default values:
 
 | Variable | Purpose |
 |---|---|
 | `NEO4J_URI` | FalkorDB Redis URI |
-| `FALKORDB_PASSWORD` | Password used by the Docker service |
-| `GRAPH_NAME` | Graph key/name used by the wrapper |
+| `NEO4J_USERNAME` / `NEO4J_PASSWORD` | Graph connection credentials |
+| `FALKORDB_PASSWORD` | Password used by the bundled container |
+| `GRAPH_NAME` | FalkorDB graph key |
 
-Despite the `NEO4J_*` variable names, the active graph adapter is FalkorDB.
+The historical `NEO4J_*` names are retained even though the active adapter is
+FalkorDB.
 
 ### Embedding and Reranker
 
-`KG/embeddings.py` loads the embedding model from
-`models/embedding_models/qwen3-0.6b` when present and falls back to the
-Hugging Face model id otherwise. The reranker uses
-`models/reranker/qwen3-reranker-0.6b`.
-
-Use this helper to download both:
-
-```bash
-uv run python tools/download_models.py
-```
+`tools/download_models.py` installs pinned snapshots of
+`Qwen/Qwen3-Embedding-0.6B` and `Qwen/Qwen3-Reranker-0.6B` under `models/`.
+`KG/embeddings.py` uses the local embedding path when available and otherwise
+falls back to the Hugging Face model ID.
 
 ### Experiment Configuration
 
-Benchmark defaults live in
-[`experiment/experiment_config.py`](experiment/experiment_config.py):
-
-- `REPRODUCIBILITY_PARAMS`: seed and deterministic execution controls.
-- `INGEST_PARAMS`: ingest mode, entity matching, LoCoMo chunking, and LongMem
-  split-summary behavior.
-- `RETRIEVAL_PARAMS`: initial search and post-filter thresholds/top-k values.
-- `RERANKER_PARAMS`: graph filtering, reranking, evidence selection, and
-  spreading-activation settings.
-- `GREP_AGENT_PARAMS`: Agent Filter behavior.
-
-Use CLI flags for run selectors such as sample IDs, categories, stage selection,
-artifact reuse, and output roots.
+`experiment/experiment_config.py` centralizes reproducibility, ingest,
+retrieval, reranker, and Agent Filter defaults. CLI flags are intended for run
+selection, stage selection, artifact reuse, and output paths. See the
+[experiment guide](experiment/README.md) for the supported interface.
 
 ## Quick Start
 
-After setup and `.env` configuration, this minimal example ingests one dialogue
-turn and retrieves context for a question:
+With FalkorDB and the configured LLM endpoint running, ingest one turn and
+retrieve context:
 
 ```python
 from KG.pipeline.factory import build_pipeline
@@ -241,101 +196,24 @@ with build_pipeline() as runtime:
     print(context)
 ```
 
-Run it from the repository root with FalkorDB and your LLM endpoint available.
-For benchmark execution, use the LoCoMo and LongMemEval entrypoints below.
-
-## Usage
-
-### Core API
-
-`build_pipeline()` is the intended high-level API for direct use. It creates the
-ingestor, retriever, graph client, vector-store manager, and LLM client, and it
-closes owned resources when the context exits.
-
-```python
-from KG.pipeline.factory import build_pipeline
-
-with build_pipeline() as runtime:
-    ingestor = runtime.ingestor
-    retriever = runtime.retriever
-```
-
-### Agent Filter
-
-![Agent Filter flow](docs/architecture/agent_flow_v2.png)
-
-Agent Filter consumes an existing benchmark run that already has a
-`Retrieved_Context` column. It does not rerun graph/vector retrieval; it refines
-the retrieved evidence with tool actions and writes a new run.
-
-LongMemEval replay:
-
-```bash
-uv run python -m experiment.agent_filter.replay_run \
-  --source-run <existing-run> \
-  --run-tag <agent-filter-run> \
-  --workers 4
-```
-
-LoCoMo replay:
-
-```bash
-uv run python -m experiment.agent_filter.locomo_replay \
-  --source-run <existing-run> \
-  --run-tag <agent-filter-run> \
-  --chunk-turns 8 \
-  --samples 0-9 \
-  --workers 4 \
-  --granularity turn
-```
-
-For LongMem VECTOR support, set `LONGMEM_ARTIFACT_ROOT` or pass
-`--artifact-root`. LoCoMo finds the summary VDB under each sample artifact
-directory. See [experiment/agent_filter/README.md](experiment/agent_filter/README.md)
-for details.
+`build_pipeline()` owns the ingestor, retriever, graph client, vector stores,
+and LLM client. Using it as a context manager closes owned resources.
 
 ## Benchmarks
 
-GRACE-Mem keeps benchmark orchestration separate from the core `KG/` package.
-Both benchmark runners use the same stage vocabulary:
+Benchmark orchestration is separate from the core package. Both runners expose
+the ordered stages `ingest`, `qa_eval`, and `judge`; use `--stage` for a subset
+or `--artifact-dir` to reuse a compatible ingest.
 
-```text
-ingest -> qa_eval -> judge
-```
+Datasets are not bundled. Use the official sources:
 
-Use `--stage` to select a subset, `--no-judge` to skip judging, and
-`--artifact-dir` to reuse an existing artifact run for retrieval-only evaluation.
-Benchmark datasets are not included in this repository.
-
-### LongMemEval
-
-LongMemEval expects one preprocessed CSV per question under
-`experiment/longmem/script_data/<category>/`. The repository does not include a
-raw LongMemEval-to-CSV converter.
-
-Minimal category run:
-
-```bash
-uv run python experiment/longmem/pipeline/watchdog.py \
-  --run-tag my-run \
-  --type temporal_reasoning
-```
-
-Default output:
-
-```text
-experiment/longmem/output/<run-tag>/<category>/
-```
-
-Supported category directories and required CSV columns are documented in
-[experiment/README.md](experiment/README.md#longmemeval).
+- [LoCoMo dataset and benchmark](https://github.com/snap-research/locomo)
+- [LongMemEval dataset and benchmark](https://github.com/xiaowu0162/LongMemEval)
 
 ### LoCoMo
 
-LoCoMo expects the official data file under `experiment/locomo/data/`, usually
-`locomo10.json` or `locomo.json`. Normal runs require explicit sample selection.
-
-Minimal run:
+Place the official `locomo10.json` at `experiment/locomo/data/locomo10.json`,
+then run selected samples:
 
 ```bash
 uv run python experiment/locomo/pipeline/runner.py \
@@ -344,87 +222,131 @@ uv run python experiment/locomo/pipeline/runner.py \
   --run-tag my-run
 ```
 
-Default output:
+### LongMemEval
 
-```text
-experiment/locomo/output/standard/<run-tag>/
+LongMemEval currently expects one preprocessed question CSV under each category
+directory in `experiment/longmem/script_data/`:
+
+```bash
+uv run python experiment/longmem/pipeline/watchdog.py \
+  --run-tag my-run \
+  --type temporal_reasoning
 ```
 
-For dataset layout, reruns, stage selection, aggregation, and scoring commands,
-see [experiment/README.md](experiment/README.md).
+The repository does not yet convert the official LongMemEval release into this
+CSV layout. Consequently, the runner is reproducible from prepared inputs, but
+the public repository does not yet provide a complete raw-data-to-paper-result
+recipe. The exact schema, commands, output layout, and artifact compatibility
+rules are in the [experiment guide](experiment/README.md).
 
-## Analysis & Diagnostics
+### Evaluation
 
-Offline diagnostics are research utilities for existing artifacts. They are not
-required for the main runtime and generally avoid rerunning the full ingest or
-answer-generation pipeline.
+Use the shared post-hoc evaluation commands on completed runs:
 
-Useful entrypoints include:
+```bash
+uv run python experiment/common/evaluation/judge.py locomo <run-tag> --samples 0-9
+uv run python experiment/common/evaluation/judge.py longmem <run-tag>
+uv run python experiment/common/evaluation/score.py <run-tag>
+```
 
-| Purpose | Command |
-|---|---|
-| LoCoMo gold evidence recall | `python -m experiment.locomo.analysis.gold_recall --help` |
-| LoCoMo dataset statistics | `python -m experiment.locomo.analysis.dataset --help` |
-| LoCoMo aggregate outputs | `python -m experiment.locomo.analysis.aggregate --help` |
-| LoCoMo turn filtering | `python -m experiment.locomo.analysis.turn_filter --help` |
-| LongMem gold evidence recall | `python -m experiment.longmem.analysis.gold_recall --help` |
-| LongMem judge flips | `python -m experiment.longmem.analysis.judge_flips --help` |
-| LongMem summary scores | `python -m experiment.longmem.analysis.summary_scores --help` |
-| LongMem fact replay | `python -m experiment.longmem.analysis.fact_replay --help` |
+See [EVALUATION.md](EVALUATION.md) for voting, abstention, output-column, and
+oracle rules.
 
-Agent Filter reachability, resampling, and tribunal studies live in
-`experiment.longmem.analysis` with the `agent_filter_*` prefix. The trace viewer
-and live smoke probe live under `tools/`.
+## Agent Filter
+
+![Illustrative Agent Filter trace](docs/architecture/agent_flow_v2.png)
+
+The IDs and evidence counts in this figure illustrate one trace; they are not
+fixed pipeline invariants. The default retrieval and Agent Filter caps are
+configured independently.
+
+Agent Filter starts from an existing run's `Retrieved_Context`. It does not
+rerun the full KG retrieval pipeline: GREP and READ inspect the question corpus,
+while optional VECTOR performs a separate semantic search over the existing
+summary VDB. Execution failures preserve the original context, but successful
+refinement is not a guarantee that answer quality improves.
+
+```bash
+# LongMemEval
+uv run python -m experiment.agent_filter.replay_run \
+  --source-run <existing-run> --run-tag <agent-run> --workers 4
+
+# LoCoMo
+uv run python -m experiment.agent_filter.locomo_replay \
+  --source-run <existing-run> --run-tag <agent-run> \
+  --chunk-turns 8 --samples 0-9 --workers 4 --granularity turn
+```
+
+LongMem VECTOR discovery uses `LONGMEM_ARTIFACT_ROOT` or `--artifact-root`.
+LoCoMo discovers its summary VDB under each source sample. See the
+[Agent Filter guide](experiment/agent_filter/README.md) for defaults,
+adjudication scope, scoring, and trace inspection.
+
+## Analysis and Validation
+
+Offline analysis lives under each benchmark's `analysis/` package. Some tools
+only read artifacts; others call an LLM or launch benchmark subprocesses. Check
+each entrypoint's `--help` and the runtime matrix in the
+[experiment guide](experiment/README.md#offline-analysis) before running it.
+
+The tracked regression suite is designed to run without API credentials, model
+weights, or a live database:
+
+```bash
+uv run pytest -q
+```
+
+Optional integration behavior is skipped when its declared prerequisites are
+unavailable. Expected failures record known temporal parser limitations; see
+[tests/README.md](tests/README.md) for result semantics.
 
 ## Repository Structure
 
 ```text
 GRACE-Mem/
-├── KG/                         # core ingestion, retrieval, graph, storage, LLM utilities
+├── KG/                         # core ingestion, retrieval, graph, storage, and LLM code
 ├── experiment/
-│   ├── common/                 # shared evaluation, scoring, reproducibility helpers
-│   ├── locomo/                 # LoCoMo runner, stages, artifacts, analysis
-│   ├── longmem/                # LongMemEval runner, stages, artifacts, analysis
-│   ├── agent_filter/           # post-retrieval evidence refinement
-│   └── noco/                   # optional NocoDB upload helpers
-├── docs/
-│   └── architecture/           # README architecture figures
-├── tools/                      # setup, model download, refresh, and audit helpers
-├── .env.example
-├── docker-compose.yml
+│   ├── common/                 # shared evaluation and run helpers
+│   ├── locomo/                 # LoCoMo pipeline and analysis
+│   ├── longmem/                # LongMemEval pipeline and analysis
+│   └── agent_filter/           # optional evidence refinement
+├── docs/architecture/          # architecture figures
+├── tests/                      # offline regression suite
+├── tools/                      # setup, model, trace, and maintenance utilities
+├── EVALUATION.md
 ├── pyproject.toml
 └── uv.lock
 ```
 
-Benchmark datasets, generated artifacts, model weights, logs, and local
-development-only files are intentionally gitignored.
+Datasets, generated artifacts, model weights, logs, secrets, and manual live
+probes are intentionally excluded from version control.
 
 ## Reproducibility
 
-The benchmark layer centralizes run settings in
-`experiment/experiment_config.py` and writes run metadata through
-`experiment/common/run_metadata.py`. Benchmark runs preserve artifacts,
-checkpoints, logs, answer CSVs, judge CSVs, and aggregate outputs under their run
-directories.
+The benchmark layer centralizes settings and writes run metadata alongside
+artifacts, checkpoints, logs, answers, and judge output. The model downloader
+pins embedding and reranker snapshots.
 
-Deterministic reproduction is limited by external dependencies: the configured
-LLM endpoint, judge model, embedding/reranker versions, hardware, and benchmark
-data preprocessing can all affect results. Reuse artifacts with matching ingest
-layout and retrieval configuration when comparing reruns.
+Exact results can still vary with the answer/judge endpoint and model revision,
+hardware, benchmark preprocessing, and external service behavior. This
+repository currently provides no canonical paper configuration, expected-score
+table, or LongMemEval raw-data converter; do not interpret a successful run as
+an exact reproduction of an unpublished reference score.
 
 ## Documentation
 
 | Document | Purpose |
 |---|---|
-| [Experiment guide](experiment/README.md) | Data layout, benchmark commands, stages, artifact reuse, and scoring |
-| [Evaluation protocol](EVALUATION.md) | Judge model behavior, voting rules, output columns, and scoring |
-| [Agent Filter guide](experiment/agent_filter/README.md) | Evidence-refinement workflow, VECTOR setup, and trace output |
+| [Experiment guide](experiment/README.md) | Data layout, commands, artifacts, and analysis requirements |
+| [Evaluation protocol](EVALUATION.md) | Judge, voting, scoring, abstention, and oracle behavior |
+| [Agent Filter guide](experiment/agent_filter/README.md) | Evidence refinement, VECTOR, adjudication, and traces |
+| [Test guide](tests/README.md) | Automated suite, skips, expected failures, and manual-probe policy |
 | [.env example](.env.example) | Runtime endpoint and graph configuration |
 
-## Current Limitations
+## Release Status
 
-- Benchmark datasets and generated artifacts are not distributed with the
-  repository.
-- LongMemEval requires the documented preprocessed CSV layout.
-- End-to-end results depend on external LLM and judge endpoints.
-- No repository license file is currently present.
+- No repository license is currently present. Until one is added, normal
+  copyright restrictions apply to reuse and redistribution.
+- No official GRACE-Mem paper citation has been provided in this repository.
+- LongMemEval raw-data preprocessing and canonical expected scores remain to be
+  published for end-to-end paper reproduction.

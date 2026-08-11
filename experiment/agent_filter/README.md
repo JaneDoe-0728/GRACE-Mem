@@ -1,97 +1,150 @@
-# Agent Filter — post-retrieval evidence refinement
+# Agent Filter
 
-Agent Filter is a layer that runs after vector retrieval + reranking. Once retrieval has picked the top-16 candidate summaries for a question, the agent uses terminal-style tools (`GREP` / `READ` / `VECTOR`) directly over the question's raw corpus to **verify the candidates and recover missing literal evidence**, then rebuilds the answer context from the selected evidence.
+Agent Filter is an optional post-retrieval evidence-refinement layer. It starts
+from an existing benchmark row's `Retrieved_Context`, lets an LLM inspect the
+question corpus with `GREP` and `READ`, and can use `VECTOR` to discover
+semantically related summary records. It then rebuilds the answer context from
+the selected evidence.
 
-- **No re-retrieval**: Agent Filter starts from an existing run's `Retrieved_Context` and never touches embedding / reranker / graph retrieval.
-- **Fail-safe**: if any step fails, it falls back to the un-refined original context, so answering never gets worse.
-- **Single source of truth**: all pipeline parameters are hardcoded in `GREP_AGENT_PARAMS` in [`experiment/experiment_config.py`](../experiment_config.py); nothing is toggled via environment variables or CLI flags.
+The current retrieval configuration keeps up to 16 reranked summaries by
+default, and Agent Filter has its own maximum of 16 evidence IDs. These are
+configuration defaults, not invariants for every run.
 
-Implementation locations:
+- Agent Filter does **not** rerun the full KG entity, relationship, graph, and
+  reranker pipeline.
+- `VECTOR`, when available, performs a separate embedding search over the
+  existing `summaries_chroma` store. `GREP` and `READ` operate on the corpus.
+- Parsing, tool, and execution failures preserve the original context. This
+  protects availability; it does not guarantee that successful refinement
+  improves answer quality.
+
+## Implementation
 
 | Purpose | File |
 |---|---|
-| Core harness (filter / fetch / VECTOR / adjudicate) | [`experiment/agent_filter/harness.py`](harness.py) |
-| LongMem entry point | [`experiment/agent_filter/replay_run.py`](replay_run.py) |
-| LoCoMo entry point | [`experiment/agent_filter/locomo_replay.py`](locomo_replay.py) |
-| Parameters | [`experiment/experiment_config.py`](../experiment_config.py) |
+| Core harness and tools | [`harness.py`](harness.py) |
+| LongMemEval replay | [`replay_run.py`](replay_run.py) |
+| LoCoMo replay | [`locomo_replay.py`](locomo_replay.py) |
+| Shared defaults | [`../experiment_config.py`](../experiment_config.py) |
 
----
+`GREP_AGENT_PARAMS` is the source of truth for algorithm defaults such as mode,
+call caps, evidence caps, VECTOR thresholds, graph context, and adjudication.
+Run selection and filesystem inputs are still controlled by CLI flags, and
+endpoint/artifact discovery can use environment variables.
 
-## 1. Prerequisites
+## Prerequisites
 
-1. **Retrieval already done**: you need an existing run whose CSV contains a `Retrieved_Context` column (the top-16 candidates). Agent Filter only operates on top of that.
-2. **Configure the endpoint**: copy `.env.example` to `.env` and fill in your OpenAI-compatible endpoint and model:
+1. Complete the root [installation](../../README.md#installation) and endpoint
+   [configuration](../../README.md#configuration).
+2. Produce or obtain a benchmark run whose answer CSV contains
+   `Retrieved_Context`.
+3. For LongMem VECTOR support, retain the matching ingest artifacts and set
+   `LONGMEM_ARTIFACT_ROOT` or pass `--artifact-root`.
 
-   ```bash
-   cp .env.example .env
-   ```
+Relevant environment variables:
 
-   Relevant variables:
+| Variable | Purpose |
+|---|---|
+| `LLM_API` / `MODEL_NAME` | Answer model and fallback Agent Filter endpoint |
+| `GREP_AGENT_LLM_API` / `GREP_AGENT_MODEL_NAME` | Optional Agent Filter endpoint override |
+| `JUDGE_LLM_API` / `JUDGE_MODEL_NAME` | Post-hoc judge |
+| `LONGMEM_ARTIFACT_ROOT` | LongMem root containing per-question summary VDBs |
 
-   | Variable | Purpose |
-   |---|---|
-   | `LLM_API` / `MODEL_NAME` | LLM for answering and retrieval |
-   | `GREP_AGENT_LLM_API` / `GREP_AGENT_MODEL_NAME` | model that drives the filter agent (falls back to the KG LLM above if unset) |
-   | `JUDGE_LLM_API` / `JUDGE_MODEL_NAME` | LLM for judging |
-   | `LONGMEM_ARTIFACT_ROOT` | root dir of the summary VDB for LongMem's `VECTOR` tool (see §4) |
-
----
-
-## 2. Run LongMem
+## LongMemEval Replay
 
 ```bash
-python -m experiment.agent_filter.replay_run \
-  --source-run <existing retrieval run> \
-  --run-tag   <output name> \
+uv run python -m experiment.agent_filter.replay_run \
+  --source-run <existing-retrieval-run> \
+  --run-tag <agent-filter-run> \
   --workers 4
 ```
 
-- Reads only `--source-run`'s `Retrieved_Context` and reruns from the agent layer.
-- Does not overwrite existing output; add `--force` to rerun the same tag.
-- Small-sample debugging: `--limit N` (per-category cap), `--category <cat>`, `--names-file <list>`.
+Useful selectors:
 
-## 3. Run LoCoMo
+- `--category <category>` and `--limit N` restrict a debugging run.
+- `--names-file <path>` reads a `category,stem` allowlist.
+- `--artifact-root <path>` enables VECTOR from matching summary artifacts.
+- `--force` permits replacing output for the same run tag.
+
+The command reads the source answer CSVs, refines their contexts, generates new
+answers, and writes a separate run under
+`experiment/longmem/output/<agent-filter-run>/`.
+
+## LoCoMo Replay
 
 ```bash
-python -m experiment.agent_filter.locomo_replay \
-  --source-run <existing retrieval run> \
-  --run-tag   <output name> \
-  --chunk-turns 8 --samples 0-9 --workers 4 \
+uv run python -m experiment.agent_filter.locomo_replay \
+  --source-run <existing-retrieval-run> \
+  --run-tag <agent-filter-run> \
+  --chunk-turns 8 \
+  --samples 0-9 \
+  --workers 4 \
   --granularity turn
 ```
 
-- LoCoMo's summary VDB lives in the source folder under `sample_<N>/artifacts/`; `locomo_replay.py` picks it up automatically and prints `VECTOR ON/OFF` per sample.
+LoCoMo locates each summary VDB below the source sample's `artifacts/`
+directory and reports whether VECTOR is available. `--granularity chunk` exposes
+chunk IDs to the agent; `--granularity turn` exposes individual turns.
 
----
+## VECTOR Discovery
 
-## 4. The VECTOR tool and artifact-root (LongMem)
+For LongMem, the expected layout below `--artifact-root` is:
 
-`VECTOR` lets the agent run its own semantic search over the question's summary VDB (`summaries_chroma`) to recover paraphrased evidence that literal GREP can't reach. This VDB is built during ingestion and is **not** part of the retrieval source.
+```text
+<artifact-root>/<category>/artifacts_<question-stem>/summaries_chroma/
+```
 
-- Point at it via the `LONGMEM_ARTIFACT_ROOT` environment variable or the `--artifact-root <dir>` flag (per-question layout: `<root>/<cat>/artifacts_<stem>/summaries_chroma`).
-- Empty = VECTOR disabled. On startup it prints `artifact-root = … (summaries_chroma: N → VECTOR ON/OFF)`; `OFF` means the path is wrong or not mounted.
-- LoCoMo does not need this setting (the VDB travels with the source folder).
+An empty artifact root disables VECTOR. A missing or mismatched
+`summaries_chroma` directory also reports `VECTOR OFF`; GREP and READ remain
+available. VECTOR results are discovery candidates and are subject to the
+harness's evidence-selection behavior.
 
----
+## Adjudication
 
-## 5. Adjudicate — a built-in step
+After the agent proposes FINAL evidence, the optional answer-blind adjudicator
+can reconsider dropped seed evidence and add relevant items back. It never sees
+the generated answer and only adds evidence.
 
-After FINAL, an answer-blind independent call (which cannot see the answer the agent already inferred) judges each dropped seed one by one as KEEP/DROP, and **recovers** (add-only, never remove) evidence relevant to the question topic. This is a **built-in, always-on** step in the pipeline and needs no flag.
+With the current defaults, adjudication is enabled for these LongMem categories:
 
-The whole pipeline's behavior (mode, call-count cap, adjudicate, graph context, VECTOR thresholds, etc.) is fixed and hardcoded in `GREP_AGENT_PARAMS` in [`experiment/experiment_config.py`](../experiment_config.py); change that file to adjust.
+- `single_session_preference`
+- `multi_session`
+- `temporal_reasoning`
+- `knowledge_update`
 
----
+It is not globally always-on: `grep_agent_adjudicate=0` disables it, and
+`grep_agent_adjudicate_categories` controls its scope. LoCoMo replay passes no
+LongMem category, so the current category allowlist does not enable adjudication
+there.
 
-## 6. Output
+## Outputs and Evaluation
 
-- LongMem: `experiment/longmem/output/<run-tag>/`
-- LoCoMo: `experiment/locomo/output/standard/<run-tag>/`
-- Step-by-step agent trace: `_grep_agent_traces.jsonl` / `_grep_traces.jsonl` under each run directory (keep it to reconstruct the agent's per-step search decisions).
+Trace files are written alongside each run:
 
-For a fair comparison, the baseline and Agent Filter arms must use the **same source, question set, answer model, and judge settings**, otherwise the results are not directly comparable.
+- LongMem: `_grep_agent_traces.jsonl`
+- LoCoMo: `_grep_traces.jsonl`
 
----
+For LongMem traces, build a self-contained HTML viewer with:
 
-## 7. Note: LoCoMo's kept/added/dropped convention
+```bash
+uv run python -m tools.agent_filter_trace_viewer.build \
+  --run-tag <agent-filter-run>
+```
 
-LoCoMo seeds are fixed-16 chunks (e.g. `0__4:1`), but the agent's `final_sids` are turn-level (e.g. `0__4:1t2`). Before computing kept/added/dropped, you must truncate `final` back to the chunk prefix (`re.sub(r't\d+$','',s)`) and then compare against the 16 seeds, to preserve the `kept + dropped ≡ 16` invariant. `locomo_replay.py` already applies this conversion when writing traces. (LongMem's seed and final share the same sid space, so it is naturally conserved and has no such issue.)
+Judge and score the new outputs with the shared evaluation CLIs:
+
+```bash
+uv run python experiment/common/evaluation/judge.py longmem <agent-filter-run>
+uv run python experiment/common/evaluation/judge.py locomo <agent-filter-run> --samples 0-9
+uv run python experiment/common/evaluation/score.py <agent-filter-run> --agent
+```
+
+Use the same source run, question set, answer model, judge model, and evaluation
+settings when comparing a baseline with Agent Filter.
+
+## LoCoMo Trace Accounting
+
+LoCoMo seed IDs are chunk-level, while turn-granularity FINAL IDs can include a
+turn suffix such as `t2`. `locomo_replay.py` normalizes FINAL IDs to their chunk
+prefix before writing kept/added/dropped trace accounting. LongMem seed and
+FINAL IDs already use the same ID space.

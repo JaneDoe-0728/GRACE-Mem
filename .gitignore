@@ -38,7 +38,21 @@ experiment/old longmem result
 experiment/sample_question
 logs/
 test/logs/
-tests/
+# Publish the deterministic pytest suite, but keep historical live/manual probes
+# and generated test artifacts local.
+tests/*
+!tests/README.md
+!tests/conftest.py
+!tests/test_*.py
+tests/test_api.py
+tests/test_gemini.py
+tests/test_gemini_new.py
+tests/test_gpt.py
+tests/test_gpt_new.py
+tests/test_inference_keyword.py
+tests/test_reranker.py
+tests/test_sa_retrieve.py
+tests/test_update.py
 docs/REFACTOR_INSTRUCTIONS.md
 docs/REFACTOR_REPORT.zh-TW.md
 

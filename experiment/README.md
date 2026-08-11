@@ -5,8 +5,23 @@ same core ingest/retrieval packages and the shared settings in
 [`experiment_config.py`](experiment_config.py), while keeping benchmark data,
 artifacts, graph state, logs, and evaluation output isolated.
 
-Complete the root [Quick Start](../README.md#quick-start) before using this guide.
-The benchmark datasets are not included in the repository.
+Complete the root [installation](../README.md#installation) and
+[configuration](../README.md#configuration) steps before using this guide. The
+benchmark datasets are not included in the repository.
+
+## Reproduction Scope
+
+The repository provides runnable ingest, retrieval, answer, judge, and scoring
+stages, but it does not yet provide a complete paper-reproduction bundle:
+
+- LoCoMo can use the official `locomo10.json` directly.
+- LongMemEval requires the per-question CSV layout documented below; a converter
+  from the official release is not currently included.
+- Answer and judge endpoints are external, and no canonical endpoint revision,
+  full run configuration, or expected-score table is currently published.
+
+Record the dataset revision, `.env` model names, experiment configuration,
+command line, and generated `run_metadata.json` when reporting a run.
 
 ## Execution Model
 
@@ -27,7 +42,9 @@ artifacts instead of ingesting again.
 
 ### LoCoMo
 
-Place the official conversation/QA file under `experiment/locomo/data/`:
+Download LoCoMo from the
+[official repository](https://github.com/snap-research/locomo), then place the
+conversation/QA file under `experiment/locomo/data/`:
 
 | File | Required | Purpose |
 |---|---|---|
@@ -39,6 +56,10 @@ For `--dataset locomo-plus`, the default filenames are
 dataset paths with `--dataset-json` and `--sessions-jsonl`.
 
 ### LongMemEval
+
+Download the source data from the
+[official LongMemEval repository](https://github.com/xiaowu0162/LongMemEval).
+GRACE-Mem does not read that release directly.
 
 LongMem expects one preprocessed CSV per question under
 `experiment/longmem/script_data/<category>/`. The raw LongMemEval release is not
@@ -52,7 +73,7 @@ read directly, and this repository does not include a converter.
 | `content` | yes | Contains the turn text |
 | `dialogue_datetime` | yes | Anchors relative-time normalization |
 | `question` | yes | Question for this CSV; configurable with `question_column` |
-| `answer` | no | Gold answer used by the judge |
+| `answer` | judge only | Gold answer; required when the `judge` stage or post-hoc judge is used |
 | `question_date` | no | Query time; falls back to available dialogue/date fields |
 
 Supported category directories include `single_session_user`,
@@ -268,19 +289,21 @@ Offline diagnostics are separated from benchmark execution and live under each
 benchmark's `analysis` package. These canonical modules are the only supported
 analysis entry points.
 
-| Purpose | Command |
-|---|---|
-| LoCoMo gold recall | `python -m experiment.locomo.analysis.gold_recall --help` |
-| LoCoMo dataset statistics | `python -m experiment.locomo.analysis.dataset --help` |
-| LoCoMo turn filtering | `python -m experiment.locomo.analysis.turn_filter --help` |
-| LongMem gold recall | `python -m experiment.longmem.analysis.gold_recall --help` |
-| LongMem judge flips | `python -m experiment.longmem.analysis.judge_flips --help` |
-| LongMem summary scores | `python -m experiment.longmem.analysis.summary_scores --help` |
-| LongMem fact replay | `python -m experiment.longmem.analysis.fact_replay --help` |
+| Purpose | Command | Runtime requirement |
+|---|---|---|
+| LoCoMo gold recall | `python -m experiment.locomo.analysis.gold_recall --help` | Existing run and gold annotations |
+| LoCoMo dataset statistics | `python -m experiment.locomo.analysis.dataset --help` | Dataset only |
+| LoCoMo turn filtering | `python -m experiment.locomo.analysis.turn_filter --help` | Existing artifacts; no LLM |
+| LoCoMo vote merge | `python -m experiment.locomo.analysis.vote_merge --help` | LLM and judge endpoint |
+| LongMem gold recall | `python -m experiment.longmem.analysis.gold_recall --help` | Existing run and gold annotations |
+| LongMem judge flips | `python -m experiment.longmem.analysis.judge_flips --help` | Existing judged outputs; no LLM |
+| LongMem summary scores | `python -m experiment.longmem.analysis.summary_scores --help` | Existing outputs; no LLM |
+| LongMem fact replay | `python -m experiment.longmem.analysis.fact_replay --help` | LLM unless `--dry-run` is used |
 
-Agent Filter reachability, resampling, and tribunal studies are LongMem analysis
-modules prefixed with `agent_filter_`. The trace viewer and live smoke probe live
-under `tools/` because they inspect artifacts or require configured services.
+Agent Filter reachability reads existing artifacts; resampling and tribunal call
+the configured LLM. These LongMem modules use the `agent_filter_` prefix. The
+trace viewer reads generated traces without an endpoint, while the smoke probe
+under `tools/manual/` requires configured services.
 
 ## Recovery and Diagnostics
 
