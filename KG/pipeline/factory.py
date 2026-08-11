@@ -70,7 +70,7 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
     """Open connections and return the constructed pipeline runtime."""
     from KG.pipeline.retriever import Retriever
     from KG.pipeline.ingestor import Ingestor
-    # from KG.pipeline.ingestor_no_ops import IngestorNoEntityOps
+    # from KG.pipeline.ingestor import IngestorNoEntityOps
     from KG.storage import MGR
     from KG.llm import LLMClient
     from KG.graph.falkordb import graph_from_env
