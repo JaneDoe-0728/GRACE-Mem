@@ -119,21 +119,25 @@ class VDBManager:
             t.start()
             self._persist_thread = t
 
-    def flush_persist(self) -> None:
-        """Wait for any in-flight persist thread, then persist synchronously."""
+    def _wait_for_persist(self) -> None:
+        """Wait for an in-flight persist and surface its failure."""
         with self._persist_lock:
-            t = self._persist_thread
-        if t is not None:
-            t.join(timeout=30)
-            if t.is_alive():
+            thread = self._persist_thread
+        if thread is not None:
+            thread.join(timeout=30)
+            if thread.is_alive():
                 raise RuntimeError(
-                    "persist_async thread timed out — VDB state unknown, aborting flush"
+                    "persist_async thread timed out - VDB state unknown"
                 )
             self._persist_thread = None
         if self._persist_error:
-            err = self._persist_error
+            error = self._persist_error
             self._persist_error = None
-            raise RuntimeError(f"Background persist failed: {err}") from err
+            raise RuntimeError(f"Background persist failed: {error}") from error
+
+    def flush_persist(self) -> None:
+        """Wait for any in-flight persist thread, then persist synchronously."""
+        self._wait_for_persist()
         # Synchronous persist to guarantee all files are on disk
         if self._entities_vdb:
             self._entities_vdb.save()
@@ -196,30 +200,38 @@ class VDBManager:
                 + "\n".join(f"  - {e}" for e in errors)
             )
 
-    def reset_all(self, delete_files: bool = True) -> None:
-        """重置所有 VDB 與快取，並可選擇刪除檔案"""
-        # 1) Wait for any in-flight persist thread to finish
-        with self._persist_lock:
-            t = self._persist_thread
-        if t is not None:
-            t.join(timeout=30)
-            self._persist_thread = None
+    def close(self, *, persist: bool = False, clear_cache: bool = False) -> None:
+        """Release initialized vector-store clients and optional in-memory state."""
+        if persist:
+            self.flush_persist()
+        else:
+            self._wait_for_persist()
 
-        # 2) Close ChromaDB clients BEFORE deleting files on disk
-        for vdb in (self._entities_vdb, self._relationships_vdb, self._summaries_vdb):
-            if vdb is not None:
-                try:
-                    vdb.close()
-                except Exception:
-                    pass
+        for vdb in (
+            self._entities_vdb,
+            self._relationships_vdb,
+            self._summaries_vdb,
+        ):
+            if vdb is None:
+                continue
+            try:
+                vdb.close()
+            except Exception as exc:
+                logger.warning("Failed to close vector store: %s", exc)
 
-        # 3) Drop Python references so old objects can be GC'd
         self._entities_vdb = None
         self._relationships_vdb = None
         self._summaries_vdb = None
         self._entities_bm25 = None
+        if clear_cache:
+            CacheStore.clear(self.cache)
 
-        # 4) Delete files on disk (now safe — no open SQLite connections)
+    def reset_all(self, delete_files: bool = True) -> None:
+        """重置所有 VDB 與快取，並可選擇刪除檔案"""
+        # Close clients before deleting files on disk.
+        self.close()
+
+        # Delete files on disk (now safe - no open SQLite connections).
         if delete_files:
             import shutil
             # Delete ChromaDB directories
@@ -242,7 +254,7 @@ class VDBManager:
                 except FileNotFoundError:
                     pass
 
-        # 5) Clear cache in memory
+        # Clear cache in memory.
         CacheStore.clear(self.cache)
 def _resolve_art_dir() -> Path:
     """Resolve and create the artifacts directory used by storage singletons.
