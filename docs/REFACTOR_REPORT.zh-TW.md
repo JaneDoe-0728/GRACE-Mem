@@ -237,7 +237,7 @@ commit `ea5d063` 到 `4a27d01` 為止的變更。
 - `setup_env.sh`
 - `experiment/reproducibility.py`
 
-### LoCoMo（28）
+### LoCoMo（27）
 
 - `experiment/locomo/aggregate.py`
 - `experiment/locomo/cli.py`
@@ -260,7 +260,6 @@ commit `ea5d063` 到 `4a27d01` 為止的變更。
 - `experiment/locomo/snapshot.py`
 - `experiment/locomo/stages/ingest.py`
 - `experiment/locomo/stages/judge.py`
-- `experiment/locomo/stages/judge_open_domain.py`
 - `experiment/locomo/stages/qa_eval.py`
 - `experiment/locomo/stages/upload.py`
 - `experiment/locomo/turn_filter_analysis.py`

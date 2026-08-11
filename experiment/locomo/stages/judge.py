@@ -16,8 +16,21 @@ if __package__ in (None, ""):
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-from experiment.locomo.helpers.dataset import category_to_label, load_qa_items, normalize_dataset_name, resolve_dataset_path
-from experiment.locomo.helpers.llm import build_judge_plus_messages, build_judge_standard_messages, llm_post
+from experiment.locomo.helpers.dataset import (
+    category_to_label,
+    find_evidence_turns_from_sample,
+    load_qa_items,
+    load_raw_samples,
+    normalize_dataset_name,
+    resolve_dataset_path,
+)
+from experiment.locomo.helpers.llm import (
+    build_judge_plus_messages,
+    build_judge_standard_messages,
+    build_open_domain_plus_messages,
+    build_open_domain_standard_messages,
+    llm_post,
+)
 from experiment.judge import (
     normalize_temporal_gold as _normalize_temporal_gold,
     parse_locomo_verdict as _parse_label,
@@ -25,6 +38,8 @@ from experiment.judge import (
 
 INPUT_CSV = "data/sample0_eval__20260205_111338_judge.csv"
 OUTPUT_CSV = "data/sample0_eval__20260205_111338_judgev2.csv"
+OPEN_DOMAIN_INPUT_CSV = "data/4o-open-domain.csv"
+OPEN_DOMAIN_OUTPUT_CSV = "data/4o-open-domain_judged.csv"
 LOCOMO_JSON = "data/locomo10.json"
 
 CATEGORY_MAP = {
@@ -117,11 +132,27 @@ def judge_single(
     dataset: str,
     category: str | None = None,
     evidence: str = "",
+    mode: str = "standard",
 ) -> float:
     """
     單題評分：回傳 CORRECT/WRONG JSON；我們映射為 1/0。
     """
-    if dataset == "locomo-plus":
+    if mode == "open-domain" and dataset == "locomo-plus":
+        messages = build_open_domain_plus_messages(
+            label=category_to_label(category),
+            category=category,
+            gold=gold,
+            pred=gen,
+            evidence=evidence,
+        )
+    elif mode == "open-domain":
+        messages = build_open_domain_standard_messages(
+            question=question,
+            gold=gold,
+            gen=gen,
+            evidence_turns=evidence,
+        )
+    elif dataset == "locomo-plus":
         messages = build_judge_plus_messages(
             label=category_to_label(category),
             category=category,
@@ -205,6 +236,91 @@ def load_category_map(dataset_json_path: str, sample_index: int) -> dict:
             continue
         q_to_cat[q] = item.get("category")
     return q_to_cat
+
+
+def _load_all_category_map(dataset_json: str) -> dict[str, str]:
+    samples = load_raw_samples(dataset_json)
+    q_to_cat: dict[str, str] = {}
+    for sample_index in range(len(samples)):
+        try:
+            qa_items = load_qa_items(dataset_json, sample_index=sample_index)
+        except Exception:
+            continue
+        for item in qa_items:
+            question = str(item.get("question", "")).strip()
+            if question:
+                q_to_cat[question] = str(item.get("category", "")).strip()
+    return q_to_cat
+
+
+def _build_dia_index(conversation: dict) -> dict:
+    dia_index = {}
+    for key, turns in conversation.items():
+        if not key.startswith("session_") or key.endswith("_date_time"):
+            continue
+        if not isinstance(turns, list):
+            continue
+        for turn in turns:
+            dia_id = turn.get("dia_id")
+            if dia_id:
+                dia_index[dia_id] = turn
+    return dia_index
+
+
+def _find_evidence_turns(dataset: list, question: str, sample: str | None) -> list[str]:
+    q_norm = question.strip()
+    candidates = dataset
+    if sample and sample.startswith("sample_"):
+        try:
+            idx = int(sample.split("_", 1)[1])
+        except ValueError:
+            idx = None
+        if idx is not None and 0 <= idx < len(dataset):
+            candidates = [dataset[idx]]
+
+    def _match(sample_item, use_casefold: bool) -> dict | None:
+        for qa in sample_item.get("qa", []):
+            q = str(qa.get("question", "")).strip()
+            matched = q.casefold() == q_norm.casefold() if use_casefold else q == q_norm
+            if matched:
+                return qa
+        return None
+
+    found = None
+    conv = None
+    for item in candidates:
+        found = _match(item, use_casefold=False)
+        if found:
+            conv = item.get("conversation", {})
+            break
+
+    if not found:
+        for item in dataset:
+            found = _match(item, use_casefold=True)
+            if found:
+                conv = item.get("conversation", {})
+                break
+
+    if not found:
+        for item in dataset:
+            turns = find_evidence_turns_from_sample(item, question)
+            if turns:
+                return turns
+
+    if not found or not conv:
+        return []
+
+    dia_index = _build_dia_index(conv)
+    evidence_turns = []
+    for dia_id in found.get("evidence", []):
+        turn = dia_index.get(dia_id)
+        if not turn:
+            continue
+        speaker = str(turn.get("speaker", "")).strip()
+        text = str(turn.get("text", "")).strip()
+        if speaker and text:
+            evidence_turns.append(f"{speaker}: {text}")
+    return evidence_turns
 
 
 def _infer_sample_index(input_csv: str) -> int | None:
@@ -338,6 +454,85 @@ def llm_as_judge_singlemode(
             print(f"  - {label}: {', '.join(parts)}")
     return stats
 
+
+def llm_as_judge_open_domain(
+    input_csv=INPUT_CSV,
+    output_csv=OUTPUT_CSV,
+    *,
+    dataset_json: str,
+    dataset: str,
+):
+    df = pd.read_csv(input_csv)
+    locomo_data = load_raw_samples(dataset_json)
+
+    # locomo-plus merged CSVs normally carry category and evidence text already.
+    has_category_col = "category" in df.columns
+    q_to_cat = (
+        {}
+        if dataset != "locomo-plus" or has_category_col
+        else _load_all_category_map(dataset_json)
+    )
+    has_evidence_col = "gold_evidence_source" in df.columns
+
+    q_col = next((c for c in df.columns if c.lower() == "question"), None)
+    g_col = next((c for c in df.columns if c.lower() in ["answer", "gold_answer"]), None)
+    gen_col = next((c for c in df.columns if c.lower() in ["generated_answer", "model_answer", "gpt_answer"]), None)
+
+    if not all([q_col, g_col, gen_col]):
+        raise ValueError("Missing required columns: question, answer/gold_answer, generated_answer/model_answer")
+
+    if "correctness" not in df.columns:
+        df["correctness"] = ""
+    if "evidence_turns" not in df.columns:
+        df["evidence_turns"] = ""
+
+    for i, row in df.iterrows():
+        q = str(row[q_col]).strip()
+        gold = str(row[g_col]).strip()
+        gen = str(row[gen_col]).strip()
+        if not gen:
+            df.at[i, "correctness"] = ""
+            continue
+
+        if has_evidence_col:
+            evidence_turns = str(row.get("gold_evidence_source", "")).strip()
+        else:
+            sample = str(row.get("sample", "")).strip() if "sample" in df.columns else ""
+            evidence_turns_list = _find_evidence_turns(locomo_data, q, sample)
+            evidence_turns = "\n".join(evidence_turns_list)
+            if not evidence_turns_list:
+                print(f"[WARN] No evidence turns found for row {i}: {q[:80]}...")
+        df.at[i, "evidence_turns"] = evidence_turns
+
+        if has_category_col:
+            category = str(row.get("category", "")).strip() or None
+        else:
+            category = q_to_cat.get(q)
+        print(f"Judging row {i}: {q[:50]}...")
+        val = judge_single(
+            q,
+            gold,
+            gen,
+            dataset=dataset,
+            category=category,
+            evidence=evidence_turns,
+            mode="open-domain",
+        )
+        df.at[i, "correctness"] = val
+
+    df.to_csv(output_csv, index=False, encoding="utf-8-sig")
+    print(f"✅ Done. Saved to {output_csv}")
+
+    stats = compute_correctness_stats(df, exclude_adversarial=False)
+    if stats["avg_correctness"] is not None:
+        print(f"📊 Avg correctness: {stats['avg_correctness']:.4f} ({stats['avg_correctness_percent']:.2f}%)")
+    else:
+        print("📊 Avg correctness: N/A (no scored rows)")
+    return {
+        "avg_correctness": stats["avg_correctness"],
+        "avg_correctness_percent": stats["avg_correctness_percent"],
+    }
+
 class JudgeStage:
     """Class interface for standalone or embedded judge runs."""
 
@@ -350,6 +545,7 @@ class JudgeStage:
         dataset: str,
         sample_index=None,
         exclude_adversarial: bool = True,
+        mode: str = "standard",
     ) -> None:
         self.input_csv = input_csv
         self.output_csv = output_csv
@@ -357,8 +553,16 @@ class JudgeStage:
         self.dataset = dataset
         self.sample_index = sample_index
         self.exclude_adversarial = exclude_adversarial
+        self.mode = mode
 
     def run(self) -> dict:
+        if self.mode == "open-domain":
+            return llm_as_judge_open_domain(
+                input_csv=str(self.input_csv),
+                output_csv=str(self.output_csv),
+                dataset_json=str(self.dataset_json),
+                dataset=self.dataset,
+            )
         return llm_as_judge_singlemode(
             input_csv=str(self.input_csv),
             output_csv=str(self.output_csv),
@@ -371,8 +575,9 @@ class JudgeStage:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LLM judge correctness with optional category stats")
-    parser.add_argument("--input-csv", default=INPUT_CSV)
-    parser.add_argument("--output-csv", default=OUTPUT_CSV)
+    parser.add_argument("--mode", choices=["standard", "open-domain"], default="standard")
+    parser.add_argument("--input-csv", default=None)
+    parser.add_argument("--output-csv", default=None)
     parser.add_argument("--sample-index", type=int, default=None)
     parser.add_argument("--dataset", choices=["locomo", "locomo-plus"], default="locomo")
     parser.add_argument("--dataset-json", default=None, help="Defaults are resolved from --dataset")
@@ -386,11 +591,22 @@ if __name__ == "__main__":
         explicit_path=args.dataset_json,
     )
 
-    llm_as_judge_singlemode(
-        input_csv=args.input_csv,
-        output_csv=args.output_csv,
-        sample_index=args.sample_index,
-        dataset_json=str(dataset_json),
-        dataset=dataset,
-        exclude_adversarial=not args.adv,
-    )
+    input_csv = args.input_csv or (OPEN_DOMAIN_INPUT_CSV if args.mode == "open-domain" else INPUT_CSV)
+    output_csv = args.output_csv or (OPEN_DOMAIN_OUTPUT_CSV if args.mode == "open-domain" else OUTPUT_CSV)
+
+    if args.mode == "open-domain":
+        llm_as_judge_open_domain(
+            input_csv=input_csv,
+            output_csv=output_csv,
+            dataset_json=str(dataset_json),
+            dataset=dataset,
+        )
+    else:
+        llm_as_judge_singlemode(
+            input_csv=input_csv,
+            output_csv=output_csv,
+            sample_index=args.sample_index,
+            dataset_json=str(dataset_json),
+            dataset=dataset,
+            exclude_adversarial=not args.adv,
+        )
