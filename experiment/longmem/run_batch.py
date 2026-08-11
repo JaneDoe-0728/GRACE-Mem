@@ -290,45 +290,44 @@ def main(argv: list[str] | None = None):
         noco_table_name = build_noco_table_name(run_tag=run_tag, target_name=target_name)
         if upload_nocodb:
             print(f"[UPLOAD] Target '{target_name}' will sync to NocoDB table '{noco_table_name}'")
-        processor = MultiDatasetProcessor(
+        with MultiDatasetProcessor(
             base_output_dir=str(output_dir),
             upload_nocodb=upload_nocodb,
             noco_table_name=noco_table_name,
-        )
+        ) as processor:
+            results = processor.process_all(
+                datasets,
+                run_judge=run_judge,
+                stages=set(selected_stages),
+            )
 
-        results = processor.process_all(
-            datasets,
-            run_judge=run_judge,
-            stages=set(selected_stages),
-        )
+            # ============================================================
+            # Post-Processing: Save Summary
+            # ============================================================
 
-        # ============================================================
-        # Post-Processing: Save Summary
-        # ============================================================
+            summary_path = processor.base_output_dir / "processing_summary_0204.json"
+            write_json_file(summary_path, results)
 
-        summary_path = processor.base_output_dir / "processing_summary_0204.json"
-        write_json_file(summary_path, results)
+            print(f"\n{'='*60}")
+            print(f"All processing complete!")
+            print(f"{'='*60}")
+            print(f"Output directory: {processor.base_output_dir}")
+            print(f"Summary file: {summary_path}")
+            print(f"NocoDB upload enabled: {upload_nocodb}")
+            print(f"Stages: {', '.join(selected_stages)}")
+            print(f"\nResults:")
 
-        print(f"\n{'='*60}")
-        print(f"All processing complete!")
-        print(f"{'='*60}")
-        print(f"Output directory: {processor.base_output_dir}")
-        print(f"Summary file: {summary_path}")
-        print(f"NocoDB upload enabled: {upload_nocodb}")
-        print(f"Stages: {', '.join(selected_stages)}")
-        print(f"\nResults:")
+            for i, res in enumerate(results, start=1):
+                if "error" in res:
+                    print(f"  [{i}] ❌ {res['dataset']}: FAILED")
+                    print(f"      Error: {res['error']}")
+                else:
+                    print(f"  [{i}] ✅ {res['dataset']}: SUCCESS")
+                    print(f"      Questions answered: {res['num_questions']}")
+                    print(f"      Output CSV: {res['output_path']}")
+                    print(f"      VDB artifacts: {res['artifacts_dir']}")
 
-        for i, res in enumerate(results, start=1):
-            if "error" in res:
-                print(f"  [{i}] ❌ {res['dataset']}: FAILED")
-                print(f"      Error: {res['error']}")
-            else:
-                print(f"  [{i}] ✅ {res['dataset']}: SUCCESS")
-                print(f"      Questions answered: {res['num_questions']}")
-                print(f"      Output CSV: {res['output_path']}")
-                print(f"      VDB artifacts: {res['artifacts_dir']}")
-
-        print(f"\n{'='*60}")
+            print(f"\n{'='*60}")
 
 
 if __name__ == "__main__":

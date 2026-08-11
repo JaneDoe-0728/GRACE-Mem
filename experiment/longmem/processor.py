@@ -27,7 +27,7 @@ from typing import Optional, Dict, List, Set
 import traceback
 from datetime import datetime
 
-from KG.storage import CacheStore, VDBManager
+from KG.storage import VDBManager
 from KG.pipeline.ingestor import Ingestor
 from KG.pipeline.retriever import Retriever, RetrieverConfig
 from experiment.experiment_config import INGEST_PARAMS, RERANKER_PARAMS
@@ -100,6 +100,7 @@ class MultiDatasetProcessor:
         self.llm = None
         self.graph = None
         self.embedder = None
+        self._closed = False
 
         # Split-summary rebuild helpers. Expensive to construct (raw-context index +
         # llmlingua model) and stateless across datasets, so they are built once on
@@ -118,7 +119,48 @@ class MultiDatasetProcessor:
         self.judge_stage = JudgeStage()
         self.upload_stage = UploadStage()
 
+    def close(self) -> None:
+        """Release dataset-local and shared runtime resources once."""
+        if self._closed:
+            return
+        cleanup_error: Exception | None = None
+        if self.current_mgr is not None:
+            try:
+                self.current_mgr.close()
+            except Exception as exc:
+                cleanup_error = exc
+            self.current_mgr = None
+        if self.graph is not None:
+            try:
+                self.graph.close()
+            except Exception as exc:
+                if cleanup_error is None:
+                    cleanup_error = exc
+            self.graph = None
+        if self.llm is not None:
+            try:
+                self.llm.close()
+            except Exception as exc:
+                if cleanup_error is None:
+                    cleanup_error = exc
+            self.llm = None
+        self.current_ingestor = None
+        self.current_retriever = None
+        self.current_ent = None
+        self.current_rel = None
+        self._closed = True
+        if cleanup_error is not None:
+            raise cleanup_error
+
+    def __enter__(self) -> "MultiDatasetProcessor":
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
+
     def _ensure_runtime_components(self) -> None:
+        if self._closed:
+            raise RuntimeError("MultiDatasetProcessor is closed")
         if self.llm is None:
             self.llm = LLMClient()
         if self.graph is None:
@@ -665,30 +707,22 @@ class MultiDatasetProcessor:
     def _teardown_dataset(self, config: DatasetConfig):
         """Clean up after processing dataset"""
         log_dir = getattr(self, "current_log_dir", None)
+        cleanup_error: Exception | None = None
 
-        # Persist VDB changes
         if self.current_mgr:
             print(f"\n[CLEANUP] Persisting VDB changes...")
-            self.current_mgr.flush_persist()
+            try:
+                self.current_mgr.close(persist=True, clear_cache=True)
+            except Exception as exc:
+                cleanup_error = exc
 
-            # Close ChromaDB clients to release SQLite file descriptors, then null refs
-            mgr = self.current_mgr
-            for vdb in (mgr._entities_vdb, mgr._relationships_vdb, mgr._summaries_vdb):
-                if vdb is not None:
-                    try:
-                        vdb.close()
-                    except Exception:
-                        pass
-            mgr._entities_vdb = None
-            mgr._relationships_vdb = None
-            mgr._summaries_vdb = None
-            mgr._entities_bm25 = None
-            CacheStore.clear(mgr.cache)
-
-        # 然後才清掉圖
         if self.graph is not None:
             print(f"[CLEANUP] Clearing graph database...")
-            self.graph.clear_all()
+            try:
+                self.graph.clear_all()
+            except Exception as exc:
+                if cleanup_error is None:
+                    cleanup_error = exc
 
         # Note: Logger monkey-patches will be overwritten by next dataset's setup
         # Each dataset gets its own log directory, so no conflict
@@ -703,6 +737,8 @@ class MultiDatasetProcessor:
             cleanup_retrieval_loggers(Path(log_dir))
         gc.collect()
         print(f"[CLEANUP] Memory released (gc.collect done)")
+        if cleanup_error is not None:
+            raise cleanup_error
 
     def _checkpoint_path(self, config: DatasetConfig) -> Path:
         return shared_checkpoint_path(self.base_output_dir, config)
@@ -782,15 +818,14 @@ class MultiDatasetProcessor:
         should_setup_runtime = run_ingest or run_qa
         df: Optional[pd.DataFrame] = None
 
-        if should_setup_runtime:
-            self._setup_dataset(config)
-
-            # Load data
-            print(f"\n[LOAD] Reading CSV: {config.csv_path}")
-            df = read_csv_frame(Path(config.csv_path))
-            print(f"[LOAD] Loaded {len(df)} rows")
-
         try:
+            if should_setup_runtime:
+                self._setup_dataset(config)
+
+                print(f"\n[LOAD] Reading CSV: {config.csv_path}")
+                df = read_csv_frame(Path(config.csv_path))
+                print(f"[LOAD] Loaded {len(df)} rows")
+
             if not should_setup_runtime:
                 answer_data = self._read_answer_data(output_path) if output_path.exists() else {}
                 return {
