@@ -292,23 +292,12 @@ LoCoMo discovers its summary VDB under each source sample. See the
 [Agent Filter guide](experiment/agent_filter/README.md) for defaults,
 adjudication scope, scoring, and trace inspection.
 
-## Analysis and Validation
+## Analysis
 
 Offline analysis lives under each benchmark's `analysis/` package. Some tools
 only read artifacts; others call an LLM or launch benchmark subprocesses. Check
 each entrypoint's `--help` and the runtime matrix in the
 [experiment guide](experiment/README.md#offline-analysis) before running it.
-
-The tracked regression suite is designed to run without API credentials, model
-weights, or a live database:
-
-```bash
-uv run pytest -q
-```
-
-Optional integration behavior is skipped when its declared prerequisites are
-unavailable. Expected failures record known temporal parser limitations; see
-[tests/README.md](tests/README.md) for result semantics.
 
 ## Repository Structure
 
@@ -321,15 +310,15 @@ GRACE-Mem/
 │   ├── longmem/                # LongMemEval pipeline and analysis
 │   └── agent_filter/           # optional evidence refinement
 ├── docs/architecture/          # architecture figures
-├── tests/                      # offline regression suite
 ├── tools/                      # setup, model, trace, and maintenance utilities
+├── LICENSE
 ├── EVALUATION.md
 ├── pyproject.toml
 └── uv.lock
 ```
 
-Datasets, generated artifacts, model weights, logs, secrets, and manual live
-probes are intentionally excluded from version control.
+Datasets, generated artifacts, model weights, logs, secrets, and local test
+suites are intentionally excluded from version control.
 
 ## Reproducibility
 
@@ -352,13 +341,14 @@ of an unpublished reference score.
 | [Experiment guide](experiment/README.md) | Data layout, commands, artifacts, and analysis requirements |
 | [Evaluation protocol](EVALUATION.md) | Judge, voting, scoring, abstention, and oracle behavior |
 | [Agent Filter guide](experiment/agent_filter/README.md) | Evidence refinement, VECTOR, adjudication, and traces |
-| [Test guide](tests/README.md) | Automated suite, skips, expected failures, and manual-probe policy |
 | [.env example](.env.example) | Runtime endpoint and graph configuration |
 
 ## Release Status
 
-- No repository license is currently present. Until one is added, normal
-  copyright restrictions apply to reuse and redistribution.
 - No official GRACE-Mem paper citation has been provided in this repository.
 - A canonical paper configuration and expected-score table have not yet been
   published for exact result comparison.
+
+## License
+
+GRACE-Mem is released under the [MIT License](LICENSE).
