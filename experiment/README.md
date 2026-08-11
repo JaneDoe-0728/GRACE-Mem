@@ -221,6 +221,7 @@ For paper scoring, use the shared post-hoc judge after answer generation:
 ```bash
 uv run python experiment/judge.py locomo <run-tag> --samples 0-9
 uv run python experiment/judge.py longmem <run-tag>
+uv run python experiment/score.py <run-tag>
 ```
 
 The exact carry/rejudge rule, LongMemEval abstention handling, result columns,

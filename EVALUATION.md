@@ -92,6 +92,25 @@ The aggregate also records the selected columns, overall count, and per-category
 counts. Supplying `--column <name>` intentionally replaces this protocol with a
 single custom result column and is recorded as a custom score.
 
+## Scoring Existing Runs
+
+Use the shared scorer for either benchmark. It applies the final result columns,
+prints overall and per-category accuracy, and also reports F1 and BLEU-1:
+
+```bash
+uv run python experiment/score.py <run-tag>
+```
+
+Multiple runs produce an overall mean and population standard deviation:
+
+```bash
+uv run python experiment/score.py <run-r1> <run-r2> <run-r3>
+```
+
+Pass `--agent` to include fallback/kept/added/dropped metrics from Agent Filter
+traces, `--column <name>` for a deliberate legacy/custom comparison, or
+`--json <path>` for machine-readable output.
+
 ## Reproducibility Checklist
 
 For every reported run, retain:

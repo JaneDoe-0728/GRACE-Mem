@@ -96,7 +96,7 @@ modules = (
     'experiment.longmem.analysis.collect',
     'experiment.longmem.analysis.summarize',
     'experiment.locomo.vote_merge',
-    'experiment.agent_filter.score_f1_bleu',
+    'experiment.score',
 )
 for module_name in modules:
     before = list(sys.path)

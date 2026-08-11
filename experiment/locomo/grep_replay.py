@@ -157,7 +157,7 @@ def process_row(row: dict, corpus: Corpus, params: dict, trace_fh, lock,
     out["model_answer"] = ans
     with lock:
         # 寫完整 trace(含 timing/commands/sufficiency/dropped),與 LongMem 的
-        # replay_run 對齊,讓 score_grep_x3 能統計時間與 agent 數據。question 截短。
+        # Keep replay_run-compatible timing and agent fields for experiment/score.py.
         trace_fh.write(json.dumps({"question": q[:120], **trace}, ensure_ascii=False) + "\n")
         trace_fh.flush()
     return out
