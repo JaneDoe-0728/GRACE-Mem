@@ -262,6 +262,26 @@ Changing candidate-pool granularity can invalidate previously tuned
 `summary_direct_vector_topn` and `summary_rerank_topk` values; re-sweep evidence
 parameters when changing chunk/layout behavior.
 
+## Offline Analysis
+
+Offline diagnostics are separated from benchmark execution and live under each
+benchmark's `analysis` package. The legacy script paths remain compatibility
+wrappers, but new automation should use the canonical modules below.
+
+| Purpose | Command |
+|---|---|
+| LoCoMo gold recall | `python -m experiment.locomo.analysis.gold_recall --help` |
+| LoCoMo dataset statistics | `python -m experiment.locomo.analysis.dataset --help` |
+| LoCoMo turn filtering | `python -m experiment.locomo.analysis.turn_filter --help` |
+| LongMem gold recall | `python -m experiment.longmem.analysis.gold_recall --help` |
+| LongMem judge flips | `python -m experiment.longmem.analysis.judge_flips --help` |
+| LongMem summary scores | `python -m experiment.longmem.analysis.summary_scores --help` |
+| LongMem fact replay | `python -m experiment.longmem.analysis.fact_replay --help` |
+
+Agent Filter reachability, resampling, and tribunal studies are LongMem analysis
+modules prefixed with `agent_filter_`. The trace viewer and live smoke probe live
+under `tools/` because they inspect artifacts or require configured services.
+
 ## Recovery and Diagnostics
 
 - Inspect available flags directly with `uv run python <entrypoint> --help`.
