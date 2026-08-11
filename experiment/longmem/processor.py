@@ -23,7 +23,7 @@ import logging
 import os
 import pandas as pd
 from pathlib import Path
-from typing import Optional, Dict, List, Set
+from typing import Any, Optional, Dict, List, Set
 import traceback
 from datetime import datetime
 
@@ -103,6 +103,7 @@ class MultiDatasetProcessor:
         # first use and deliberately NOT reset by _cleanup_current_dataset().
         self._split_lookup = None
         self._split_compressor = None
+        self._logger_bindings: list[tuple[Any, str, Any]] = []
 
         # Dataset-specific components (reinitialized per dataset)
         self.current_mgr: Optional[VDBManager] = None
@@ -144,6 +145,7 @@ class MultiDatasetProcessor:
         self.current_retriever = None
         self.current_ent = None
         self.current_rel = None
+        self._restore_module_loggers()
         self._closed = True
         if cleanup_error is not None:
             raise cleanup_error
@@ -153,6 +155,17 @@ class MultiDatasetProcessor:
 
     def __exit__(self, exc_type, exc, traceback) -> None:
         self.close()
+
+    def _bind_module_logger(self, module: Any, logger_instance: Any) -> None:
+        """Temporarily replace a module logger until dataset teardown."""
+        attribute = "_jlog"
+        self._logger_bindings.append((module, attribute, getattr(module, attribute)))
+        setattr(module, attribute, logger_instance)
+
+    def _restore_module_loggers(self) -> None:
+        while self._logger_bindings:
+            module, attribute, previous = self._logger_bindings.pop()
+            setattr(module, attribute, previous)
 
     def _ensure_runtime_components(self) -> None:
         if self._closed:
@@ -657,33 +670,48 @@ class MultiDatasetProcessor:
         import KG.pipeline.retrieval_steps.filtering as filtering_module
         import KG.pipeline.retrieval_steps.temporal as temporal_module
         import KG.pipeline.retrieval_steps.evidence as evidence_module
-        ingestor_module._jlog = ingestor_jlog
-        sync_step_module._jlog = ingestor_jlog  # sync events co-located in kg_ingestor.jsonl
-        falkordb_module._jlog = make_module_jlog(
-            name=f"KG.Graph.{config.name}",
-            filename="kg_ingestor.jsonl",
-            log_dir=str(log_dir),
+        self._bind_module_logger(ingestor_module, ingestor_jlog)
+        self._bind_module_logger(sync_step_module, ingestor_jlog)
+        self._bind_module_logger(
+            falkordb_module,
+            make_module_jlog(
+                name=f"KG.Graph.{config.name}",
+                filename="kg_ingestor.jsonl",
+                log_dir=str(log_dir),
+            ),
         )
-        retriever_module._jlog = retriever_jlog
-        search_module._jlog = make_module_jlog(
-            name=f"KG.Retrieval.Search.{config.name}",
-            filename="kg_retrieval_search.jsonl",
-            log_dir=str(log_dir),
+        self._bind_module_logger(retriever_module, retriever_jlog)
+        self._bind_module_logger(
+            search_module,
+            make_module_jlog(
+                name=f"KG.Retrieval.Search.{config.name}",
+                filename="kg_retrieval_search.jsonl",
+                log_dir=str(log_dir),
+            ),
         )
-        filtering_module._jlog = make_module_jlog(
-            name=f"KG.Retrieval.Filtering.{config.name}",
-            filename="kg_retrieval_filtering.jsonl",
-            log_dir=str(log_dir),
+        self._bind_module_logger(
+            filtering_module,
+            make_module_jlog(
+                name=f"KG.Retrieval.Filtering.{config.name}",
+                filename="kg_retrieval_filtering.jsonl",
+                log_dir=str(log_dir),
+            ),
         )
-        temporal_module._jlog = make_module_jlog(
-            name=f"KG.Retrieval.Temporal.{config.name}",
-            filename="kg_retrieval_temporal.jsonl",
-            log_dir=str(log_dir),
+        self._bind_module_logger(
+            temporal_module,
+            make_module_jlog(
+                name=f"KG.Retrieval.Temporal.{config.name}",
+                filename="kg_retrieval_temporal.jsonl",
+                log_dir=str(log_dir),
+            ),
         )
-        evidence_module._jlog = make_module_jlog(
-            name=f"KG.Retrieval.Evidence.{config.name}",
-            filename="kg_retrieval_evidence.jsonl",
-            log_dir=str(log_dir),
+        self._bind_module_logger(
+            evidence_module,
+            make_module_jlog(
+                name=f"KG.Retrieval.Evidence.{config.name}",
+                filename="kg_retrieval_evidence.jsonl",
+                log_dir=str(log_dir),
+            ),
         )
 
         print(f"[INIT] Ingestor and Retriever initialized with per-dataset logs")
@@ -717,6 +745,7 @@ class MultiDatasetProcessor:
         self.current_retriever = None
         self.current_ent = None
         self.current_rel = None
+        self._restore_module_loggers()
         if log_dir is not None:
             cleanup_retrieval_loggers(Path(log_dir))
         gc.collect()

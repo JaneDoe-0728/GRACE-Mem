@@ -17,6 +17,7 @@ def _processor_without_init() -> MultiDatasetProcessor:
     processor.graph = Mock()
     processor.llm = Mock()
     processor._closed = False
+    processor._logger_bindings = []
     return processor
 
 
@@ -66,3 +67,19 @@ def test_dataset_setup_failure_still_runs_teardown():
         processor.process_dataset(config)
 
     processor._teardown_dataset.assert_called_once_with(config)
+
+
+def test_dataset_logger_bindings_are_restored_in_reverse_order():
+    processor = _processor_without_init()
+    first_original = Mock(name="first_original")
+    second_original = Mock(name="second_original")
+    first_module = SimpleNamespace(_jlog=first_original)
+    second_module = SimpleNamespace(_jlog=second_original)
+
+    processor._bind_module_logger(first_module, Mock(name="first_dataset"))
+    processor._bind_module_logger(second_module, Mock(name="second_dataset"))
+    processor._restore_module_loggers()
+
+    assert first_module._jlog is first_original
+    assert second_module._jlog is second_original
+    assert processor._logger_bindings == []
