@@ -92,3 +92,30 @@ def test_locomo_internal_modules_do_not_import_helpers_facade():
                 invalid_imports.append(f"{path.relative_to(ROOT)}:{node.lineno}")
 
     assert invalid_imports == []
+
+
+def test_helpers_facade_does_not_eagerly_import_optional_layers():
+    script = """
+import sys
+import experiment.locomo.helpers as helpers
+
+blocked = {
+    'experiment.locomo.helpers.llm',
+    'experiment.locomo.aggregate',
+    'experiment.locomo.summary',
+    'experiment.locomo.utils.graph',
+}
+assert blocked.isdisjoint(sys.modules)
+assert helpers.normalize_dataset_name('locomo') == 'locomo'
+assert 'experiment.locomo.helpers.dataset' in sys.modules
+assert blocked.isdisjoint(sys.modules)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
