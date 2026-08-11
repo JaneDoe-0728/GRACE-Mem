@@ -60,15 +60,17 @@ def discover_dataset_configs(
     *,
     folder_path: str,
     file_pattern: str,
-    shared_config: dict,
+    ingest_params: dict,
+    retrieval_params: dict,
 ) -> list[DatasetConfig]:
     datasets: list[DatasetConfig] = []
     for csv_file in discover_csv_datasets(folder_path, file_pattern):
         datasets.append(
-            DatasetConfig(
+            DatasetConfig.from_params(
                 name=Path(csv_file).stem,
                 csv_path=str(csv_file),
-                **shared_config,
+                ingest_params=ingest_params,
+                retrieval_params=retrieval_params,
             )
         )
     return datasets
@@ -196,12 +198,6 @@ def main(argv: list[str] | None = None):
     # Configuration: Shared settings for ALL datasets
     # ============================================================
 
-    SHARED_CONFIG = {
-        "question_column": "question",
-        **INGEST_PARAMS,
-        **RETRIEVAL_PARAMS,
-    }
-
     # ============================================================
     # Auto-discover datasets from folder (or subfolders)
     # ============================================================
@@ -263,20 +259,22 @@ def main(argv: list[str] | None = None):
     for target_name, csv_paths in run_targets:
         if child_mode:
             datasets = [
-                DatasetConfig(
+                DatasetConfig.from_params(
                     name=csv_path.stem,
                     csv_path=str(csv_path),
-                    **SHARED_CONFIG,
+                    ingest_params=INGEST_PARAMS,
+                    retrieval_params=RETRIEVAL_PARAMS,
                 )
                 for csv_path in csv_paths
             ]
             output_dir = Path(output_root) / target_name
         else:
             datasets = [
-                DatasetConfig(
+                DatasetConfig.from_params(
                     name=csv_path.stem,
                     csv_path=str(csv_path),
-                    **SHARED_CONFIG,
+                    ingest_params=INGEST_PARAMS,
+                    retrieval_params=RETRIEVAL_PARAMS,
                 )
                 for csv_path in csv_paths
             ]

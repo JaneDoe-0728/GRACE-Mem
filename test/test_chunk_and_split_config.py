@@ -232,21 +232,24 @@ def test_locomo_always_uses_single_entry_regardless_of_use_split_summary():
     assert RERANKER_PARAMS["split_single_entry_raw"] is True
 
 
-@pytest.mark.parametrize("rel", ["experiment/longmem/processor.py", "experiment/longmem/rerun.py"])
-def test_longmem_retrieval_flag_is_derived_from_use_split_summary(rel):
-    """Neither file may hardcode split_single_entry_raw.
+def test_longmem_processor_retrieval_flag_uses_typed_dataset_config():
+    """The processor must derive retrieval layout from the dataset config.
 
     Regression: processor.py pinned it to False, so retrieval always looked for :u/:a
     entries even on a fresh run where nothing had built them.
     """
-    source = (REPO_ROOT / rel).read_text(encoding="utf-8")
+    source = (REPO_ROOT / "experiment/longmem/processor.py").read_text(encoding="utf-8")
 
-    assert "USE_SPLIT_SUMMARY" in source, f"{rel} does not read use_split_summary"
+    assert '"split_single_entry_raw": not config.use_split_summary' in source
     hardcoded = re.findall(r'"split_single_entry_raw":\s*(True|False)\b', source)
-    assert not hardcoded, (
-        f"{rel} hardcodes split_single_entry_raw={hardcoded}; it must follow "
-        "use_split_summary or the artifacts and the retrieval config can diverge"
-    )
+    assert not hardcoded
+
+
+def test_longmem_rerun_retrieval_flag_uses_shared_split_setting():
+    source = (REPO_ROOT / "experiment/longmem/rerun.py").read_text(encoding="utf-8")
+
+    assert "USE_SPLIT_SUMMARY" in source
+    assert not re.findall(r'"split_single_entry_raw":\s*(True|False)\b', source)
 
 
 @pytest.mark.parametrize("use_split_summary,expected_flag", [(True, False), (False, True)])
@@ -259,7 +262,7 @@ def test_processor_runs_the_rebuild_after_ingest():
     """The rebuild must be invoked from the single point where both ingest modes meet."""
     source = (REPO_ROOT / "experiment/longmem/processor.py").read_text(encoding="utf-8")
     assert "def _maybe_rebuild_split_summaries" in source
-    assert "self._maybe_rebuild_split_summaries()" in source
+    assert "self._maybe_rebuild_split_summaries(config)" in source
 
     tree = ast.parse(source)
     hook = next(
@@ -267,7 +270,7 @@ def test_processor_runs_the_rebuild_after_ingest():
         if isinstance(node, ast.FunctionDef) and node.name == "_maybe_rebuild_split_summaries"
     )
     body = ast.get_source_segment(source, hook) or ""
-    assert "USE_SPLIT_SUMMARY" in body, "the rebuild step ignores the config flag"
+    assert "config.use_split_summary" in body, "the rebuild step ignores the config flag"
     assert "rebuild_artifact" in body, "the rebuild step does not call rebuild_artifact"
 
 

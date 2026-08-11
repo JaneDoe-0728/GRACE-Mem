@@ -30,11 +30,7 @@ from datetime import datetime
 from KG.storage import VDBManager
 from KG.pipeline.ingestor import Ingestor
 from KG.pipeline.retriever import Retriever, RetrieverConfig
-from experiment.experiment_config import INGEST_PARAMS, RERANKER_PARAMS
-
-# LongMem-only: whether summaries are rebuilt into :u/:a entry pairs after ingest.
-# Drives both the rebuild step and the matching retrieval setting.
-USE_SPLIT_SUMMARY = bool(INGEST_PARAMS.get("use_split_summary", True))
+from experiment.experiment_config import RERANKER_PARAMS
 from KG.llm import LLMClient, token_tracker
 from KG.graph.falkordb import graph_from_env
 from embeddings import embedder
@@ -353,10 +349,10 @@ class MultiDatasetProcessor:
 
         return results
 
-    def _maybe_rebuild_split_summaries(self) -> None:
+    def _maybe_rebuild_split_summaries(self, config: DatasetConfig) -> None:
         """Rebuild this dataset's summaries_chroma into :u/:a entry pairs.
 
-        Runs right after ingest when INGEST_PARAMS["use_split_summary"] is True, so the
+        Runs right after ingest when config.use_split_summary is true, so the
         artifacts on disk match what the retriever is configured to look for
         (split_single_entry_raw=False). Without this step retrieval would query
         {sid}:u / {sid}:a entries that the Ingestor never writes, and the whole
@@ -365,7 +361,7 @@ class MultiDatasetProcessor:
         rebuild_artifact() is idempotent — it skips an artifact dir that already has a
         summaries_chroma_bak backup — so reruns and resumed runs are safe.
         """
-        if not USE_SPLIT_SUMMARY:
+        if not config.use_split_summary:
             return
         if self.current_mgr is None:
             return
@@ -403,22 +399,10 @@ class MultiDatasetProcessor:
             traceback.print_exc()
 
     def _build_context(self, question: str, config: DatasetConfig, query_time: str | None = None) -> str:
-        retrieval_params = {
-            "ent_topk": config.ent_topk,
-            "rel_topk": config.rel_topk,
-            "ent_threshold": config.ent_threshold,
-            "rel_threshold": config.rel_threshold,
-            "filter_ent_topk": config.filter_ent_topk,
-            "filter_rel_topk": config.filter_rel_topk,
-            "filter_ent_threshold": config.filter_ent_threshold,
-            "filter_rel_threshold": config.filter_rel_threshold,
-            "summary_topk_per_item": config.summary_topk_per_item,
-            "summary_vec_threshold": config.summary_vec_threshold,
-        }
         return self.qa_stage.build_context(
             self.current_retriever,
             question=question,
-            retrieval_params=retrieval_params,
+            retrieval_params=config.retrieval_kwargs(),
             query_time=query_time,
         )
 
@@ -652,7 +636,7 @@ class MultiDatasetProcessor:
         # rebuild runs AND retrieval looks for :u/:a; False means neither.
         _longmem_reranker_params = {
             **RERANKER_PARAMS,
-            "split_single_entry_raw": not USE_SPLIT_SUMMARY,
+            "split_single_entry_raw": not config.use_split_summary,
         }
         self.current_retriever = Retriever(
             llm=self.llm,
@@ -862,7 +846,7 @@ class MultiDatasetProcessor:
                 else:
                     raise ValueError(f"Unknown ingest_mode: {config.ingest_mode}")
                 print(f"\n[INGEST] Completed! Processed {len(ingest_results)} sessions")
-                self._maybe_rebuild_split_summaries()
+                self._maybe_rebuild_split_summaries(config)
             else:
                 print(f"\n[INGEST] Skipped for dataset {config.name}")
 
