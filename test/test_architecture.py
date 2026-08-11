@@ -74,3 +74,21 @@ def test_snapshot_imports_in_a_fresh_interpreter():
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_locomo_internal_modules_do_not_import_helpers_facade():
+    invalid_imports: list[str] = []
+    locomo_root = ROOT / "experiment" / "locomo"
+    facade = locomo_root / "helpers" / "__init__.py"
+    for path in locomo_root.rglob("*.py"):
+        if path == facade:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module == "experiment.locomo.helpers"
+            ):
+                invalid_imports.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+
+    assert invalid_imports == []

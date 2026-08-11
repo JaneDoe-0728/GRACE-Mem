@@ -85,7 +85,7 @@ def _write_run_metadata(
 # ---------------------------------------------------------------------------
 
 def _build_runtime(args) -> RunRuntime:
-    from experiment.locomo.helpers import (
+    from experiment.locomo.helpers.dataset import (
         default_output_variant_dir,
         load_raw_samples,
         normalize_dataset_name,
@@ -158,7 +158,7 @@ def _build_runtime(args) -> RunRuntime:
 # ---------------------------------------------------------------------------
 
 def run_orchestrator(args) -> None:
-    from experiment.locomo.helpers import is_cognitive_item
+    from experiment.locomo.helpers.dataset import is_cognitive_item
     from experiment.locomo.cli import build_worker_command, resolve_stages
 
     runtime = _build_runtime(args)

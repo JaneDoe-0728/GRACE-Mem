@@ -350,7 +350,7 @@ def _run_locomo_gold_summary_only(args) -> None:
 
     from KG.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
-    from experiment.locomo.helpers import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
 
     dataset = normalize_dataset_name(args.dataset)
     dataset_json = resolve_dataset_path(dataset=dataset, kind="qa_json", explicit_path=args.dataset_json)
@@ -434,7 +434,7 @@ def _run_locomo_gold_raw_text_only(args) -> None:
 
     from KG.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
-    from experiment.locomo.helpers import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
 
     dataset = normalize_dataset_name(args.dataset)
     dataset_json = resolve_dataset_path(dataset=dataset, kind="qa_json", explicit_path=args.dataset_json)
@@ -512,7 +512,7 @@ def _run_locomo_replay_summary_raw_text_from_run(args) -> None:
 
     from KG.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
-    from experiment.locomo.helpers import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
 
     if not args.replay_run_dir:
         raise ValueError("--replay-run-dir is required for replay_summary_raw_text_from_run mode")
@@ -603,7 +603,7 @@ def _run_locomo_replay_summary_fact_from_run(args) -> None:
 
     from KG.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
-    from experiment.locomo.helpers import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
 
     if not args.replay_run_dir:
         raise ValueError("--replay-run-dir is required for replay_summary_fact_from_run mode")
@@ -697,7 +697,7 @@ def run_locomo_worker(args) -> None:
 
     from KG.llm import token_tracker
     from experiment.locomo.stages import judge
-    from experiment.locomo.helpers import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
 
     dataset = normalize_dataset_name(args.dataset)
     dataset_json = resolve_dataset_path(
@@ -867,7 +867,7 @@ def _run_locomo_plus_gold_summary_only(args) -> None:
     import json as _json
     import pandas as pd
 
-    from experiment.locomo.helpers import (
+    from experiment.locomo.helpers.dataset import (
         is_adversarial_item,
         load_raw_samples,
         normalize_qa_item,
@@ -960,7 +960,7 @@ def _run_locomo_plus_gold_raw_text_only(args) -> None:
     import json as _json
     import pandas as pd
 
-    from experiment.locomo.helpers import (
+    from experiment.locomo.helpers.dataset import (
         is_adversarial_item,
         load_raw_samples,
         normalize_qa_item,
@@ -1053,7 +1053,7 @@ def run_locomo_plus_worker(args) -> None:
 
     import pandas as pd
 
-    from experiment.locomo.helpers import (
+    from experiment.locomo.helpers.dataset import (
         extract_injected_session_record,
         is_adversarial_item,
         load_raw_samples,
@@ -1273,7 +1273,7 @@ def run_locomo_plus_worker(args) -> None:
 def run_worker(args) -> None:
     ensure_worker_repo_path()
 
-    from experiment.locomo.helpers import normalize_dataset_name
+    from experiment.locomo.helpers.dataset import normalize_dataset_name
 
     dataset = normalize_dataset_name(args.dataset)
     if dataset == "locomo":
