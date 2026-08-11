@@ -10,11 +10,11 @@ Source CSVs are read from: experiment/longmem/script_data/{category}/{name}.csv
 Output: {name}_replay_fact.csv in each category directory.
 
 Usage:
-    python experiment/longmem/replay_fact_multi_dataset.py
-    python experiment/longmem/replay_fact_multi_dataset.py --dry-run
-    python experiment/longmem/replay_fact_multi_dataset.py --category multi_session
-    python experiment/longmem/replay_fact_multi_dataset.py --no-judge
-    python experiment/longmem/replay_fact_multi_dataset.py --force
+    python -m experiment.longmem.analysis.fact_replay --source-roles all
+    python -m experiment.longmem.analysis.fact_replay --source-roles user
+    python -m experiment.longmem.analysis.fact_replay --dry-run
+    python -m experiment.longmem.analysis.fact_replay --category multi_session
+    python -m experiment.longmem.analysis.fact_replay --no-judge
 """
 from __future__ import annotations
 

@@ -44,31 +44,20 @@ def test_fact_replay_role_modes_share_one_loader(tmp_path) -> None:
     assert _build_session_raw_texts(source, source_roles="user") == {"s1": "User: User fact"}
 
 
-def test_legacy_analysis_modules_delegate_private_helpers() -> None:
-    pairs = (
-        ("locomo_gold_recall_metrics", "experiment.locomo.analysis.gold_recall", "_sample_index"),
-        ("gold_recall_metrics", "experiment.longmem.analysis.gold_recall", "_is_correct"),
-        ("experiment.locomo.helpers.diff_sample_flips", "experiment.locomo.analysis.flips", "_compute_flips"),
-        ("experiment.longmem.summary_score_dist", "experiment.longmem.analysis.summary_scores", "_stats"),
+def test_canonical_analysis_modules_import_without_sys_path_changes() -> None:
+    modules = (
+        "experiment.locomo.analysis.dataset",
+        "experiment.locomo.analysis.flips",
+        "experiment.locomo.analysis.gold_recall",
+        "experiment.locomo.analysis.turn_filter",
+        "experiment.longmem.analysis.fact_replay",
+        "experiment.longmem.analysis.gold_recall",
+        "experiment.longmem.analysis.judge_flips",
+        "experiment.longmem.analysis.summary_scores",
+        "tools.agent_filter_trace_viewer.build",
+        "tools.manual.agent_filter_smoke",
     )
-    for legacy_name, canonical_name, attribute in pairs:
+    for module_name in modules:
         before = list(sys.path)
-        legacy = importlib.import_module(legacy_name)
-        canonical = importlib.import_module(canonical_name)
-        assert getattr(legacy, attribute) is getattr(canonical, attribute)
+        importlib.import_module(module_name)
         assert sys.path == before
-
-
-def test_fact_replay_legacy_entrypoints_keep_role_defaults(monkeypatch) -> None:
-    all_roles = importlib.import_module("experiment.longmem.replay_fact_multi_dataset")
-    user_only = importlib.import_module("experiment.longmem.replay_fact_user_only")
-    calls: list[tuple[list[str] | None, str]] = []
-
-    def fake_main(argv=None, *, default_source_roles="all"):
-        calls.append((argv, default_source_roles))
-
-    monkeypatch.setattr("experiment.longmem.analysis.fact_replay.main", fake_main)
-    all_roles.main(["--dry-run"])
-    user_only.main(["--dry-run"])
-
-    assert calls == [(["--dry-run"], "all"), (["--dry-run"], "user")]

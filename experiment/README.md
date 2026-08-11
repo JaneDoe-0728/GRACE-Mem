@@ -265,8 +265,8 @@ parameters when changing chunk/layout behavior.
 ## Offline Analysis
 
 Offline diagnostics are separated from benchmark execution and live under each
-benchmark's `analysis` package. The legacy script paths remain compatibility
-wrappers, but new automation should use the canonical modules below.
+benchmark's `analysis` package. These canonical modules are the only supported
+analysis entry points.
 
 | Purpose | Command |
 |---|---|

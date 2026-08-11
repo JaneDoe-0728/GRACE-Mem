@@ -25,7 +25,7 @@ For each question (one row in ``<run>/_judge_merged.csv``):
                    falls back to the CSV gold_evidence_source column, which is
                    session-level only)
 
-Metrics (mirrors gold_recall_metrics.py for LongMem):
+Metrics (aligned with the LongMem gold-recall report):
   整體正確率            = #correct / #questions
   Gold summary 返回率   = Σ retrieved-gold / Σ gold        (micro recall)
   整題 gold 全中率      = #all-gold-hit / #questions-with-gold
