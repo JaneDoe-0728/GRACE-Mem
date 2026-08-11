@@ -89,4 +89,4 @@ fi
 echo "  Reranker model: OK"
 
 echo ""
-echo "Environment ready. See experiment/readme.md to run the benchmarks."
+echo "Environment ready. See experiment/README.md to run the benchmarks."

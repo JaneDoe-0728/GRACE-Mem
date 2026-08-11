@@ -1,6 +1,6 @@
 """README conformance tests.
 
-Encodes executable contracts from README.md / experiment/readme.md so a future
+Encodes executable contracts from README.md / experiment/README.md so a future
 edit that drifts from the code fails here instead of in a user's first five
 minutes.
 
@@ -24,12 +24,21 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+DOCUMENTS = (
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "experiment" / "README.md",
+    REPO_ROOT / "KG" / "ARCHITECTURE.md",
+    REPO_ROOT / "docs" / "architecture" / "import-graph.md",
+    REPO_ROOT / "test" / "README.md",
+)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -83,9 +92,42 @@ def _port_open(host: str, port: int, timeout: float = 1.0) -> bool:
         return False
 
 
+def _heading_anchors(markdown: str) -> set[str]:
+    anchors: set[str] = set()
+    for heading in re.findall(r"^#{1,6}\s+(.+)$", markdown, re.MULTILINE):
+        slug = re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
+        anchors.add(slug)
+    return anchors
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # Setup section: requirements, .env.example, setup_env.sh, docker-compose
 # ══════════════════════════════════════════════════════════════════════════
+
+def test_pyproject_points_to_the_tracked_root_readme():
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^readme\s*=\s*"([^"]+)"', text, re.MULTILINE)
+
+    assert match is not None
+    assert match.group(1) == "README.md"
+    assert (REPO_ROOT / match.group(1)).is_file()
+
+
+@pytest.mark.parametrize("document", DOCUMENTS, ids=lambda path: str(path.relative_to(REPO_ROOT)))
+def test_local_documentation_links_and_anchors_resolve(document: Path):
+    markdown = document.read_text(encoding="utf-8")
+    for raw_target in re.findall(r"(?<!!)\[[^]]+\]\(([^)]+)\)", markdown):
+        target = unquote(raw_target.strip())
+        if target.startswith(("http://", "https://", "mailto:")):
+            continue
+        path_part, _, anchor = target.partition("#")
+        linked_path = (document.parent / path_part).resolve() if path_part else document.resolve()
+        assert linked_path.exists(), f"{document}: missing local link {raw_target}"
+        if anchor and linked_path.is_file():
+            linked_markdown = linked_path.read_text(encoding="utf-8")
+            assert anchor in _heading_anchors(linked_markdown), (
+                f"{document}: missing anchor {raw_target}"
+            )
 
 def test_pyproject_declares_supported_python_range():
     """readme: 'Python 3.10-3.13'."""
@@ -176,10 +218,10 @@ def test_no_hardcoded_endpoint_ips_anywhere():
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# Module layout: every path in the readme tree must exist
+# Documented package and operations paths
 # ══════════════════════════════════════════════════════════════════════════
 
-README_LAYOUT_PATHS = [
+DOCUMENTED_PATHS = [
     "KG/pipeline/factory.py",
     "KG/pipeline/retriever.py",
     "KG/pipeline/ingestor.py",
@@ -206,7 +248,7 @@ README_LAYOUT_PATHS = [
     "KG/llm/prompts/extraction/two_step.py",
     "KG/llm/prompts/entity_ops/rules.py",
     "KG/llm/prompts/entity_ops/examples.py",
-    "experiment/readme.md",
+    "experiment/README.md",
     "experiment/experiment_config.py",
     "experiment/longmem/watchdog.py",
     "experiment/locomo/pipeline.py",
@@ -221,9 +263,9 @@ README_LAYOUT_PATHS = [
 ]
 
 
-@pytest.mark.parametrize("rel", README_LAYOUT_PATHS)
-def test_every_path_named_in_the_readme_exists(rel):
-    assert (REPO_ROOT / rel).exists(), f"readme references {rel}, which does not exist"
+@pytest.mark.parametrize("rel", DOCUMENTED_PATHS)
+def test_documented_public_paths_exist(rel):
+    assert (REPO_ROOT / rel).exists(), f"documentation contract is missing {rel}"
 
 
 IMPORTABLE_MODULES = [
@@ -256,7 +298,7 @@ def test_documented_modules_import_cleanly(module):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# "Quick API at a glance": every documented symbol must exist
+# Public package contracts referenced by architecture and operations docs
 # ══════════════════════════════════════════════════════════════════════════
 
 DOCUMENTED_METHODS = [
@@ -340,6 +382,15 @@ def test_factory_returns_the_four_documented_keys():
     text = (REPO_ROOT / "KG/pipeline/factory.py").read_text(encoding="utf-8")
     for key in ("retriever", "ingestor", "graph", "mgr"):
         assert f'"{key}"' in text
+
+
+def test_default_stage_model_matches_the_experiment_guide():
+    from experiment.locomo.cli import DEFAULT_STAGES as LOCOMO_DEFAULT_STAGES
+    from experiment.longmem.helpers.args import DEFAULT_STAGES as LONGMEM_DEFAULT_STAGES
+
+    expected = ("ingest", "qa_eval", "judge", "upload")
+    assert LOCOMO_DEFAULT_STAGES == expected
+    assert LONGMEM_DEFAULT_STAGES == expected
 
 
 @pytest.mark.parametrize("field,expected", [
@@ -438,7 +489,7 @@ def test_locomo_aggregate_accepts_the_flags_the_experiment_readme_shows():
 
 
 def test_experiment_config_is_the_single_source_of_truth():
-    """experiment/readme.md: 'edit only experiment_config.py'."""
+    """experiment/README.md: shared defaults live in experiment_config.py."""
     from experiment import experiment_config
 
     for name in ("REPRODUCIBILITY_PARAMS", "INGEST_PARAMS", "RETRIEVAL_PARAMS", "RERANKER_PARAMS"):

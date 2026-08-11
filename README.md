@@ -119,7 +119,7 @@ Benchmark data is not committed to this repository.
 
 The repository does not currently include a raw LongMemEval-to-CSV converter.
 Required files, columns, and overrides are documented in the
-[experiment data guide](experiment/readme.md#data-layout).
+[experiment data guide](experiment/README.md#data-layout).
 
 ### 3. Run a benchmark
 
@@ -143,7 +143,7 @@ uv run python experiment/longmem/watchdog.py \
 Both commands run the default `ingest -> qa_eval -> judge -> upload` stage set.
 NocoDB upload is best-effort when its credentials are not configured. Stage
 selection, resume behavior, retrieval-only runs, and output paths are covered in
-the [experiment guide](experiment/readme.md).
+the [experiment guide](experiment/README.md).
 
 ## Core API
 
@@ -242,7 +242,7 @@ test/             Offline regression suite plus explicitly separated live probes
 
 | Document | Purpose |
 |---|---|
-| [Experiment guide](experiment/readme.md) | Data layout, benchmark commands, stages, outputs, and recovery |
+| [Experiment guide](experiment/README.md) | Data layout, benchmark commands, stages, outputs, and recovery |
 | [KG architecture](KG/ARCHITECTURE.md) | Package ownership, public imports, runtime data, and boundaries |
 | [Import graph baseline](docs/architecture/import-graph.md) | Dependency direction, removed cycles, and runtime ownership |
 | [Agent Filter guide](agent_filter/README.md) | Evidence-refinement workflow and evaluation notes |
