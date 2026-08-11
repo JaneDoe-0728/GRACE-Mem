@@ -27,6 +27,7 @@ class PipelineRuntime(Mapping[str, Any]):
     ingestor: Any
     graph: Any
     mgr: Any
+    llm: Any | None = field(default=None, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
 
     _COMPONENT_NAMES: ClassVar[tuple[str, ...]] = (
@@ -51,8 +52,12 @@ class PipelineRuntime(Mapping[str, Any]):
         """Close runtime-owned external connections once."""
         if self._closed:
             return
-        self.graph.close()
-        self._closed = True
+        try:
+            self.graph.close()
+        finally:
+            if self.llm is not None:
+                self.llm.close()
+            self._closed = True
 
     def __enter__(self) -> "PipelineRuntime":
         return self
@@ -74,8 +79,9 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
 
     GLOBAL_CACHE = MGR.cache
     llm = LLMClient()
-    graph = graph_from_env().open()
+    graph = None
     try:
+        graph = graph_from_env().open()
         ent = EntityManager(
             embedder=embedder,
             mgr=MGR,
@@ -115,7 +121,16 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
             ingestor=ingestor,
             graph=graph,
             mgr=MGR,
+            llm=llm,
         )
     except BaseException:
-        graph.close()
+        if graph is not None:
+            try:
+                graph.close()
+            except Exception:
+                pass
+        try:
+            llm.close()
+        except Exception:
+            pass
         raise

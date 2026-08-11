@@ -14,6 +14,7 @@ def _runtime() -> PipelineRuntime:
         ingestor=object(),
         graph=Mock(),
         mgr=object(),
+        llm=Mock(),
     )
 
 
@@ -38,6 +39,7 @@ def test_pipeline_runtime_context_manager_closes_graph_once():
 
     runtime.close()
     runtime.graph.close.assert_called_once_with()
+    runtime.llm.close.assert_called_once_with()
 
 
 def test_pipeline_runtime_closes_graph_when_context_raises():
@@ -48,10 +50,14 @@ def test_pipeline_runtime_closes_graph_when_context_raises():
             raise RuntimeError("pipeline failed")
 
     runtime.graph.close.assert_called_once_with()
+    runtime.llm.close.assert_called_once_with()
 
 
 def test_build_pipeline_closes_graph_when_construction_fails(monkeypatch):
     graph = Mock()
+    llm = Mock()
+    graph.close.side_effect = RuntimeError("graph close failed")
+    llm.close.side_effect = RuntimeError("llm close failed")
     graph_from_env = Mock(return_value=SimpleNamespace(open=Mock(return_value=graph)))
 
     def module(name: str, **attributes):
@@ -74,7 +80,7 @@ def test_build_pipeline_closes_graph_when_construction_fails(monkeypatch):
         "KG.pipeline.retriever": module("KG.pipeline.retriever", Retriever=object),
         "KG.pipeline.ingestor": module("KG.pipeline.ingestor", Ingestor=object),
         "KG.storage": module("KG.storage", MGR=SimpleNamespace(cache=cache)),
-        "KG.llm": module("KG.llm", LLMClient=Mock),
+        "KG.llm": module("KG.llm", LLMClient=Mock(return_value=llm)),
         "KG.graph.falkordb": module("KG.graph.falkordb", graph_from_env=graph_from_env),
         "embeddings": module("embeddings", embedder=SimpleNamespace(embed=Mock())),
         "KG.services": module(
@@ -91,3 +97,4 @@ def test_build_pipeline_closes_graph_when_construction_fails(monkeypatch):
         build_pipeline()
 
     graph.close.assert_called_once_with()
+    llm.close.assert_called_once_with()

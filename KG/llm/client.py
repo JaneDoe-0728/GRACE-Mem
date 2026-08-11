@@ -53,6 +53,7 @@ class LLMClient:
         }
         self._timeout = timeout
         self._seed_log_states: set[str] = set()
+        self._closed = False
         self.client = OpenAI(
             base_url=base_url,
             api_key=resolved_api_key,
@@ -62,6 +63,19 @@ class LLMClient:
             generate_fn=self.generate_llm_extract,
             config=EntityOpsConfig()
         )
+
+    def close(self) -> None:
+        """Release the underlying HTTP transport once."""
+        if self._closed:
+            return
+        self.client.close()
+        self._closed = True
+
+    def __enter__(self) -> "LLMClient":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        self.close()
 
     def _log_seed_state(self, state: str, detail: str) -> None:
         if state in self._seed_log_states:
