@@ -61,14 +61,15 @@ def main() -> None:
     # 這裡把它換回 category-aware(prompts/judge.py 的 per-category rubric),
     # 與 rejudge_output_dirs 同口徑;直接丟掉 category 會讓 LongMem 分數失真。
     import experiment.longmem.stage_adapter as _sa
-    from experiment.longmem.prompts import build_judge_messages as _bjm
-    from experiment.longmem.rejudge_output_dirs import _parse_correct as _pc
+    from experiment.judge import JudgeEngine
 
     def _category_aware_judge(*, llm, question, gold, generated, category=None):
-        messages = _bjm(question=question, gold=gold, generated=generated,
-                        category=category)
-        resp = llm.chat(messages=messages, temperature=0.0, max_tokens=256)
-        return _pc((resp.choices[0].message.content or "").strip())
+        return JudgeEngine(llm, "longmem").judge(
+            question=question,
+            gold=gold,
+            generated=generated,
+            category=category,
+        )
 
     _sa.judge_single = _category_aware_judge
 

@@ -1043,12 +1043,22 @@ class MultiDatasetProcessor:
     # Judge integration
     # =====================================================================
 
-    def _judge_single(self, question: str, gold: str, gen: str) -> int:
+    def _judge_single(
+        self,
+        question: str,
+        gold: str,
+        gen: str,
+        *,
+        category: str | None = None,
+        is_abstention: bool = False,
+    ) -> int:
         return self.judge_stage.judge_single(
             llm=self.llm,
             question=question,
             gold=gold,
             generated=gen,
+            category=category,
+            is_abstention=is_abstention,
         )
 
     # =====================================================================
@@ -1172,7 +1182,13 @@ class MultiDatasetProcessor:
                     judge_log_dir = getattr(self, "current_log_dir", self.base_output_dir / f"logs_{config.name}")
                     ensure_dir(judge_log_dir)
                     token_tracker.set_context(dataset=config.name, stage="judge", log_dir=judge_log_dir)
-                    correctness = str(self._judge_single(question, gold, generated))
+                    correctness = str(self._judge_single(
+                        question,
+                        gold,
+                        generated,
+                        category=Path(config.csv_path).parent.name,
+                        is_abstention=Path(config.csv_path).stem.endswith("_abs"),
+                    ))
                     print(f"[JUDGE] Result: {'correct' if correctness == '1' else 'incorrect'} ({correctness})")
                     self._persist_correctness(output_path, correctness)
                     self._emit_error_analysis_bundle(config, answer_data=answer_data, correctness=correctness)

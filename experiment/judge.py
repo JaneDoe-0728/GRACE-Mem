@@ -344,7 +344,7 @@ class JudgeEngine:
         return first, final
 
 
-def _openai_key() -> str | None:
+def openai_api_key() -> str | None:
     key = os.environ.get("OPENAI_API_KEY")
     if key:
         return key
@@ -357,7 +357,7 @@ def _openai_key() -> str | None:
     return None
 
 
-def _find_column(frame: pd.DataFrame, candidates: Sequence[str]) -> str | None:
+def find_column(frame: pd.DataFrame, candidates: Sequence[str]) -> str | None:
     columns = {column.lower().lstrip("\ufeff"): column for column in frame.columns}
     return next((columns[name.lower()] for name in candidates if name.lower() in columns), None)
 
@@ -378,7 +378,7 @@ def _client_factory(args: argparse.Namespace) -> Callable[[], LLMClient]:
 
     def factory() -> LLMClient:
         if not hasattr(local, "client"):
-            api_key = _openai_key() if args.judge_base_url.rstrip("/").endswith("openai.com/v1") else None
+            api_key = openai_api_key() if args.judge_base_url.rstrip("/").endswith("openai.com/v1") else None
             local.client = LLMClient(
                 base_url=args.judge_base_url,
                 model_name=args.judge_model,
@@ -416,9 +416,9 @@ def _judge_locomo_file(
     dry_run: bool,
 ) -> tuple[int, int, int]:
     frame = pd.read_csv(output if output.exists() else source, encoding="utf-8-sig")
-    question_col = _find_column(frame, ["question"])
-    gold_col = _find_column(frame, ["gold_answer", "answer", "gold"])
-    generated_col = _find_column(frame, ["model_answer", "generated_answer", "Generated_Answer"])
+    question_col = find_column(frame, ["question"])
+    gold_col = find_column(frame, ["gold_answer", "answer", "gold"])
+    generated_col = find_column(frame, ["model_answer", "generated_answer", "Generated_Answer"])
     if not all((question_col, gold_col, generated_col)):
         raise ValueError(f"{source}: missing question, gold, or generated-answer column")
 
@@ -481,7 +481,7 @@ def _score_locomo(paths: Iterable[Path], column: str, include_adversarial: bool)
     by_category: dict[str, list[int]] = {}
     for path in paths:
         frame = pd.read_csv(path, encoding="utf-8-sig")
-        label_col = _find_column(frame, ["category_label"])
+        label_col = find_column(frame, ["category_label"])
         for _, row in frame.iterrows():
             label = str(row.get(label_col, "")).strip() if label_col else ""
             if not include_adversarial and label.lower() == "adversarial":
@@ -556,9 +556,9 @@ def _judge_longmem_file(
     dry_run: bool,
 ) -> tuple[int, int, str]:
     frame = pd.read_csv(path, encoding="utf-8-sig")
-    question_col = _find_column(frame, ["question"])
-    gold_col = _find_column(frame, ["answer", "gold_answer"])
-    generated_col = _find_column(frame, ["Generated_Answer", "generated_answer", "model_answer"])
+    question_col = find_column(frame, ["question"])
+    gold_col = find_column(frame, ["answer", "gold_answer"])
+    generated_col = find_column(frame, ["Generated_Answer", "generated_answer", "model_answer"])
     if not all((question_col, gold_col, generated_col)):
         return 0, 0, "missing-columns"
 

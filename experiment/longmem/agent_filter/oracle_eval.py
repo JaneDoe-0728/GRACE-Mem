@@ -30,8 +30,8 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 
 from KG.llm import LLMClient
+from experiment.judge import LONGMEM_CATEGORIES, JudgeEngine
 from experiment.longmem.agent_filter.corpus import load_corpus
-from experiment.longmem.rejudge_output_dirs import _DIR_TO_CATEGORY, _judge_single
 from experiment.longmem.stages.qa_eval import QAEvalStage
 
 DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
@@ -98,8 +98,12 @@ def process_one(src_csv: Path, out_path: Path, category: str, *, no_judge: bool)
 
     correctness = ""
     if not no_judge and gold_answer:
-        correctness = str(_judge_single(
-            judge_llm, question=question, gold=gold_answer, generated=answer, category=category,
+        correctness = str(JudgeEngine(judge_llm, "longmem").judge(
+            question=question,
+            gold=gold_answer,
+            generated=answer,
+            category=category,
+            is_abstention=src_csv.stem.endswith("_abs"),
         ))
 
     stage.single_result_frame(
@@ -125,7 +129,7 @@ def main() -> None:
     args = ap.parse_args()
 
     jobs: list[tuple[Path, Path, str]] = []
-    for cat_sub, category in _DIR_TO_CATEGORY.items():
+    for cat_sub, category in LONGMEM_CATEGORIES.items():
         if args.category and cat_sub != args.category:
             continue
         cdir = DATA_ROOT / cat_sub

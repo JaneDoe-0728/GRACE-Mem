@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from experiment.longmem.prompts import build_judge_messages
+from experiment.judge import JudgeEngine, parse_binary_judge
 from experiment.longmem.utils.io import read_csv_dict_rows, write_csv_frame
 
 
@@ -15,26 +15,25 @@ class JudgeStage:
     DEFAULT_OUTPUT_CSV = "./experiment/longmem/output/default/temporal_reasoning/all_answers_judged_0316.csv"
 
     def parse_binary_judge(self, text: str) -> int:
-        value = (text or "").strip().lower()
-        if "yes" in value and "no" not in value:
-            return 1
-        if "no" in value and "yes" not in value:
-            return 0
-        if "1" in value and "0" not in value:
-            return 1
-        if "correct" in value and "incorrect" not in value:
-            return 1
-        return 0
+        return parse_binary_judge(text)
 
-    def judge_single(self, llm, *, question: str, gold: str, generated: str) -> int:
-        messages = build_judge_messages(
+    def judge_single(
+        self,
+        llm,
+        *,
+        question: str,
+        gold: str,
+        generated: str,
+        category: str | None = None,
+        is_abstention: bool = False,
+    ) -> int:
+        return JudgeEngine(llm, "longmem").judge(
             question=question,
             gold=gold,
             generated=generated,
+            category=category,
+            is_abstention=is_abstention,
         )
-        resp = llm.chat(messages=messages, temperature=0.0, max_tokens=124)
-        text = resp.choices[0].message.content or ""
-        return self.parse_binary_judge(text)
 
     def llm_as_judge_singlemode(
         self,
@@ -61,6 +60,9 @@ class JudgeStage:
         if "correctness" not in df.columns:
             df["correctness"] = ""
 
+        category = input_path.parent.name.replace("_", "-")
+        is_abstention = input_path.stem.endswith("_abs")
+
         for i, row in df.iterrows():
             question = str(row[q_col]).strip()
             gold = str(row[g_col]).strip()
@@ -80,6 +82,8 @@ class JudgeStage:
                 question=question,
                 gold=gold,
                 generated=generated,
+                category=category,
+                is_abstention=is_abstention,
             )
             df.at[i, "correctness"] = value
 
@@ -91,12 +95,22 @@ def parse_binary_judge(text: str) -> int:
     return JudgeStage().parse_binary_judge(text)
 
 
-def judge_single(llm, *, question: str, gold: str, generated: str) -> int:
+def judge_single(
+    llm,
+    *,
+    question: str,
+    gold: str,
+    generated: str,
+    category: str | None = None,
+    is_abstention: bool = False,
+) -> int:
     return JudgeStage().judge_single(
         llm,
         question=question,
         gold=gold,
         generated=generated,
+        category=category,
+        is_abstention=is_abstention,
     )
 
 

@@ -24,7 +24,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 
 from KG.llm import LLMClient
-from experiment.locomo.rejudge_4omini import _openai_key, judge_4omini
+from experiment.judge import JudgeEngine, openai_api_key
 
 OUT = _ROOT / "experiment" / "locomo" / "output" / "standard"
 
@@ -100,7 +100,8 @@ def main():
     print(f"voting over {len(keys)} questions")
 
     llm = LLMClient(base_url="https://api.openai.com/v1", model_name="gpt-4o-mini",
-                    api_key=_openai_key())
+                    api_key=openai_api_key())
+    judge = JudgeEngine(llm, "locomo")
 
     rows = []
     n_judged = 0
@@ -118,9 +119,11 @@ def main():
         elif rep == 2:
             corr = b.loc[k, "c4o"]
         else:
-            corr = judge_4omini(llm, question=q,
-                                gold=str(a.loc[k, "gold_answer"]),
-                                gen=ans[2])
+            corr = judge.judge(
+                question=q,
+                gold=str(a.loc[k, "gold_answer"]),
+                generated=ans[2],
+            )
             n_judged += 1
         rows.append({"key": k, "rep": rep, "corr": corr,
                      "category_label": a.loc[k].get("category_label")})

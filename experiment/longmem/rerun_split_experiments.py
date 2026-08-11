@@ -32,11 +32,11 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 
 from KG.llm import LLMClient
-from experiment.longmem.rejudge_output_dirs import (
-    _DIR_TO_CATEGORY,
-    _SKIP_FILES,
-    _find_col,
-    _judge_single,
+from experiment.judge import (
+    LONGMEM_CATEGORIES,
+    SKIP_LONGMEM_FILES,
+    JudgeEngine,
+    find_column,
 )
 
 CONFIG_PATH = _ROOT / "experiment" / "experiment_config.py"
@@ -90,16 +90,17 @@ def run_retrieval(run_tag: str, *, smoke: bool) -> None:
 def judge_dir(run_tag: str, *, llm) -> tuple[int, int]:
     base = OUTPUT_DIR / run_tag
     judged = skipped = 0
-    for cat_sub, category in _DIR_TO_CATEGORY.items():
+    engine = JudgeEngine(llm, "longmem")
+    for cat_sub, category in LONGMEM_CATEGORIES.items():
         cat_dir = base / cat_sub
         if not cat_dir.exists():
             continue
         for path in sorted(cat_dir.glob("*.csv")):
-            if path.name in _SKIP_FILES:
+            if path.name in SKIP_LONGMEM_FILES:
                 continue
             df = pd.read_csv(path, encoding="utf-8-sig")
-            q = _find_col(df, ["question"]); g = _find_col(df, ["answer", "gold_answer"])
-            gen = _find_col(df, ["Generated_Answer", "generated_answer", "model_answer"])
+            q = find_column(df, ["question"]); g = find_column(df, ["answer", "gold_answer"])
+            gen = find_column(df, ["Generated_Answer", "generated_answer", "model_answer"])
             if not all([q, g, gen]):
                 continue
             if "correctness" not in df.columns:
@@ -117,8 +118,12 @@ def judge_dir(run_tag: str, *, llm) -> tuple[int, int]:
                 question = str(row[q]).strip(); gold = str(row[g]).strip(); generated = str(row[gen]).strip()
                 if not question or not generated:
                     continue
-                df.at[i, "correctness"] = _judge_single(
-                    llm, question=question, gold=gold, generated=generated, category=category
+                df.at[i, "correctness"] = engine.judge(
+                    question=question,
+                    gold=gold,
+                    generated=generated,
+                    category=category,
+                    is_abstention=path.stem.endswith("_abs"),
                 )
                 judged += 1
                 changed = True

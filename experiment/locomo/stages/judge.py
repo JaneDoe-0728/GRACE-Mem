@@ -1,11 +1,9 @@
 import os
 import pandas as pd
 import re
-from datetime import datetime, timedelta
 from pathlib import Path
 import sys
 import argparse
-import json
 import nltk
 from tqdm import tqdm
 
@@ -20,6 +18,10 @@ if __package__ in (None, ""):
 
 from experiment.locomo.helpers.dataset import category_to_label, load_qa_items, normalize_dataset_name, resolve_dataset_path
 from experiment.locomo.helpers.llm import build_judge_plus_messages, build_judge_standard_messages, llm_post
+from experiment.judge import (
+    normalize_temporal_gold as _normalize_temporal_gold,
+    parse_locomo_verdict as _parse_label,
+)
 
 INPUT_CSV = "data/sample0_eval__20260205_111338_judge.csv"
 OUTPUT_CSV = "data/sample0_eval__20260205_111338_judgev2.csv"
@@ -106,117 +108,6 @@ def compute_correctness_stats(df: pd.DataFrame, *, exclude_adversarial: bool = T
     if not bleu_scored.empty:
         stats["avg_bleu1"] = round(float(bleu_scored.mean()), 6)
     return stats
-
-def _parse_label(text: str) -> float | None:
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        data = None
-    if isinstance(data, dict) and "label" in data:
-        label = str(data["label"]).strip().lower()
-        if label == "correct":
-            return 1
-        if label == "partial":
-            return 0.5
-        if label == "wrong":
-            return 0
-
-    t = text.strip().lower()
-    has_correct = bool(re.search(r'\bcorrect\b', t))
-    has_incorrect = bool(re.search(r'\bincorrect\b', t))
-    has_partial = bool(re.search(r'\bpartial\b', t))
-    has_wrong = bool(re.search(r'\bwrong\b', t))
-    if has_correct and not has_wrong and not has_incorrect:
-        return 1
-    if has_partial and not has_correct and not has_wrong and not has_incorrect:
-        return 0.5
-    if has_wrong or has_incorrect:
-        return 0
-    return None
-
-
-_WEEKDAYS = {
-    'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
-    'friday': 4, 'saturday': 5, 'sunday': 6,
-}
-_N_WORDS = {'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-            '1': 1, '2': 2, '3': 3, '4': 4, '5': 5}
-
-
-def _parse_anchor_date(date_str: str) -> datetime | None:
-    date_str = date_str.strip().rstrip('.,')
-    for fmt in ('%d %B %Y', '%d %B, %Y', '%B %d %Y', '%B %d, %Y',
-                '%B, %Y', '%B %Y', '%d %b %Y', '%d %b, %Y', '%Y'):
-        try:
-            return datetime.strptime(date_str, fmt)
-        except ValueError:
-            continue
-    try:
-        import dateparser
-        dt = dateparser.parse(date_str, settings={'PREFER_DAY_OF_MONTH': 'first'})
-        return dt
-    except Exception:
-        return None
-
-
-def _normalize_temporal_gold(gold: str) -> str | None:
-    """
-    Expand relative temporal gold expressions to absolute date ranges for the judge.
-    Returns a short hint string, or None if gold doesn't need normalization.
-    """
-    text = gold.strip()
-
-    # "The week before {date}"
-    m = re.search(r'the week before\s+(.+)', text, re.IGNORECASE)
-    if m:
-        anchor = _parse_anchor_date(m.group(1))
-        if anchor:
-            end = anchor - timedelta(days=1)
-            start = end - timedelta(days=6)
-            return f"{start.strftime('%Y-%m-%d')} to {end.strftime('%Y-%m-%d')} (the 7 days before {anchor.strftime('%Y-%m-%d')})"
-
-    # "The {weekday} before {date}"
-    m = re.search(r'the (monday|tuesday|wednesday|thursday|friday|saturday|sunday) before\s+(.+)', text, re.IGNORECASE)
-    if m:
-        target_wd = _WEEKDAYS[m.group(1).lower()]
-        anchor = _parse_anchor_date(m.group(2))
-        if anchor:
-            days_back = (anchor.weekday() - target_wd) % 7 or 7
-            target = anchor - timedelta(days=days_back)
-            return f"{target.strftime('%Y-%m-%d')} (the {m.group(1).title()} before {anchor.strftime('%Y-%m-%d')})"
-
-    # "The weekend before {date}"
-    m = re.search(r'the weekend before\s+(.+)', text, re.IGNORECASE)
-    if m:
-        anchor = _parse_anchor_date(m.group(1))
-        if anchor:
-            days_to_sat = (anchor.weekday() - 5) % 7 or 7
-            sat = anchor - timedelta(days=days_to_sat)
-            sun = sat + timedelta(days=1)
-            return f"{sat.strftime('%Y-%m-%d')} to {sun.strftime('%Y-%m-%d')} (weekend before {anchor.strftime('%Y-%m-%d')})"
-
-    # "N weekends before {date}"
-    m = re.search(r'(\w+) weekends? before\s+(.+)', text, re.IGNORECASE)
-    if m:
-        n = _N_WORDS.get(m.group(1).lower())
-        anchor = _parse_anchor_date(m.group(2))
-        if n and anchor:
-            days_to_sat = (anchor.weekday() - 5) % 7 or 7
-            sat = anchor - timedelta(days=days_to_sat) - timedelta(weeks=n - 1)
-            sun = sat + timedelta(days=1)
-            return f"{sat.strftime('%Y-%m-%d')} to {sun.strftime('%Y-%m-%d')} ({n} weekend(s) before {anchor.strftime('%Y-%m-%d')})"
-
-    # "few days before {date}"
-    m = re.search(r'few days? before\s+(.+)', text, re.IGNORECASE)
-    if m:
-        anchor = _parse_anchor_date(m.group(1))
-        if anchor:
-            start = anchor - timedelta(days=7)
-            end = anchor - timedelta(days=1)
-            return f"approximately {start.strftime('%Y-%m-%d')} to {end.strftime('%Y-%m-%d')}"
-
-    return None
-
 
 def judge_single(
     question: str,

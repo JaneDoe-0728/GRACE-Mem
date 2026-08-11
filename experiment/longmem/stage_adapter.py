@@ -57,12 +57,22 @@ def ask_llm(*, llm, question: str, context: str, question_date: str | None) -> s
     )
 
 
-def judge_single(*, llm, question: str, gold: str, generated: str) -> int:
+def judge_single(
+    *,
+    llm,
+    question: str,
+    gold: str,
+    generated: str,
+    category: str | None = None,
+    is_abstention: bool = False,
+) -> int:
     return _JUDGE_STAGE.judge_single(
         llm,
         question=question,
         gold=gold,
         generated=generated,
+        category=category,
+        is_abstention=is_abstention,
     )
 
 
