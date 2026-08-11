@@ -1,5 +1,7 @@
 import ast
 from pathlib import Path
+import subprocess
+import sys
 
 from tools.import_graph import build_graph, discover_modules, strongly_connected_components
 
@@ -60,3 +62,15 @@ def test_experiment_imports_use_canonical_package_names():
                     invalid_imports.append(f"{path.relative_to(ROOT)}:{node.lineno}: {name}")
 
     assert invalid_imports == []
+
+
+def test_snapshot_imports_in_a_fresh_interpreter():
+    result = subprocess.run(
+        [sys.executable, "-c", "import experiment.locomo.snapshot"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr

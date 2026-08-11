@@ -16,11 +16,9 @@ if __package__ in (None, ""):
 
 try:
     from KG.storage import MGR
-    from KG.graph.falkordb import graph_from_env
     from KG.pipeline.retrieval_steps import TemporalRelevanceCalculator
     from KG.utils.query_time_parser import detect_and_parse_time_expressions
     from KG.utils.temporal import time_rewrite_ablation_enabled
-    # from KG.graph.neo4j import graph_from_env
 except Exception as e:
     raise RuntimeError(
         "Failed to import your KG/LLM modules. Ensure PYTHONPATH includes your project root. Original error: %r" % (e,)
@@ -1414,23 +1412,13 @@ def main():
     else:
         output_csv = Path(__file__).resolve().parent / "data" / f"{default_output_stem(dataset)}_sample{args.sample_index}_eval.csv"
 
-    # Initialize retriever via build_pipeline() when running as a standalone script
+    # Standalone mode owns one pipeline runtime for retrieval and graph access.
     import experiment.locomo.stages.qa_eval as _self
-    if _self.retriever is None:
-        from KG.pipeline.factory import build_pipeline
-        _p = build_pipeline(retriever_config=RERANKER_PARAMS)
-        _self.retriever = _p["retriever"]
+    from KG.pipeline.factory import build_pipeline
 
-    # Initialize graph/VDB in read-only mode (your manager should avoid writes by default here)
-    graph = graph_from_env().open()
-    try:
-        MGR.initialize()  # <-- do not reset, just init / load existing
-    except Exception as e:
-        if graph:
-            graph.close()
-        raise
-
-    try:
+    with build_pipeline(retriever_config=RERANKER_PARAMS) as runtime:
+        _self.retriever = runtime.retriever
+        MGR.initialize()
         qa_items = load_questions(
             dataset_json_path,
             sample_index=args.sample_index,
@@ -1459,10 +1447,6 @@ def main():
         df_clean.to_csv(output_csv, index=False, encoding="utf-8", quoting=csv.QUOTE_ALL)
 
         print(f"[DONE] Wrote CLEAN CSV: {output_csv}")
-
-    finally:
-        if graph:
-            graph.close()
 
 if __name__ == "__main__":
     main()

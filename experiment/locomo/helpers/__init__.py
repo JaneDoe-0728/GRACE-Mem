@@ -33,8 +33,6 @@ from experiment.locomo.utils.graph import (
     _export_graph,
     _restore_graph,
 )
-from experiment.locomo.snapshot import highest_existing_snapshot
-
 __all__ = [
     "llm_post",
     "aggregate_judge_csv_files",
@@ -53,7 +51,6 @@ __all__ = [
     "export_graph",
     "extract_injected_session_record",
     "find_evidence_turns_from_sample",
-    "highest_existing_snapshot",
     "index_source_conversations",
     "is_adversarial_category",
     "is_adversarial_item",

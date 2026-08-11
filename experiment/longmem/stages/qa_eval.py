@@ -220,11 +220,11 @@ if __name__ == "__main__":
     from experiment.experiment_config import RETRIEVAL_PARAMS
 
     CSV_PATH = "./experiment/longmem/script_data/temporal_reasoning/2ebe6c92.csv"
-    retriever = _build_pipeline()["retriever"]
-    stage = QAEvalStage(retriever=retriever)
-    answer, _, _ = stage.run_single_csv(
-        csv_path=CSV_PATH,
-        llm=LLMClient(),
-        retrieval_params=RETRIEVAL_PARAMS,
-    )
+    with _build_pipeline() as runtime:
+        stage = QAEvalStage(retriever=runtime.retriever)
+        answer, _, _ = stage.run_single_csv(
+            csv_path=CSV_PATH,
+            llm=LLMClient(),
+            retrieval_params=RETRIEVAL_PARAMS,
+        )
     print("answer:", answer)

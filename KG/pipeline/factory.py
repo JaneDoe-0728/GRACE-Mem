@@ -7,9 +7,9 @@ open connections and construct the pipeline objects.
 
 供上層 server.py 取用建構好的 retriever 與 ingestor 物件:
   from KG.pipeline.factory import build_pipeline
-  _pipeline = build_pipeline()
-  retriever = _pipeline["retriever"]
-  ingestor  = _pipeline["ingestor"]
+  with build_pipeline() as runtime:
+      retriever = runtime.retriever
+      ingestor = runtime.ingestor
 """
 
 from __future__ import annotations
@@ -75,39 +75,47 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
     GLOBAL_CACHE = MGR.cache
     llm = LLMClient()
     graph = graph_from_env().open()
+    try:
+        ent = EntityManager(
+            embedder=embedder,
+            mgr=MGR,
+            provenance=Provenance,
+            GLOBAL_CACHE=GLOBAL_CACHE,
+            processed_ent_map=GLOBAL_CACHE["entities"],
+            processed_ent_full_map=GLOBAL_CACHE["entities_full"],
+        )
 
-    ent = EntityManager(
-        embedder=embedder,
-        mgr=MGR,
-        provenance=Provenance,
-        GLOBAL_CACHE=GLOBAL_CACHE,
-        processed_ent_map=GLOBAL_CACHE["entities"],
-        processed_ent_full_map=GLOBAL_CACHE["entities_full"],
-    )
+        rel = RelationshipManager(
+            embedder=embedder,
+            mgr=MGR,
+            provenance=Provenance,
+            GLOBAL_CACHE=GLOBAL_CACHE,
+            processed_rel_map=GLOBAL_CACHE["relationships"],
+            processed_rel_full_map=GLOBAL_CACHE["relationships_full"],
+        )
 
-    rel = RelationshipManager(
-        embedder=embedder,
-        mgr=MGR,
-        provenance=Provenance,
-        GLOBAL_CACHE=GLOBAL_CACHE,
-        processed_rel_map=GLOBAL_CACHE["relationships"],
-        processed_rel_full_map=GLOBAL_CACHE["relationships_full"],
-    )
-
-    retriever = Retriever(
-        llm=llm,
-        graph=graph,
-        mgr=MGR,
-        embed=embedder.embed,
-        cache=GLOBAL_CACHE,
-        config=retriever_config,
-    )
-    ingestor  = Ingestor(llm=llm, graph=graph, mgr=MGR, ent_svc=ent, rel_svc=rel, config=ingestor_config)
-    # ingestor = IngestorNoEntityOps(llm=llm, graph=graph, mgr=MGR, ent_svc=ent, rel_svc=rel)
-
-    return PipelineRuntime(
-        retriever=retriever,
-        ingestor=ingestor,
-        graph=graph,
-        mgr=MGR,
-    )
+        retriever = Retriever(
+            llm=llm,
+            graph=graph,
+            mgr=MGR,
+            embed=embedder.embed,
+            cache=GLOBAL_CACHE,
+            config=retriever_config,
+        )
+        ingestor = Ingestor(
+            llm=llm,
+            graph=graph,
+            mgr=MGR,
+            ent_svc=ent,
+            rel_svc=rel,
+            config=ingestor_config,
+        )
+        return PipelineRuntime(
+            retriever=retriever,
+            ingestor=ingestor,
+            graph=graph,
+            mgr=MGR,
+        )
+    except BaseException:
+        graph.close()
+        raise

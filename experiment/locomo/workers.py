@@ -736,46 +736,46 @@ def run_locomo_worker(args) -> None:
         from experiment.locomo.stages import ingest, qa_eval
 
         pipeline = build_pipeline(retriever_config=RERANKER_PARAMS, ingestor_config=_INGESTOR_CONFIG)
-        retriever = pipeline["retriever"]
-        ingestor = pipeline["ingestor"]
-        graph = pipeline["graph"]
+        retriever = pipeline.retriever
+        ingestor = pipeline.ingestor
+        graph = pipeline.graph
         qa_eval.retriever = retriever
 
-        configure_retriever(retriever, adaptive=args.adaptive, tau=args.tau)
+        try:
+            configure_retriever(retriever, adaptive=args.adaptive, tau=args.tau)
 
-        if run_ingest:
-            log_event("1/3", "Ingest", sample=sample_index)
-            token_tracker.set_context(
-                dataset=f"{dataset}:{sample_index}",
-                stage="ingest",
-                log_path=token_log_path,
-            )
-            run_ingest_stage_for_locomo(
-                ingest_module=ingest,
-                ingestor=ingestor,
-                dataset=dataset,
-                dataset_json=dataset_json,
-                sessions_jsonl=args.sessions_jsonl,
-                sample_index=sample_index,
-                prev_k=args.prev_k,
-                entity_sim_topk=args.entity_sim_topk,
-                entity_sim_threshold=args.entity_sim_threshold,
-                chunk_turns=args.chunk_turns,
-            )
-            MGR.flush_persist()
-        else:
-            log_event("1/3", "Ingest skipped (stage selection)", sample=sample_index)
+            if run_ingest:
+                log_event("1/3", "Ingest", sample=sample_index)
+                token_tracker.set_context(
+                    dataset=f"{dataset}:{sample_index}",
+                    stage="ingest",
+                    log_path=token_log_path,
+                )
+                run_ingest_stage_for_locomo(
+                    ingest_module=ingest,
+                    ingestor=ingestor,
+                    dataset=dataset,
+                    dataset_json=dataset_json,
+                    sessions_jsonl=args.sessions_jsonl,
+                    sample_index=sample_index,
+                    prev_k=args.prev_k,
+                    entity_sim_topk=args.entity_sim_topk,
+                    entity_sim_threshold=args.entity_sim_threshold,
+                    chunk_turns=args.chunk_turns,
+                )
+                MGR.flush_persist()
+            else:
+                log_event("1/3", "Ingest skipped (stage selection)", sample=sample_index)
 
-        if run_qa:
-            log_event("2/3", "Eval", sample=sample_index)
-            token_tracker.set_context(
-                dataset=f"{dataset}:{sample_index}",
-                stage="qa",
-                log_path=token_log_path,
-            )
-            if artifact_dir is not None:
-                restore_graph_from_artifact_dir(graph, artifact_dir)
-            try:
+            if run_qa:
+                log_event("2/3", "Eval", sample=sample_index)
+                token_tracker.set_context(
+                    dataset=f"{dataset}:{sample_index}",
+                    stage="qa",
+                    log_path=token_log_path,
+                )
+                if artifact_dir is not None:
+                    restore_graph_from_artifact_dir(graph, artifact_dir)
                 validate_and_export_graph(graph, sample_index=sample_index)
                 backup_artifacts_and_logs(
                     sample_dir,
@@ -804,14 +804,7 @@ def run_locomo_worker(args) -> None:
                     simplify_gold_evidence=True,
                 )
                 write_eval_csv(pandas_module=pd, eval_csv=eval_csv, rows=rows)
-            finally:
-                try:
-                    export_graph_to_artifacts(graph, sample_index=sample_index)
-                except Exception as exc:
-                    log_event("ARTIFACT][WARN", "Graph export failed", error=exc)
-                graph.close()
-        else:
-            try:
+            else:
                 validate_and_export_graph(graph, sample_index=sample_index)
                 backup_artifacts_and_logs(
                     sample_dir,
@@ -819,12 +812,12 @@ def run_locomo_worker(args) -> None:
                     include_artifacts=True,
                 )
                 log_event("ARTIFACT", "Saved post-ingest snapshot", path=sample_dir / "artifacts")
-            finally:
-                try:
-                    export_graph_to_artifacts(graph, sample_index=sample_index)
-                except Exception as exc:
-                    log_event("ARTIFACT][WARN", "Graph export failed", error=exc)
-                graph.close()
+        finally:
+            try:
+                export_graph_to_artifacts(graph, sample_index=sample_index)
+            except Exception as exc:
+                log_event("ARTIFACT][WARN", "Graph export failed", error=exc)
+            pipeline.close()
     else:
         log_event("1/3", "Ingest skipped (stage selection)", sample=sample_index)
         log_event("2/3", "Eval skipped (stage selection)", sample=sample_index)
@@ -1151,16 +1144,16 @@ def run_locomo_plus_worker(args) -> None:
     from KG.pipeline.factory import build_pipeline
     from experiment.locomo.stages import ingest, judge, qa_eval
 
-    pipeline = build_pipeline(retriever_config=RERANKER_PARAMS, ingestor_config=_INGESTOR_CONFIG)
-    ingestor = pipeline["ingestor"]
-    qa_eval.retriever = pipeline["retriever"]
-    graph = pipeline["graph"]
-
     if run_qa and artifact_dir is None and not run_ingest:
         raise FileNotFoundError(
             f"qa_eval stage requires reusable artifacts for sample {sample_index}. "
             "Run --stage ingest first or provide --artifact-dir <previous_run>."
         )
+
+    pipeline = build_pipeline(retriever_config=RERANKER_PARAMS, ingestor_config=_INGESTOR_CONFIG)
+    ingestor = pipeline.ingestor
+    qa_eval.retriever = pipeline.retriever
+    graph = pipeline.graph
 
     try:
         if artifact_dir is not None:
@@ -1235,7 +1228,7 @@ def run_locomo_plus_worker(args) -> None:
             export_graph_to_artifacts(graph, sample_index=sample_index)
         except Exception as exc:
             log_event("ARTIFACT][WARN", "Graph export failed", error=exc)
-        graph.close()
+        pipeline.close()
 
     stats: dict = {}
     if args.no_judge:

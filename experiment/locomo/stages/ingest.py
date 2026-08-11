@@ -269,10 +269,6 @@ def main() -> None:
     parser.add_argument("--no-session-uid", action="store_true")
     args = parser.parse_args()
 
-    from KG.pipeline.factory import build_pipeline
-    _pipeline = build_pipeline()
-    ingestor = _pipeline["ingestor"]
-
     dataset = normalize_dataset_name(args.dataset)
     sessions = load_sessions(
         dataset=dataset,
@@ -291,13 +287,16 @@ def main() -> None:
     print(f"[INFO] dataset={dataset} sessions(lines)={len(sessions)}")
     print(df[["session_id", "dialogue_datetime"]].head(10).to_string(index=False))
 
-    report = ingest_by_session_one_turn(
-        ingestor,
-        df,
-        prev_k=args.prev_k,
-        entity_sim_topk=args.entity_sim_topk,
-        entity_sim_threshold=args.entity_sim_threshold,
-    )
+    from KG.pipeline.factory import build_pipeline
+
+    with build_pipeline() as runtime:
+        report = ingest_by_session_one_turn(
+            runtime.ingestor,
+            df,
+            prev_k=args.prev_k,
+            entity_sim_topk=args.entity_sim_topk,
+            entity_sim_threshold=args.entity_sim_threshold,
+        )
     print(f"[DONE] sessions_ingested={len(report)}")
 
 

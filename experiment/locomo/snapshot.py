@@ -264,45 +264,44 @@ def _snapshot_builder(args) -> None:
 
     # Import pipeline now (VDB initialises from whatever is in ARTIFACTS_SRC)
     from KG.storage import MGR
-    from KG.graph.falkordb import graph_from_env
     from KG.pipeline.factory import build_pipeline
     from experiment.locomo.stages import ingest
 
-    _pipeline = build_pipeline()
-    ingestor = _pipeline["ingestor"]
-    graph = _pipeline["graph"]
+    runtime = build_pipeline()
+    graph = runtime.graph
+    try:
+        if resume_from > 0:
+            restore_graph(run_root, conv_id, resume_from, graph)
+        else:
+            graph.clear_all()
+            graph.init_schema()
 
-    if resume_from > 0:
-        restore_graph(run_root, conv_id, resume_from, graph)
-    else:
-        graph.clear_all()
-        graph.init_schema()
+        # Ingest sessions that are missing snapshots
+        records_map = {r["session_id"]: r for r in records}
+        for sess_id in target_ids:
+            if sess_id <= resume_from:
+                continue  # already snapshotted
+            if sess_id not in records_map:
+                log_event("SNAP_BUILD][WARN", "Session not in source records; skipping", session=sess_id)
+                continue
 
-    # Ingest sessions that are missing snapshots
-    records_map = {r["session_id"]: r for r in records}
-    for sess_id in target_ids:
-        if sess_id <= resume_from:
-            continue  # already snapshotted
-        if sess_id not in records_map:
-            log_event("SNAP_BUILD][WARN", "Session not in source records; skipping", session=sess_id)
-            continue
+            log_event("SNAP_BUILD", "Ingesting session", conv=conv_id, session=sess_id)
+            # chunk_turns must match the run being snapshotted; a mismatch silently
+            # shifts every summary_id and the restored artifacts stop lining up.
+            df = ingest.session_records_to_df(
+                [records_map[sess_id]], conv_id=conv_id, chunk_turns=args.chunk_turns
+            )
+            ingest.ingest_by_session_one_turn(
+                runtime.ingestor,
+                df,
+                prev_k=args.prev_k,
+                entity_sim_topk=args.entity_sim_topk,
+                entity_sim_threshold=args.entity_sim_threshold,
+            )
+            MGR.flush_persist()
+            snap_path = save_snapshot(run_root, conv_id, sess_id, graph)
+            log_event("SNAP_BUILD", "Saved snapshot", path=snap_path)
+    finally:
+        runtime.close()
 
-        log_event("SNAP_BUILD", "Ingesting session", conv=conv_id, session=sess_id)
-        # chunk_turns must match the run being snapshotted; a mismatch silently
-        # shifts every summary_id and the restored artifacts stop lining up.
-        df = ingest.session_records_to_df(
-            [records_map[sess_id]], conv_id=conv_id, chunk_turns=args.chunk_turns
-        )
-        ingest.ingest_by_session_one_turn(
-            ingestor,
-            df,
-            prev_k=args.prev_k,
-            entity_sim_topk=args.entity_sim_topk,
-            entity_sim_threshold=args.entity_sim_threshold,
-        )
-        MGR.flush_persist()
-        snap_path = save_snapshot(run_root, conv_id, sess_id, graph)
-        log_event("SNAP_BUILD", "Saved snapshot", path=snap_path)
-
-    graph.close()
     log_event("SNAP_BUILD", "Done", conv=conv_id, up_to=up_to_session)
