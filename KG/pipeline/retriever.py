@@ -312,7 +312,7 @@ class RetrieverConfig:
     # user/assistant split embedding scheme.
     # Defaults to True because Ingestor.summarize_and_ingest_turn writes exactly one
     # entry per summary_id and never writes :u/:a. Those pairs are a LongMem-only
-    # post-processing pass (experiment/longmem/rebuild_split_summaries.py), so only the
+    # post-processing pass (experiment/longmem/tools/rebuild_split_summaries.py), so only the
     # LongMem pipeline sets this to False — and it derives the value from
     # INGEST_PARAMS["use_split_summary"], the same flag that decides whether the rebuild
     # ran at all. Setting False against artifacts that were never rebuilt makes every

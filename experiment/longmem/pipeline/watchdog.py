@@ -19,16 +19,17 @@ from pathlib import Path
 from typing import NamedTuple
 
 # Allow importing experiment.* and refresh_system when this file is run directly.
-_LONGMEM = Path(__file__).resolve().parent
+_PIPELINE_DIR = Path(__file__).resolve().parent
+_LONGMEM_ROOT = _PIPELINE_DIR.parent
 if __package__ in (None, ""):
-    repo_root = _LONGMEM.parents[1]
+    repo_root = _PIPELINE_DIR.parents[2]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
 from experiment.longmem.helpers.args import DEFAULT_STAGES, add_child_args, add_data_args, add_rerun_args, add_run_args, resolve_stages
 from experiment.longmem.helpers.datasets import resolve_child_datasets, select_dataset_names, select_datasets
 from experiment.longmem.helpers.progress import append_stuck_history_entry
-from experiment.run_metadata import namespace_to_dict, write_run_metadata
+from experiment.common.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.longmem.utils.io import (
     append_type_subdir,
     append_jsonl,
@@ -45,8 +46,8 @@ from experiment.longmem.utils.io import (
 )
 
 
-DEFAULT_DATA_ROOT = _LONGMEM / "script_data"
-DEFAULT_OUTPUT_BASE = _LONGMEM / "output"
+DEFAULT_DATA_ROOT = _LONGMEM_ROOT / "script_data"
+DEFAULT_OUTPUT_BASE = _LONGMEM_ROOT / "output"
 
 
 class RerunTarget(NamedTuple):
@@ -615,13 +616,13 @@ def _run_rerun_mode(
     *,
     data_folder: Path | None = None,
 ) -> int:
-    from experiment.longmem.aggregate import update_all_answers_csv, update_progress_rows
+    from experiment.longmem.pipeline.aggregate import update_all_answers_csv, update_progress_rows
     from experiment.longmem.helpers.rerun_support import (
         cleanup_retrieval_loggers,
         retrieval_datasets_from_artifacts,
         rerun_accuracy,
     )
-    from experiment.longmem.rerun import LongMemRerun
+    from experiment.longmem.pipeline.rerun import LongMemRerun
 
     if not artifact_dir.exists():
         logger.error("Artifact dir not found: %s", artifact_dir)
@@ -756,7 +757,7 @@ def main(argv: list[str] | None = None) -> int:
     add_rerun_args(parser)
     # Watchdog-specific args
     parser.add_argument("--python", default=sys.executable)
-    parser.add_argument("--script", default="./experiment/longmem/run_batch.py")
+    parser.add_argument("--script", default="./experiment/longmem/pipeline/batch.py")
     parser.add_argument("--sleep", type=int, default=30, help="Base seconds between restarts")
     parser.add_argument("--max-restarts", type=int, default=10, help="0 = infinite")
     parser.add_argument("--log-dir", default=None, help="Directory for watchdog logs")

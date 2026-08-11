@@ -250,14 +250,14 @@ DOCUMENTED_PATHS = [
     "KG/llm/prompts/entity_ops/examples.py",
     "experiment/README.md",
     "experiment/experiment_config.py",
-    "experiment/judge.py",
-    "experiment/oracle.py",
-    "experiment/score.py",
-    "experiment/longmem/watchdog.py",
-    "experiment/locomo/pipeline.py",
+    "experiment/common/evaluation/judge.py",
+    "experiment/common/evaluation/oracle.py",
+    "experiment/common/evaluation/score.py",
+    "experiment/longmem/pipeline/watchdog.py",
+    "experiment/locomo/pipeline/runner.py",
     "experiment/agent_filter/replay_run.py",
     "experiment/agent_filter/harness.py",
-    "experiment/locomo/grep_replay.py",
+    "experiment/agent_filter/locomo_replay.py",
     "experiment/agent_filter/README.md",
     "docker-compose.yml",
     "setup_env.sh",
@@ -472,21 +472,21 @@ LONGMEM_FLAGS = [
 
 @pytest.mark.slow
 def test_locomo_pipeline_accepts_every_documented_flag():
-    help_text = _cli_help("experiment/locomo/pipeline.py")
+    help_text = _cli_help("experiment/locomo/pipeline/runner.py")
     missing = [f for f in LOCOMO_FLAGS if f not in help_text]
-    assert not missing, f"locomo/pipeline.py is missing documented flags: {missing}"
+    assert not missing, f"locomo/pipeline/runner.py is missing documented flags: {missing}"
 
 
 @pytest.mark.slow
 def test_longmem_watchdog_accepts_every_documented_flag():
-    help_text = _cli_help("experiment/longmem/watchdog.py")
+    help_text = _cli_help("experiment/longmem/pipeline/watchdog.py")
     missing = [f for f in LONGMEM_FLAGS if f not in help_text]
-    assert not missing, f"longmem/watchdog.py is missing documented flags: {missing}"
+    assert not missing, f"longmem/pipeline/watchdog.py is missing documented flags: {missing}"
 
 
 @pytest.mark.slow
 def test_locomo_aggregate_accepts_the_flags_the_experiment_readme_shows():
-    help_text = _cli_help("experiment/locomo/aggregate.py")
+    help_text = _cli_help("experiment/locomo/analysis/aggregate.py")
     for flag in ("--dataset", "--root"):
         assert flag in help_text, f"aggregate.py is missing {flag}"
 

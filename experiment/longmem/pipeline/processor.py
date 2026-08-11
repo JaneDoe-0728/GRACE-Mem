@@ -36,8 +36,8 @@ from KG.graph.falkordb import graph_from_env
 from embeddings import embedder
 from KG.services import EntityManager, RelationshipManager, Provenance
 from KG.utils.logger_config import make_module_jlog
-from experiment.longmem import decision
-from experiment.longmem.aggregate import update_all_answers_csv
+from experiment.longmem.pipeline import decision
+from experiment.longmem.pipeline.aggregate import update_all_answers_csv
 from experiment.longmem.helpers.checkpoints import (
     checkpoint_path as shared_checkpoint_path,
     load_checkpoint as shared_load_checkpoint,
@@ -52,8 +52,8 @@ from experiment.longmem.helpers.progress import (
     save_progress_row as shared_save_progress_row,
 )
 from experiment.longmem.models import DatasetConfig
-from experiment.longmem.snapshot import restore_graph_from_cache
-from experiment.longmem.stage_adapter import (
+from experiment.longmem.artifacts.snapshot import restore_graph_from_cache
+from experiment.longmem.pipeline.stage_adapter import (
     rewrite_temporal_question as shared_rewrite_temporal_question,
     single_result_frame,
 )
@@ -374,7 +374,7 @@ class MultiDatasetProcessor:
 
         artifact_dir = Path(self.current_mgr.ART)
         try:
-            from experiment.longmem.rebuild_split_summaries import (
+            from experiment.longmem.tools.rebuild_split_summaries import (
                 SCRIPT_DATA_DIR,
                 get_compressor,
                 rebuild_artifact,

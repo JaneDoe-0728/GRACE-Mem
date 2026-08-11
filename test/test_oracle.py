@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from experiment.agent_filter.corpus import Corpus, Turn
-from experiment.oracle import build_locomo_context, expand_longmem_sids
+from experiment.common.evaluation.oracle import build_locomo_context, expand_longmem_sids
 
 
 def test_expand_longmem_sids_stays_within_session() -> None:

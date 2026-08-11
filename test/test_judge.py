@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 
-from experiment.judge import (
+from experiment.common.evaluation.judge import (
     MAJORITY_VOTE_COLUMN,
     SINGLE_VOTE_COLUMN,
     JudgeEngine,

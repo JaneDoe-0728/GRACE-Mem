@@ -6,10 +6,10 @@ forward; an incorrect verdict is judged again with temperatures 0.0, 0.3, and
 dedicated abstention rubric.
 
 Examples:
-    uv run python experiment/judge.py locomo my-run
-    uv run python experiment/judge.py longmem my-run
-    uv run python experiment/judge.py locomo my-run --votes 1
-    uv run python experiment/judge.py longmem my-run --dry-run
+    uv run python experiment/common/evaluation/judge.py locomo my-run
+    uv run python experiment/common/evaluation/judge.py longmem my-run
+    uv run python experiment/common/evaluation/judge.py locomo my-run --votes 1
+    uv run python experiment/common/evaluation/judge.py longmem my-run --dry-run
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
-_ROOT = Path(__file__).resolve().parents[1]
+_ROOT = Path(__file__).resolve().parents[3]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 

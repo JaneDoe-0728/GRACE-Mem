@@ -17,11 +17,11 @@ if __package__ in (None, ""):
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-from experiment.longmem.processor import MultiDatasetProcessor
+from experiment.longmem.pipeline.processor import MultiDatasetProcessor
 from experiment.longmem.helpers.args import add_child_args, add_data_args, add_run_args, resolve_stages
 from experiment.longmem.helpers.datasets import discover_csv_datasets, resolve_child_datasets, select_datasets
 from experiment.longmem.models import DatasetConfig
-from experiment.run_metadata import namespace_to_dict, write_run_metadata
+from experiment.common.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.longmem.utils.io import write_json_file
 from experiment.experiment_config import INGEST_PARAMS, RETRIEVAL_PARAMS
 

@@ -15,7 +15,7 @@ from experiment.experiment_config import INGEST_PARAMS, RETRIEVAL_PARAMS, RERANK
 
 # LongMem-only: must match the value used when these artifacts were ingested.
 USE_SPLIT_SUMMARY = bool(INGEST_PARAMS.get("use_split_summary", True))
-from experiment.longmem.aggregate import update_all_answers_csv, update_progress_rows
+from experiment.longmem.pipeline.aggregate import update_all_answers_csv, update_progress_rows
 from experiment.longmem.helpers.args import add_data_args, add_rerun_args, add_run_args, resolve_stages
 from experiment.longmem.helpers.datasets import get_question_info, select_dataset_names
 from experiment.longmem.helpers.rerun_support import (
@@ -26,7 +26,7 @@ from experiment.longmem.helpers.rerun_support import (
     rerun_accuracy,
     setup_retrieval_loggers,
 )
-from experiment.longmem.snapshot import restore_graph_from_cache
+from experiment.longmem.artifacts.snapshot import restore_graph_from_cache
 from experiment.longmem.stages.judge import JudgeStage
 from experiment.longmem.stages.qa_eval import QAEvalStage
 from experiment.longmem.utils.io import append_type_subdir, ensure_dir, read_csv_frame

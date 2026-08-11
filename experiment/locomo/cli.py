@@ -12,7 +12,7 @@ if __package__ in (None, ""):
 
 from experiment.locomo.models import RunConfig, SamplePlan
 
-PIPELINE_MODULE = "experiment.locomo.pipeline"
+PIPELINE_MODULE = "experiment.locomo.pipeline.runner"
 
 try:
     from experiment.experiment_config import INGEST_PARAMS

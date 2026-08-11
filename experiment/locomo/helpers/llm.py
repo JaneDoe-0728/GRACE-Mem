@@ -9,7 +9,7 @@ import experiment.locomo.prompts.open_domain as open_domain_prompts
 import requests
 from dotenv import load_dotenv
 
-from experiment.reproducibility import get_runtime_reproducibility
+from experiment.common.reproducibility import get_runtime_reproducibility
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 

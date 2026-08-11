@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from experiment.score import score_run
+from experiment.common.evaluation.score import score_run
 
 
 def test_score_longmem_uses_final_protocol_columns(tmp_path) -> None:

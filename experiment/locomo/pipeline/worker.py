@@ -24,14 +24,14 @@ from experiment.locomo.utils.error_analysis import (
     derive_failure_type,
     render_failure_digest,
 )
-from experiment.locomo.snapshot import (
+from experiment.locomo.artifacts.snapshot import (
     _resolve_conv_id_and_sessions,
     load_snapshot_files_only,
     restore_graph,
     snapshot_dir,
     snapshot_exists,
 )
-from experiment.locomo.stage_adapter import (
+from experiment.locomo.pipeline.stage_adapter import (
     build_eval_rows,
     configure_retriever,
     run_ingest_stage_for_locomo,

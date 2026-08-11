@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from experiment.longmem.decision import (
+from experiment.longmem.pipeline.decision import (
     filter_child_entries,
     group_child_entries,
     read_child_manifest,

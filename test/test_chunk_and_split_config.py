@@ -172,9 +172,9 @@ def test_ingest_stage_adapters_accept_chunk_turns(func):
 
 
 CALL_SITES = [
-    ("experiment/locomo/stage_adapter.py", "sessions_to_one_turn_df"),
-    ("experiment/locomo/stage_adapter.py", "session_records_to_df"),
-    ("experiment/locomo/snapshot.py", "session_records_to_df"),
+    ("experiment/locomo/pipeline/stage_adapter.py", "sessions_to_one_turn_df"),
+    ("experiment/locomo/pipeline/stage_adapter.py", "session_records_to_df"),
+    ("experiment/locomo/artifacts/snapshot.py", "session_records_to_df"),
     ("experiment/locomo/stages/ingest.py", "sessions_to_one_turn_df"),
 ]
 
@@ -203,8 +203,8 @@ def test_every_df_builder_call_passes_chunk_turns(rel, func_name):
 
 
 @pytest.mark.parametrize("rel", [
-    "experiment/locomo/workers.py",
-    "experiment/locomo/snapshot.py",
+    "experiment/locomo/pipeline/worker.py",
+    "experiment/locomo/artifacts/snapshot.py",
 ])
 def test_worker_and_snapshot_pass_the_cli_value(rel):
     source = (REPO_ROOT / rel).read_text(encoding="utf-8")
@@ -238,7 +238,7 @@ def test_longmem_processor_retrieval_flag_uses_typed_dataset_config():
     Regression: processor.py pinned it to False, so retrieval always looked for :u/:a
     entries even on a fresh run where nothing had built them.
     """
-    source = (REPO_ROOT / "experiment/longmem/processor.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "experiment/longmem/pipeline/processor.py").read_text(encoding="utf-8")
 
     assert '"split_single_entry_raw": not config.use_split_summary' in source
     hardcoded = re.findall(r'"split_single_entry_raw":\s*(True|False)\b', source)
@@ -246,7 +246,7 @@ def test_longmem_processor_retrieval_flag_uses_typed_dataset_config():
 
 
 def test_longmem_rerun_retrieval_flag_uses_shared_split_setting():
-    source = (REPO_ROOT / "experiment/longmem/rerun.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "experiment/longmem/pipeline/rerun.py").read_text(encoding="utf-8")
 
     assert "USE_SPLIT_SUMMARY" in source
     assert not re.findall(r'"split_single_entry_raw":\s*(True|False)\b', source)
@@ -260,7 +260,7 @@ def test_the_two_flags_are_exact_inverses(use_split_summary, expected_flag):
 
 def test_processor_runs_the_rebuild_after_ingest():
     """The rebuild must be invoked from the single point where both ingest modes meet."""
-    source = (REPO_ROOT / "experiment/longmem/processor.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "experiment/longmem/pipeline/processor.py").read_text(encoding="utf-8")
     assert "def _maybe_rebuild_split_summaries" in source
     assert "self._maybe_rebuild_split_summaries(config)" in source
 
@@ -276,12 +276,12 @@ def test_processor_runs_the_rebuild_after_ingest():
 
 def test_rebuild_artifact_is_idempotent_by_contract():
     """The hook relies on this to make resumed/rerun ingests safe."""
-    source = (REPO_ROOT / "experiment/longmem/rebuild_split_summaries.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "experiment/longmem/tools/rebuild_split_summaries.py").read_text(encoding="utf-8")
     assert "already_rebuilt" in source
 
 
 def test_rebuild_helpers_are_importable_from_the_processor_hook():
-    from experiment.longmem.rebuild_split_summaries import (  # noqa: F401
+    from experiment.longmem.tools.rebuild_split_summaries import (  # noqa: F401
         SCRIPT_DATA_DIR,
         get_compressor,
         rebuild_artifact,

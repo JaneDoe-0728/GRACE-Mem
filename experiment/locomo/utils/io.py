@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Sequence
 
 from KG.storage.paths import resolve_artifacts_dir
-from experiment.reproducibility import attach_reproducibility_metadata
+from experiment.common.reproducibility import attach_reproducibility_metadata
 
 
 EVAL_COLUMNS = [

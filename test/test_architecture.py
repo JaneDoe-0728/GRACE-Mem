@@ -95,9 +95,9 @@ import sys
 modules = (
     'experiment.longmem.analysis.collect',
     'experiment.longmem.analysis.summarize',
-    'experiment.locomo.vote_merge',
-    'experiment.oracle',
-    'experiment.score',
+    'experiment.locomo.analysis.vote_merge',
+    'experiment.common.evaluation.oracle',
+    'experiment.common.evaluation.score',
 )
 for module_name in modules:
     before = list(sys.path)
@@ -117,7 +117,7 @@ for module_name in modules:
 
 def test_snapshot_imports_in_a_fresh_interpreter():
     result = subprocess.run(
-        [sys.executable, "-c", "import experiment.locomo.snapshot"],
+        [sys.executable, "-c", "import experiment.locomo.artifacts.snapshot"],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -152,8 +152,8 @@ import experiment.locomo.helpers as helpers
 
 blocked = {
     'experiment.locomo.helpers.llm',
-    'experiment.locomo.aggregate',
-    'experiment.locomo.summary',
+    'experiment.locomo.analysis.aggregate',
+    'experiment.locomo.analysis.summary',
     'experiment.locomo.utils.graph',
 }
 assert blocked.isdisjoint(sys.modules)

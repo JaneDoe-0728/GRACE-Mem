@@ -23,7 +23,7 @@ import pandas as pd
 from KG.llm import LLMClient
 from experiment.agent_filter.corpus import load_corpus
 from experiment.agent_filter.harness import refine_context
-from experiment.oracle import longmem_gold_sids
+from experiment.common.evaluation.oracle import longmem_gold_sids
 
 DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
 

@@ -4,7 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from experiment.longmem.decision import retrieval_context_needs_rerun
+from experiment.longmem.pipeline.decision import retrieval_context_needs_rerun
 from experiment.longmem.utils.io import glob_sorted, read_csv_frame, read_json_file, upsert_csv_row
 
 

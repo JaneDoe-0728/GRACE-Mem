@@ -3,7 +3,7 @@
 GRACE-Mem uses one post-hoc judge entrypoint for LoCoMo and LongMemEval:
 
 ```bash
-uv run python experiment/judge.py --help
+uv run python experiment/common/evaluation/judge.py --help
 ```
 
 The benchmark pipelines can run a configured inline judge and write a
@@ -45,7 +45,7 @@ interrupted run can resume with the same command.
 Run the standardized judge after answer generation:
 
 ```bash
-uv run python experiment/judge.py locomo <run-tag> \
+uv run python experiment/common/evaluation/judge.py locomo <run-tag> \
   --samples 0-9 \
   --workers 8
 ```
@@ -70,7 +70,7 @@ Adversarial questions are excluded from the aggregate by default. Pass
 Run the standardized judge on a completed LongMemEval output directory:
 
 ```bash
-uv run python experiment/judge.py longmem <run-tag> \
+uv run python experiment/common/evaluation/judge.py longmem <run-tag> \
   --workers 8
 ```
 
@@ -98,13 +98,13 @@ Use the shared scorer for either benchmark. It applies the final result columns,
 prints overall and per-category accuracy, and also reports F1 and BLEU-1:
 
 ```bash
-uv run python experiment/score.py <run-tag>
+uv run python experiment/common/evaluation/score.py <run-tag>
 ```
 
 Multiple runs produce an overall mean and population standard deviation:
 
 ```bash
-uv run python experiment/score.py <run-r1> <run-r2> <run-r3>
+uv run python experiment/common/evaluation/score.py <run-r1> <run-r2> <run-r3>
 ```
 
 Pass `--agent` to include fallback/kept/added/dropped metrics from Agent Filter
@@ -116,8 +116,8 @@ traces, `--column <name>` for a deliberate legacy/custom comparison, or
 The shared oracle answers from annotated gold turns without running retrieval:
 
 ```bash
-uv run python experiment/oracle.py locomo oracle-locomo --samples 0-9
-uv run python experiment/oracle.py longmem oracle-longmem
+uv run python experiment/common/evaluation/oracle.py locomo oracle-locomo --samples 0-9
+uv run python experiment/common/evaluation/oracle.py longmem oracle-longmem
 ```
 
 `--window 0` uses only annotated turns. `--window N` includes N neighboring
@@ -126,7 +126,7 @@ unless `--include-photo` is supplied. Use a different run tag for each window or
 photo condition.
 
 Oracle generation writes the normal benchmark output layout. Pass `--judge` to
-run the standardized judge immediately, or run `experiment/judge.py` separately.
+run the standardized judge immediately, or run `experiment/common/evaluation/judge.py` separately.
 Every oracle output includes `oracle_config.json` with the resolved settings.
 
 ## Reproducibility Checklist

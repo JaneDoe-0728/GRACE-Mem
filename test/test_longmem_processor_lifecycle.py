@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from experiment.longmem.processor import MultiDatasetProcessor
+from experiment.longmem.pipeline.processor import MultiDatasetProcessor
 
 
 def _processor_without_init() -> MultiDatasetProcessor:

@@ -31,7 +31,7 @@ from experiment.locomo.helpers.llm import (
     build_open_domain_standard_messages,
     llm_post,
 )
-from experiment.judge import (
+from experiment.common.evaluation.judge import (
     normalize_temporal_gold as _normalize_temporal_gold,
     parse_locomo_verdict as _parse_label,
 )

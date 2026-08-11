@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "experiment"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from experiment.reproducibility import activate_reproducibility
+from experiment.common.reproducibility import activate_reproducibility
 from experiment.experiment_config import INGEST_PARAMS, REPRODUCIBILITY_PARAMS
 from shared import (
     canonical_entities,

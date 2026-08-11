@@ -61,14 +61,14 @@ Supported category directories include `single_session_user`,
 
 ## LongMemEval
 
-Entrypoint: [`longmem/watchdog.py`](longmem/watchdog.py)
+Entrypoint: [`longmem/pipeline/watchdog.py`](longmem/pipeline/watchdog.py)
 
 ### Commands
 
 Full category run:
 
 ```bash
-uv run python experiment/longmem/watchdog.py \
+uv run python experiment/longmem/pipeline/watchdog.py \
   --run-tag my-run \
   --type single_session_user
 ```
@@ -76,7 +76,7 @@ uv run python experiment/longmem/watchdog.py \
 Select dataset IDs, lexical indexes, or index ranges:
 
 ```bash
-uv run python experiment/longmem/watchdog.py \
+uv run python experiment/longmem/pipeline/watchdog.py \
   --run-tag my-run \
   --type temporal_reasoning \
   --dataset-id 2ebe6c92,0,3-5
@@ -85,7 +85,7 @@ uv run python experiment/longmem/watchdog.py \
 Run only ingest and answer generation:
 
 ```bash
-uv run python experiment/longmem/watchdog.py \
+uv run python experiment/longmem/pipeline/watchdog.py \
   --run-tag my-run \
   --type temporal_reasoning \
   --stage ingest qa_eval
@@ -94,7 +94,7 @@ uv run python experiment/longmem/watchdog.py \
 Reuse an existing artifact run:
 
 ```bash
-uv run python experiment/longmem/watchdog.py \
+uv run python experiment/longmem/pipeline/watchdog.py \
   --run-tag my-rerun \
   --type temporal_reasoning \
   --artifact-dir experiment/longmem/output/my-ingest-run \
@@ -114,7 +114,7 @@ uv run python experiment/longmem/watchdog.py \
 | `--artifact-dir` | Root containing reusable `artifacts_<dataset>/` directories |
 | `--force` | Reprocess work that completion checks would otherwise skip |
 
-In batch mode, the watchdog launches `run_batch.py`, which delegates each
+In batch mode, the watchdog launches `pipeline/batch.py`, which delegates each
 question CSV to `MultiDatasetProcessor`. It records completion state and restarts
 incomplete work up to `--max-restarts`. In retrieval-only mode it runs
 `LongMemRerun` in-process, restores graph state from the artifact cache, and
@@ -136,7 +136,7 @@ experiment/longmem/output/<run-tag>/
 
 ## LoCoMo
 
-Entrypoint: [`locomo/pipeline.py`](locomo/pipeline.py)
+Entrypoint: [`locomo/pipeline/runner.py`](locomo/pipeline/runner.py)
 
 `--sample-ids` is required for normal runs.
 
@@ -145,7 +145,7 @@ Entrypoint: [`locomo/pipeline.py`](locomo/pipeline.py)
 Full run:
 
 ```bash
-uv run python experiment/locomo/pipeline.py \
+uv run python experiment/locomo/pipeline/runner.py \
   --dataset locomo \
   --sample-ids 0-9 \
   --run-tag my-run
@@ -154,7 +154,7 @@ uv run python experiment/locomo/pipeline.py \
 Reuse artifacts from an existing LoCoMo run:
 
 ```bash
-uv run python experiment/locomo/pipeline.py \
+uv run python experiment/locomo/pipeline/runner.py \
   --dataset locomo \
   --sample-ids 0-9 \
   --run-tag my-rerun \
@@ -164,7 +164,7 @@ uv run python experiment/locomo/pipeline.py \
 Run selected stages or include adversarial questions:
 
 ```bash
-uv run python experiment/locomo/pipeline.py \
+uv run python experiment/locomo/pipeline/runner.py \
   --dataset locomo \
   --sample-ids 0-3 \
   --run-tag my-run \
@@ -208,7 +208,7 @@ experiment/locomo/output/
 Judged LoCoMo runs aggregate automatically. To rebuild aggregate output:
 
 ```bash
-uv run python experiment/locomo/aggregate.py \
+uv run python experiment/locomo/analysis/aggregate.py \
   --dataset locomo \
   --root experiment/locomo/output/standard/<run-tag>
 ```
@@ -219,9 +219,9 @@ adversarial questions unless `--include-adversarial` is supplied.
 For paper scoring, use the shared post-hoc judge after answer generation:
 
 ```bash
-uv run python experiment/judge.py locomo <run-tag> --samples 0-9
-uv run python experiment/judge.py longmem <run-tag>
-uv run python experiment/score.py <run-tag>
+uv run python experiment/common/evaluation/judge.py locomo <run-tag> --samples 0-9
+uv run python experiment/common/evaluation/judge.py longmem <run-tag>
+uv run python experiment/common/evaluation/score.py <run-tag>
 ```
 
 The exact carry/rejudge rule, LongMemEval abstention handling, result columns,

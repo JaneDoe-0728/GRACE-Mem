@@ -1,10 +1,10 @@
 """Score LoCoMo or LongMemEval runs with one benchmark-aware CLI.
 
 Examples:
-    uv run python experiment/score.py my-locomo-run
-    uv run python experiment/score.py my-longmem-run
-    uv run python experiment/score.py run-r1 run-r2 run-r3 --agent
-    uv run python experiment/score.py /path/to/run --column correctness_custom
+    uv run python experiment/common/evaluation/score.py my-locomo-run
+    uv run python experiment/common/evaluation/score.py my-longmem-run
+    uv run python experiment/common/evaluation/score.py run-r1 run-r2 run-r3 --agent
+    uv run python experiment/common/evaluation/score.py /path/to/run --column correctness_custom
 """
 from __future__ import annotations
 
@@ -17,13 +17,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
-_ROOT = Path(__file__).resolve().parents[1]
+_ROOT = Path(__file__).resolve().parents[3]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 import pandas as pd
 
-from experiment.judge import ABSTENTION_COLUMN, MAJORITY_VOTE_COLUMN, as_binary
+from experiment.common.evaluation.judge import ABSTENTION_COLUMN, MAJORITY_VOTE_COLUMN, as_binary
 from experiment.locomo.stages.judge import compute_f1_and_bleu1
 
 LOCOMO_OUTPUT = _ROOT / "experiment" / "locomo" / "output" / "standard"

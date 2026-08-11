@@ -2,12 +2,12 @@
 
 Oracle generation is intentionally separate from standardized judging. Pass
 ``--judge`` to run the shared judge after generation, or invoke
-``experiment/judge.py`` later.
+``experiment/common/evaluation/judge.py`` later.
 
 Examples:
-    uv run python experiment/oracle.py locomo oracle-locomo --samples 0-9
-    uv run python experiment/oracle.py locomo oracle-window2 --window 2 --include-photo
-    uv run python experiment/oracle.py longmem oracle-longmem --workers 8
+    uv run python experiment/common/evaluation/oracle.py locomo oracle-locomo --samples 0-9
+    uv run python experiment/common/evaluation/oracle.py locomo oracle-window2 --window 2 --include-photo
+    uv run python experiment/common/evaluation/oracle.py longmem oracle-longmem --workers 8
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-_ROOT = Path(__file__).resolve().parents[1]
+_ROOT = Path(__file__).resolve().parents[3]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
@@ -30,7 +30,7 @@ import pandas as pd
 
 from KG.llm import LLMClient
 from experiment.agent_filter.corpus import Corpus, load_corpus
-from experiment.judge import (
+from experiment.common.evaluation.judge import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
     LONGMEM_CATEGORIES,
@@ -391,7 +391,7 @@ def run_locomo(args: argparse.Namespace) -> Path:
 def _write_metadata(run_dir: Path, config: OracleConfig, args: argparse.Namespace) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     metadata = {
-        "entrypoint": "experiment.oracle",
+        "entrypoint": "experiment.common.evaluation.oracle",
         "config": asdict(config),
         "arguments": {
             key: str(value) if isinstance(value, Path) else value
@@ -408,7 +408,8 @@ def _write_metadata(run_dir: Path, config: OracleConfig, args: argparse.Namespac
 def _run_judge(args: argparse.Namespace) -> None:
     command = [
         sys.executable,
-        str(_ROOT / "experiment" / "judge.py"),
+        "-m",
+        "experiment.common.evaluation.judge",
         args.benchmark,
         args.run_tag,
         "--output-root",

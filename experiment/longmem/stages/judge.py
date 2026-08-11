@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from experiment.judge import JudgeEngine, parse_binary_judge
+from experiment.common.evaluation.judge import JudgeEngine, parse_binary_judge
 from experiment.longmem.utils.io import read_csv_dict_rows, write_csv_frame
 
 

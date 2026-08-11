@@ -124,7 +124,7 @@ Required files, columns, and overrides are documented in the
 LoCoMo requires an explicit sample selection:
 
 ```bash
-uv run python experiment/locomo/pipeline.py \
+uv run python experiment/locomo/pipeline/runner.py \
   --dataset locomo \
   --sample-ids 0-9 \
   --run-tag my-run
@@ -133,7 +133,7 @@ uv run python experiment/locomo/pipeline.py \
 LongMemEval selects one or more question categories:
 
 ```bash
-uv run python experiment/longmem/watchdog.py \
+uv run python experiment/longmem/pipeline/watchdog.py \
   --run-tag my-run \
   --type temporal_reasoning
 ```
@@ -175,8 +175,8 @@ this README.
 
 | Benchmark | Entrypoint | Isolation unit | Default output |
 |---|---|---|---|
-| LoCoMo | `experiment/locomo/pipeline.py` | One subprocess per sample | `experiment/locomo/output/standard/<run-tag>/` |
-| LongMemEval | `experiment/longmem/watchdog.py` | One artifact set per question CSV | `experiment/longmem/output/<run-tag>/<category>/` |
+| LoCoMo | `experiment/locomo/pipeline/runner.py` | One subprocess per sample | `experiment/locomo/output/standard/<run-tag>/` |
+| LongMemEval | `experiment/longmem/pipeline/watchdog.py` | One artifact set per question CSV | `experiment/longmem/output/<run-tag>/<category>/` |
 
 Both pipelines support:
 
@@ -228,9 +228,17 @@ KG/
   llm/            OpenAI-compatible client, token tracking, and prompts
   utils/          Temporal parsing, reranking, logging, and shared utilities
 experiment/
-  locomo/         LoCoMo orchestration, stages, aggregation, and analysis
+  common/
+    evaluation/  Shared judge, oracle, and scoring CLIs
+    reproducibility.py
+    run_metadata.py
+  locomo/         LoCoMo orchestration, stages, artifacts, and analysis
   longmem/        LongMemEval processor, watchdog, rerun, and analysis tools
-agent_filter/     Post-retrieval evidence-refinement documentation
+  agent_filter/   Post-retrieval evidence-refinement harness and replay tools
+  noco/           Optional NocoDB upload helpers
+  experiment_config.py
+  __init__.py
+  README.md
 docs/             Refactor report requested during repository preparation
 test/             Offline regression suite plus explicitly separated live probes
 ```

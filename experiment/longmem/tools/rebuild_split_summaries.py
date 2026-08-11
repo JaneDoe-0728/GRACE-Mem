@@ -9,7 +9,7 @@ collection with two VDB entries per turn:
 KG entities/relationships are NOT touched; summary_id prov links remain valid.
 
 Usage:
-    python experiment/longmem/rebuild_split_summaries.py \\
+    python experiment/longmem/tools/rebuild_split_summaries.py \\
         --run_dir experiment/longmem/output/oss-20b-0427 \\
         [--categories knowledge_update single_session_user ...] \\
         [--dry_run]

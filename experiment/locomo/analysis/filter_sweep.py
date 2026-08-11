@@ -8,7 +8,7 @@ as a separate pipeline invocation with a custom experiment_config.py injected
 via PYTHONPATH, so neither workers.py nor qa_eval.py need to be modified.
 
 Usage (retrieval-only, reusing baseline ingest artifacts):
-    uv run python experiment/locomo/run_filter_sweep.py \
+    uv run python experiment/locomo/analysis/filter_sweep.py \
         --artifact-dir experiment/locomo/output/standard/oss-20b-0429 \
         [--date-tag 0430]      # suffix appended to run tags (default: today MMDD)
         [--quick]              # 3 canonical configs only (rrf-k60/ppr-a085/rrf+ppr-a085)
@@ -36,8 +36,9 @@ from datetime import datetime
 from pathlib import Path
 
 # ── Repository layout ────────────────────────────────────────────────────────
-SCRIPT_DIR = Path(__file__).resolve().parent           # locomo/
-EXPERIMENT_ROOT = SCRIPT_DIR.parent                    # experiment/
+SCRIPT_DIR = Path(__file__).resolve().parent           # locomo/analysis/
+LOCOMO_ROOT = SCRIPT_DIR.parent                        # locomo/
+EXPERIMENT_ROOT = LOCOMO_ROOT.parent                   # experiment/
 REPO_ROOT = EXPERIMENT_ROOT.parent                     # repo root
 
 # ── Base params mirroring experiment_config.py defaults ─────────────────────
@@ -145,7 +146,7 @@ def _run_config(
         env["PYTHONPATH"] = f"{tmpdir}:{orig_pypath}" if orig_pypath else tmpdir
 
         cmd = [
-            "uv", "run", "python", "-m", "experiment.locomo.pipeline",
+            "uv", "run", "python", "-m", "experiment.locomo.pipeline.runner",
             "--dataset", "locomo",
             "--run-tag", run_tag,
             "--artifact-dir", artifact_dir,
@@ -362,7 +363,7 @@ def main() -> None:
 
     _print_results_table(results)
 
-    out_path = SCRIPT_DIR / f"filter_sweep_{args.date_tag}.json"
+    out_path = LOCOMO_ROOT / f"filter_sweep_{args.date_tag}.json"
     out_path.write_text(json.dumps(results, indent=2, ensure_ascii=False))
     print(f"\nDetailed results saved to {out_path.relative_to(REPO_ROOT)}")
 

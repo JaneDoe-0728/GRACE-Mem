@@ -12,7 +12,7 @@ Implementation locations:
 |---|---|
 | Core harness (filter / fetch / VECTOR / adjudicate) | [`experiment/agent_filter/harness.py`](harness.py) |
 | LongMem entry point | [`experiment/agent_filter/replay_run.py`](replay_run.py) |
-| LoCoMo entry point | [`experiment/locomo/grep_replay.py`](../locomo/grep_replay.py) |
+| LoCoMo entry point | [`experiment/agent_filter/locomo_replay.py`](locomo_replay.py) |
 | Parameters | [`experiment/experiment_config.py`](../experiment_config.py) |
 
 ---
@@ -53,14 +53,14 @@ python -m experiment.agent_filter.replay_run \
 ## 3. Run LoCoMo
 
 ```bash
-python experiment/locomo/grep_replay.py \
+python -m experiment.agent_filter.locomo_replay \
   --source-run <existing retrieval run> \
   --run-tag   <output name> \
   --chunk-turns 8 --samples 0-9 --workers 4 \
   --granularity turn
 ```
 
-- LoCoMo's summary VDB lives in the source folder under `sample_<N>/artifacts/`; `grep_replay.py` picks it up automatically and prints `VECTOR ON/OFF` per sample.
+- LoCoMo's summary VDB lives in the source folder under `sample_<N>/artifacts/`; `locomo_replay.py` picks it up automatically and prints `VECTOR ON/OFF` per sample.
 
 ---
 
@@ -94,4 +94,4 @@ For a fair comparison, the baseline and Agent Filter arms must use the **same so
 
 ## 7. Note: LoCoMo's kept/added/dropped convention
 
-LoCoMo seeds are fixed-16 chunks (e.g. `0__4:1`), but the agent's `final_sids` are turn-level (e.g. `0__4:1t2`). Before computing kept/added/dropped, you must truncate `final` back to the chunk prefix (`re.sub(r't\d+$','',s)`) and then compare against the 16 seeds, to preserve the `kept + dropped ≡ 16` invariant. `grep_replay.py` already applies this conversion when writing traces. (LongMem's seed and final share the same sid space, so it is naturally conserved and has no such issue.)
+LoCoMo seeds are fixed-16 chunks (e.g. `0__4:1`), but the agent's `final_sids` are turn-level (e.g. `0__4:1t2`). Before computing kept/added/dropped, you must truncate `final` back to the chunk prefix (`re.sub(r't\d+$','',s)`) and then compare against the 16 seeds, to preserve the `kept + dropped ≡ 16` invariant. `locomo_replay.py` already applies this conversion when writing traces. (LongMem's seed and final share the same sid space, so it is naturally conserved and has no such issue.)

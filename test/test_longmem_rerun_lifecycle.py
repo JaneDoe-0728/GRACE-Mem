@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from experiment.longmem.rerun import LongMemRerun
+from experiment.longmem.pipeline.rerun import LongMemRerun
 
 
 def test_rerun_close_releases_shared_runtime_once():

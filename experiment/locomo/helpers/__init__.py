@@ -14,15 +14,15 @@ from typing import Any
 _EXPORTS = {
     "llm_post": ("experiment.locomo.helpers.llm", "llm_post"),
     "aggregate_judge_csv_files": (
-        "experiment.locomo.aggregate",
+        "experiment.locomo.analysis.aggregate",
         "aggregate_judge_csv_files",
     ),
     "compute_summary_from_df": (
-        "experiment.locomo.summary",
+        "experiment.locomo.analysis.summary",
         "compute_summary_from_df",
     ),
     "compute_summary_from_rows": (
-        "experiment.locomo.summary",
+        "experiment.locomo.analysis.summary",
         "compute_summary_from_rows",
     ),
     "ARTIFACTS_SRC": ("experiment.locomo.utils.graph", "ARTIFACTS_SRC"),

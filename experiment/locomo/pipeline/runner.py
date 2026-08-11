@@ -5,21 +5,21 @@ from pathlib import Path
 
 MODULE_DIR = Path(__file__).resolve().parent
 if __package__ in (None, ""):
-    repo_root = MODULE_DIR.parents[1]
+    repo_root = MODULE_DIR.parents[2]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-from experiment.reproducibility import (
+from experiment.common.reproducibility import (
     activate_reproducibility,
     attach_reproducibility_metadata,
     current_reproducibility_state,
     write_reproducibility_file,
 )
-from experiment.run_metadata import namespace_to_dict, write_run_metadata
+from experiment.common.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.locomo.utils.io import ensure_dir
 from experiment.locomo.utils.log import log_event
 from experiment.locomo.models import RunConfig, RunRuntime
-from experiment.locomo.decision import (
+from experiment.locomo.pipeline.decision import (
     _current_context,
     _judge_dir_for_aggregate,
     _next_context,
@@ -28,7 +28,7 @@ from experiment.locomo.decision import (
     build_sample_plan,
     should_skip_refresh,
 )
-from experiment.locomo.aggregate import maybe_aggregate_run
+from experiment.locomo.analysis.aggregate import maybe_aggregate_run
 from experiment.locomo.helpers.run_hooks import (
     _after_worker,
     _log_success,
@@ -36,8 +36,8 @@ from experiment.locomo.helpers.run_hooks import (
     _refresh_system,
     _worker_paths_for_sample,
 )
-from experiment.locomo.snapshot import _snapshot_builder
-from experiment.locomo.workers import run_worker
+from experiment.locomo.artifacts.snapshot import _snapshot_builder
+from experiment.locomo.pipeline.worker import run_worker
 
 
 _STATELESS_RETRIEVAL_MODES = {
@@ -59,7 +59,7 @@ def _write_run_metadata(
     selected_stages: list[str],
 ) -> None:
     metadata = {
-        "entrypoint": "locomo.pipeline",
+        "entrypoint": "locomo.pipeline.runner",
         "run_tag": run_root.name,
         "run_root": str(run_root.resolve()),
         "output_root": str(output_root.resolve()),

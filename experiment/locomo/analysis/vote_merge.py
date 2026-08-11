@@ -7,7 +7,7 @@
   vote3 新答案時才需新判(--judge 開啟)。
 
 Usage:
-    python experiment/locomo/vote_merge.py --out /tmp/vote_result.csv
+    python experiment/locomo/analysis/vote_merge.py --out /tmp/vote_result.csv
 """
 from __future__ import annotations
 
@@ -22,9 +22,6 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 import pandas as pd
-
-from KG.llm import LLMClient
-from experiment.judge import JudgeEngine, openai_api_key
 
 OUT = _ROOT / "experiment" / "locomo" / "output" / "standard"
 
@@ -85,6 +82,9 @@ def cluster(llm, question: str, answers: list[str]) -> list[list[int]]:
 
 
 def main():
+    from KG.llm import LLMClient
+    from experiment.common.evaluation.judge import JudgeEngine, openai_api_key
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", nargs=3, default=["locomo-n8-120b-fo2", "locomo-n8-120b-fo2r", "vote3"])
     ap.add_argument("--out", required=True)

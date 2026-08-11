@@ -9,7 +9,7 @@
 
 Usage:
     LLM_API=http://localhost:1234/v1 MODEL_NAME=openai/gpt-oss-20b \
-    python experiment/locomo/grep_replay.py --source-run locomo-n8-full \
+    python -m experiment.agent_filter.locomo_replay --source-run locomo-n8-full \
         --run-tag locomo-n8-grep --chunk-turns 8 --workers 2
 """
 from __future__ import annotations
@@ -30,7 +30,6 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from KG.llm import LLMClient
 from experiment.agent_filter.corpus import Corpus, Turn
 from experiment.agent_filter.harness import refine_context
 from experiment.agent_filter.ledger import append_ledger, compile_table
@@ -46,6 +45,8 @@ _tls = threading.local()
 
 def _llm() -> LLMClient:
     if getattr(_tls, "llm", None) is None:
+        from KG.llm import LLMClient
+
         _tls.llm = LLMClient(timeout=300.0)
     return _tls.llm
 
@@ -129,6 +130,8 @@ def _compiler():
     # (LLM_API/MODEL_NAME); optionally point it at a stronger endpoint via
     # LEDGER_COMPILER_API / LEDGER_COMPILER_MODEL.
     if getattr(_compiler_tls, "c", None) is None:
+        from KG.llm import LLMClient
+
         _compiler_tls.c = LLMClient(
             base_url=os.getenv("LEDGER_COMPILER_API") or None,
             model_name=os.getenv("LEDGER_COMPILER_MODEL") or None,
@@ -157,7 +160,7 @@ def process_row(row: dict, corpus: Corpus, params: dict, trace_fh, lock,
     out["model_answer"] = ans
     with lock:
         # 寫完整 trace(含 timing/commands/sufficiency/dropped),與 LongMem 的
-        # Keep replay_run-compatible timing and agent fields for experiment/score.py.
+        # Keep replay_run-compatible timing and agent fields for experiment/common/evaluation/score.py.
         trace_fh.write(json.dumps({"question": q[:120], **trace}, ensure_ascii=False) + "\n")
         trace_fh.flush()
     return out

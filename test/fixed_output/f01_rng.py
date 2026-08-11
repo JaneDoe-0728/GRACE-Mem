@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "experiment"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from experiment.reproducibility import activate_reproducibility, build_dataloader_seed_components
+from experiment.common.reproducibility import activate_reproducibility, build_dataloader_seed_components
 from shared import (
     canonical_json,
     finalize_report,

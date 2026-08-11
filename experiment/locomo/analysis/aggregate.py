@@ -16,12 +16,12 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Sequence
 
 MODULE_DIR = Path(__file__).resolve().parent
 if __package__ in (None, ""):
-    repo_root = MODULE_DIR.parents[1]
+    repo_root = MODULE_DIR.parents[2]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
 from experiment.locomo.models import AggregateResult
-from experiment.locomo.summary import compute_summary_from_df, compute_summary_from_rows
+from experiment.locomo.analysis.summary import compute_summary_from_df, compute_summary_from_rows
 from experiment.locomo.utils.log import log_event
 
 if TYPE_CHECKING:
@@ -373,7 +373,7 @@ def _aggregate_locomo_run(run_root: Path, *, include_adversarial: bool) -> Optio
         cmd.append("--include-adversarial")
     result = subprocess.run(cmd)
     if result.returncode != 0:
-        log_event("AGGREGATE][WARN", "locomo/aggregate.py exited with non-zero status", exit_code=result.returncode)
+        log_event("AGGREGATE][WARN", "locomo/analysis/aggregate.py exited with non-zero status", exit_code=result.returncode)
         return None
     if not output_json.exists():
         return None

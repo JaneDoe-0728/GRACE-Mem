@@ -1,6 +1,6 @@
 from KG.runtime.reproducibility import resolve_reproducibility_config
 from experiment.experiment_config import REPRODUCIBILITY_PARAMS
-from experiment.reproducibility import (
+from experiment.common.reproducibility import (
     ReproducibilityConfig,
     resolve_reproducibility_config as resolve_experiment_config,
 )

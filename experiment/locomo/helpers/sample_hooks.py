@@ -12,7 +12,7 @@ from experiment.locomo.utils.graph import (
 )
 from experiment.locomo.utils.log import log_event
 
-PIPELINE_MODULE = "experiment.locomo.pipeline"
+PIPELINE_MODULE = "experiment.locomo.pipeline.runner"
 
 
 def ensure_worker_repo_path() -> None:

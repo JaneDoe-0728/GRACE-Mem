@@ -120,7 +120,7 @@ commit `ea5d063` 到 `4a27d01` 為止的變更。
 
 - LongMem 使用 immutable typed `DatasetConfig`。
 - logger binding 會記錄原值並依反向順序還原。
-- LoCoMo summary calculation 集中至 `experiment/locomo/summary.py`。
+- LoCoMo summary calculation 集中至 `experiment/locomo/analysis/summary.py`。
 - adaptive pass trace 由 Retriever 內部單一 helper 建構。
 - reproducibility runtime 下沉到 `KG/runtime`，experiment 只保留 adapter。
 
@@ -183,7 +183,7 @@ commit `ea5d063` 到 `4a27d01` 為止的變更。
 - `KG/runtime/__init__.py`：runtime package public surface。
 - `KG/runtime/reproducibility.py`：benchmark-neutral reproducibility settings/runtime。
 - `experiment/__init__.py`：將 experiment 明確定義為 package。
-- `experiment/locomo/summary.py`：集中 aggregation summary calculation。
+- `experiment/locomo/analysis/summary.py`：集中 aggregation summary calculation。
 - `experiment/noco/client_loader.py`：不修改 `sys.path` 的 bundled Noco client loader。
 
 ### Documentation/tooling
@@ -235,14 +235,14 @@ commit `ea5d063` 到 `4a27d01` 為止的變更。
 - `docs/CHANGES-2026-08-03.md`
 - `pyproject.toml`
 - `setup_env.sh`
-- `experiment/reproducibility.py`
+- `experiment/common/reproducibility.py`
 
 ### LoCoMo（27）
 
-- `experiment/locomo/aggregate.py`
+- `experiment/locomo/analysis/aggregate.py`
 - `experiment/locomo/cli.py`
-- `experiment/locomo/decision.py`
-- `experiment/locomo/grep_replay.py`
+- `experiment/locomo/pipeline/decision.py`
+- `experiment/agent_filter/locomo_replay.py`
 - `experiment/locomo/helpers/__init__.py`
 - `experiment/locomo/helpers/analyze.py`
 - `experiment/locomo/helpers/dataset.py`
@@ -252,20 +252,20 @@ commit `ea5d063` 到 `4a27d01` 為止的變更。
 - `experiment/locomo/helpers/sample_hooks.py`
 - `experiment/locomo/helpers/session_export.py`
 - `experiment/locomo/judge_eval_4omini.py`
-- `experiment/locomo/pipeline.py`
+- `experiment/locomo/pipeline/runner.py`
 - `experiment/locomo/prompts/__init__.py`
 - `experiment/locomo/recall_hunter_locomo.py`
 - `experiment/locomo/rejudge_3vote_4omini.py`
 - `experiment/locomo/rejudge_4omini.py`
-- `experiment/locomo/snapshot.py`
+- `experiment/locomo/artifacts/snapshot.py`
 - `experiment/locomo/stages/ingest.py`
 - `experiment/locomo/stages/judge.py`
 - `experiment/locomo/stages/qa_eval.py`
 - `experiment/locomo/stages/upload.py`
 - `experiment/locomo/turn_filter_analysis.py`
 - `experiment/locomo/utils/graph.py`
-- `experiment/locomo/vote_merge.py`
-- `experiment/locomo/workers.py`
+- `experiment/locomo/analysis/vote_merge.py`
+- `experiment/locomo/pipeline/worker.py`
 
 ### LongMem/Noco（30）
 
@@ -283,20 +283,20 @@ commit `ea5d063` 到 `4a27d01` 為止的變更。
 - `experiment/longmem/gold_summary_eval.py`
 - `experiment/longmem/gold_upstream_score_dist.py`
 - `experiment/longmem/models.py`
-- `experiment/longmem/processor.py`
-- `experiment/longmem/rebuild_split_summaries.py`
+- `experiment/longmem/pipeline/processor.py`
+- `experiment/longmem/tools/rebuild_split_summaries.py`
 - `experiment/longmem/rejudge_multi_dataset.py`
 - `experiment/longmem/rejudge_output_dirs.py`
 - `experiment/longmem/replay_fact_multi_dataset.py`
 - `experiment/longmem/replay_fact_user_only.py`
-- `experiment/longmem/rerun.py`
-- `experiment/longmem/rerun_split_experiments.py`
-- `experiment/longmem/run_batch.py`
+- `experiment/longmem/pipeline/rerun.py`
+- `experiment/longmem/tools/rerun_split_experiments.py`
+- `experiment/longmem/pipeline/batch.py`
 - `experiment/longmem/stages/qa_eval.py`
 - `experiment/longmem/summary_score_dist.py`
 - `experiment/longmem/utils/__init__.py`
 - `experiment/longmem/utils/io.py`
-- `experiment/longmem/watchdog.py`
+- `experiment/longmem/pipeline/watchdog.py`
 - `experiment/noco/noco_progress.py`
 - `experiment/noco/upload_progress_to_noco.py`
 

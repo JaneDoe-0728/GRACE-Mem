@@ -11,10 +11,10 @@ qa_eval, reusing ingested artifacts, NO inline judge) into a NEW run dir
 (<orig>-rr2) -> score with the new category-aware judge into `correctness`.
 
 Usage:
-    python experiment/longmem/rerun_split_experiments.py --smoke      # 1 dataset, rerank16
-    python experiment/longmem/rerun_split_experiments.py --only rerank16
-    python experiment/longmem/rerun_split_experiments.py              # all 8, full
-    python experiment/longmem/rerun_split_experiments.py --judge-only # re-judge existing rr2 dirs
+    python experiment/longmem/tools/rerun_split_experiments.py --smoke      # 1 dataset, rerank16
+    python experiment/longmem/tools/rerun_split_experiments.py --only rerank16
+    python experiment/longmem/tools/rerun_split_experiments.py              # all 8, full
+    python experiment/longmem/tools/rerun_split_experiments.py --judge-only # re-judge existing rr2 dirs
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 
 from KG.llm import LLMClient
-from experiment.judge import (
+from experiment.common.evaluation.judge import (
     LONGMEM_CATEGORIES,
     SKIP_LONGMEM_FILES,
     JudgeEngine,
@@ -74,7 +74,7 @@ def set_config_knobs(overrides: dict) -> None:
 
 def run_retrieval(run_tag: str, *, smoke: bool) -> None:
     cmd = [
-        sys.executable, "-m", "experiment.longmem.watchdog",
+        sys.executable, "-m", "experiment.longmem.pipeline.watchdog",
         "--run-tag", run_tag,
         "--artifact-dir", ARTIFACT_DIR,
         "--output-root", f"experiment/longmem/output/{run_tag}",
