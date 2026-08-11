@@ -691,42 +691,38 @@ def _run_rerun_mode(
     status.update({"total_datasets": total, "completed_datasets": already_done, "state": "running"})
     write_status_file(status_path, status)
 
-    from KG.graph.falkordb import graph_from_env
-    from KG.llm import LLMClient
-
-    runner = LongMemRerun(llm=LLMClient(), graph=graph_from_env().open())
     results: list[dict] = []
-
-    for index, dataset_name in enumerate(to_run, 1):
-        logger.info("[%d/%d] %s", index, len(to_run), dataset_name)
-        dataset_log_dir = output_root / f"logs_{dataset_name}"
-        ensure_dir(dataset_log_dir)
-        try:
-            result = runner.rerun_dataset(
-                dataset_name=dataset_name,
-                output_dir=output_root,
-                data_folder=data_folder,
-                log_dir=dataset_log_dir,
-                artifact_dir=artifact_dir,
-                no_judge=args.no_judge,
-                stages=set(selected_stages),
-            )
-            results.append(result)
-            logger.info("✅ %s | correctness=%s", dataset_name, result["correctness"])
-        except Exception as exc:
-            logger.exception("❌ %s: %s", dataset_name, exc)
-            error_result = {"dataset": dataset_name, "error": str(exc)}
-            results.append(error_result)
+    with LongMemRerun.from_env() as runner:
+        for index, dataset_name in enumerate(to_run, 1):
+            logger.info("[%d/%d] %s", index, len(to_run), dataset_name)
+            dataset_log_dir = output_root / f"logs_{dataset_name}"
+            ensure_dir(dataset_log_dir)
             try:
-                runner.graph.clear_all()
-            except Exception:
-                pass
-        finally:
-            cleanup_retrieval_loggers(dataset_log_dir)
+                result = runner.rerun_dataset(
+                    dataset_name=dataset_name,
+                    output_dir=output_root,
+                    data_folder=data_folder,
+                    log_dir=dataset_log_dir,
+                    artifact_dir=artifact_dir,
+                    no_judge=args.no_judge,
+                    stages=set(selected_stages),
+                )
+                results.append(result)
+                logger.info("✅ %s | correctness=%s", dataset_name, result["correctness"])
+            except Exception as exc:
+                logger.exception("❌ %s: %s", dataset_name, exc)
+                error_result = {"dataset": dataset_name, "error": str(exc)}
+                results.append(error_result)
+                try:
+                    runner.graph.clear_all()
+                except Exception:
+                    pass
+            finally:
+                cleanup_retrieval_loggers(dataset_log_dir)
 
-        completed = already_done + index
-        status.update({"completed_datasets": completed})
-        write_status_file(status_path, status)
+            completed = already_done + index
+            status.update({"completed_datasets": completed})
+            write_status_file(status_path, status)
 
     success = [row for row in results if "error" not in row]
     errors = [row for row in results if "error" in row]

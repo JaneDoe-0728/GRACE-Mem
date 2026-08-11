@@ -4,6 +4,7 @@ import argparse
 import gc
 import sys
 from pathlib import Path
+from typing import Any
 
 if __package__ in (None, ""):
     repo_root = Path(__file__).resolve().parents[2]
@@ -50,6 +51,55 @@ class LongMemRerun:
         self.graph = graph
         self.qa_stage = QAEvalStage()
         self.judge_stage = JudgeStage()
+        self._closed = False
+
+    @classmethod
+    def from_env(cls) -> "LongMemRerun":
+        """Create a rerun runtime and roll back partially opened resources."""
+        from KG.graph.falkordb import graph_from_env
+        from KG.llm import LLMClient
+
+        llm = LLMClient()
+        graph = None
+        try:
+            graph = graph_from_env()
+            opened_graph = graph.open()
+            return cls(llm=llm, graph=opened_graph)
+        except BaseException:
+            if graph is not None:
+                try:
+                    graph.close()
+                except Exception:
+                    pass
+            try:
+                llm.close()
+            except Exception:
+                pass
+            raise
+
+    def close(self) -> None:
+        """Release shared graph and LLM transports once."""
+        if self._closed:
+            return
+        cleanup_error: Exception | None = None
+        try:
+            self.graph.close()
+        except Exception as exc:
+            cleanup_error = exc
+        try:
+            self.llm.close()
+        except Exception as exc:
+            if cleanup_error is None:
+                cleanup_error = exc
+        self._closed = True
+        if cleanup_error is not None:
+            raise cleanup_error
+
+    def __enter__(self) -> "LongMemRerun":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        self.close()
 
     def rerun_dataset(
         self,
@@ -270,7 +320,7 @@ class LongMemRerun:
             except Exception:
                 pass
             if mgr is not None:
-                mgr.reset_all(delete_files=False)
+                mgr.close(clear_cache=True)
             del retriever, mgr
             gc.collect()
 
@@ -394,83 +444,80 @@ def main(argv: list[str] | None = None) -> None:
         print("Nothing to do.")
         return
 
-    from KG.graph.falkordb import graph_from_env
-    from KG.llm import LLMClient
-
-    runner = LongMemRerun(llm=LLMClient(), graph=graph_from_env().open())
     results = []
     success_results: dict[Path, list[dict]] = {}
     error_results: list[dict] = []
     current = 0
-    for category, data_folder, artifact_dir, output_dir, result_dir, to_rerun in resolved_targets:
-        if category is not None and len(resolved_targets) > 1:
-            print(f"\n=== Category: {category} ===")
-        for dataset_name in to_rerun:
-            current += 1
-            print(f"\n{'#' * 60}")
-            print(f"# [{current}/{total}] {dataset_name}")
-            print(f"{'#' * 60}")
+    with LongMemRerun.from_env() as runner:
+        for category, data_folder, artifact_dir, output_dir, result_dir, to_rerun in resolved_targets:
+            if category is not None and len(resolved_targets) > 1:
+                print(f"\n=== Category: {category} ===")
+            for dataset_name in to_rerun:
+                current += 1
+                print(f"\n{'#' * 60}")
+                print(f"# [{current}/{total}] {dataset_name}")
+                print(f"{'#' * 60}")
 
-            dataset_log_dir = output_dir / f"logs_{dataset_name}"
-            ensure_dir(dataset_log_dir)
+                dataset_log_dir = output_dir / f"logs_{dataset_name}"
+                ensure_dir(dataset_log_dir)
 
-            try:
-                result = runner.rerun_dataset(
-                    dataset_name=dataset_name,
-                    output_dir=output_dir,
-                    data_folder=data_folder,
-                    log_dir=dataset_log_dir,
-                    artifact_dir=artifact_dir,
-                    no_judge=args.no_judge,
-                    stages=set(selected_stages),
-                )
-                results.append(result)
-                success_results.setdefault(output_dir, []).append(result)
-                print(f"✅ {dataset_name} | correctness={result['correctness']}")
-            except Exception as exc:
-                import traceback
-
-                traceback.print_exc()
-                print(f"❌ {dataset_name}: {exc}")
-                error_result = {"dataset": dataset_name, "error": str(exc)}
-                results.append(error_result)
-                error_results.append(error_result)
                 try:
-                    runner.graph.clear_all()
-                except Exception:
-                    pass
+                    result = runner.rerun_dataset(
+                        dataset_name=dataset_name,
+                        output_dir=output_dir,
+                        data_folder=data_folder,
+                        log_dir=dataset_log_dir,
+                        artifact_dir=artifact_dir,
+                        no_judge=args.no_judge,
+                        stages=set(selected_stages),
+                    )
+                    results.append(result)
+                    success_results.setdefault(output_dir, []).append(result)
+                    print(f"✅ {dataset_name} | correctness={result['correctness']}")
+                except Exception as exc:
+                    import traceback
 
-        success = success_results.get(output_dir, [])
-        if success:
-            progress_filename = "progress.csv" if artifact_dir is not None else "progress_rerun.csv"
-            update_progress_rows(output_dir, success, filename=progress_filename)
-            if artifact_dir is not None:
-                update_all_answers_csv(output_dir, success)
-            if result_dir is not None:
-                update_progress_rows(result_dir, success, filename=progress_filename)
-            if "upload" in selected_stages:
-                upload_stage = UploadStage()
-                table_name = build_noco_table_name(
-                    run_tag=args.run_tag,
-                    target_name=output_dir.name,
-                )
-                for row in success:
+                    traceback.print_exc()
+                    print(f"❌ {dataset_name}: {exc}")
+                    error_result = {"dataset": dataset_name, "error": str(exc)}
+                    results.append(error_result)
+                    error_results.append(error_result)
                     try:
-                        upload_stage.upsert_progress_row(
-                            table_name=table_name,
-                            row={
-                                "dataset": row.get("dataset", ""),
-                                "status": "judged" if str(row.get("correctness", "")).strip() != "" else "qa_complete",
-                                "correctness": str(row.get("correctness", "")),
-                                "question": str(row.get("question", "")),
-                                "gold_answer": str(row.get("gold", "")),
-                                "generated_answer": str(row.get("answer", "")),
-                            },
-                        )
-                    except Exception as exc:
-                        print(f"[UPLOAD] NocoDB upsert skipped for {row.get('dataset', '')}: {exc}")
-        if result_dir is not None:
-            ensure_dir(result_dir)
+                        runner.graph.clear_all()
+                    except Exception:
+                        pass
+
+            success = success_results.get(output_dir, [])
+            if success:
+                progress_filename = "progress.csv" if artifact_dir is not None else "progress_rerun.csv"
+                update_progress_rows(output_dir, success, filename=progress_filename)
+                if artifact_dir is not None:
+                    update_all_answers_csv(output_dir, success)
+                if result_dir is not None:
+                    update_progress_rows(result_dir, success, filename=progress_filename)
+                if "upload" in selected_stages:
+                    upload_stage = UploadStage()
+                    table_name = build_noco_table_name(
+                        run_tag=args.run_tag,
+                        target_name=output_dir.name,
+                    )
+                    for row in success:
+                        try:
+                            upload_stage.upsert_progress_row(
+                                table_name=table_name,
+                                row={
+                                    "dataset": row.get("dataset", ""),
+                                    "status": "judged" if str(row.get("correctness", "")).strip() != "" else "qa_complete",
+                                    "correctness": str(row.get("correctness", "")),
+                                    "question": str(row.get("question", "")),
+                                    "gold_answer": str(row.get("gold", "")),
+                                    "generated_answer": str(row.get("answer", "")),
+                                },
+                            )
+                        except Exception as exc:
+                            print(f"[UPLOAD] NocoDB upsert skipped for {row.get('dataset', '')}: {exc}")
+            if result_dir is not None:
+                ensure_dir(result_dir)
 
     if error_results:
         print(f"Errors: {len(error_results)}")
