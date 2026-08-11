@@ -40,6 +40,7 @@ torchaudio = { index = "pytorch-cu128" }
 torchvision = { index = "pytorch-cu128" }
 
 [tool.pytest.ini_options]
+addopts = ["--strict-config", "--strict-markers"]
 pythonpath = ["."]
 testpaths = ["test"]
 markers = [

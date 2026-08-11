@@ -50,21 +50,36 @@ flowchart TD
     ISTEPS --> TEMPORAL
 ```
 
-LoCoMo uses the composition factory, while LongMem still constructs most runtime
-components directly. Configuration is passed as mutable dictionaries and is also
-read from environment variables by concrete adapters.
+LoCoMo uses the composition factory. LongMem has benchmark-specific composition
+roots with typed dataset configuration and context-managed ownership of graph,
+LLM, and vector-store resources. Shared experiment parameters remain mutable
+dictionaries and concrete adapters still read connection settings from the
+environment.
 
 ## Current Findings
 
-- 181 modules and 374 package-local import edges across `KG` and `experiment`.
-- 75 `experiment -> KG` edges, which follow the intended outer-to-core direction.
+- 182 modules and 374 package-local import edges across `KG` and `experiment`.
+- 73 `experiment -> KG` edges, which follow the intended outer-to-core direction.
 - No `KG -> experiment` reverse dependencies remain.
 - No circular dependencies remain in the static project graph.
-- Manual network/model scripts are excluded from automated pytest collection.
+- Package imports do not mutate `sys.path`; direct-file CLI compatibility is
+  isolated to guarded bootstraps.
+- Nine manual network/model probes are explicitly excluded from automated pytest
+  collection. No missing production contract is hidden by the collection policy.
 
 The dependency direction and canonical package imports are locked by
 `test/test_architecture.py`. Fresh-interpreter import tests complement the AST
 graph because importing a submodule executes each parent package's `__init__.py`.
+The offline/manual boundary and result categories are documented in
+`test/README.md`.
+
+## Runtime Ownership
+
+- `PipelineRuntime` owns the LoCoMo graph and LLM transports.
+- `MultiDatasetProcessor` owns LongMem shared transports and closes each
+  dataset-local `VDBManager` during teardown.
+- `LongMemRerun` owns rerun/watchdog transports and rolls back partial startup.
+- Dataset logger monkeypatches are scoped and restored in reverse order.
 
 ## Cycles Removed
 
