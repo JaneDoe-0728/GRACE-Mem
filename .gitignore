@@ -9,6 +9,7 @@ KG/storage/artifacts
 .codex/skills
 experiment/locomo/output
 experiment/longmem/script_data
+experiment/longmem/data
 experiment/longmem/output
 experiment/locomo/data
 experiment/longmem/sample

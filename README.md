@@ -210,10 +210,20 @@ Datasets are not bundled. Use the official sources:
 - [LoCoMo dataset and benchmark](https://github.com/snap-research/locomo)
 - [LongMemEval dataset and benchmark](https://github.com/xiaowu0162/LongMemEval)
 
+Download the pinned LoCoMo release and the cleaned LongMemEval-S release, verify
+their SHA-256 checksums, and convert LongMemEval into runner-ready CSVs:
+
+```bash
+uv run python -m tools.download_datasets --dataset all
+```
+
+Source JSON files and generated CSVs remain gitignored. Re-running the command
+verifies existing files and skips a complete matching conversion.
+
 ### LoCoMo
 
-Place the official `locomo10.json` at `experiment/locomo/data/locomo10.json`,
-then run selected samples:
+The downloader places `locomo10.json` at
+`experiment/locomo/data/locomo10.json`. Then run selected samples:
 
 ```bash
 uv run python experiment/locomo/pipeline/runner.py \
@@ -224,8 +234,9 @@ uv run python experiment/locomo/pipeline/runner.py \
 
 ### LongMemEval
 
-LongMemEval currently expects one preprocessed question CSV under each category
-directory in `experiment/longmem/script_data/`:
+The downloader converts each LongMemEval question to
+`experiment/longmem/script_data/<category>/<question-id>.csv`. Run a category
+after conversion:
 
 ```bash
 uv run python experiment/longmem/pipeline/watchdog.py \
@@ -233,11 +244,10 @@ uv run python experiment/longmem/pipeline/watchdog.py \
   --type temporal_reasoning
 ```
 
-The repository does not yet convert the official LongMemEval release into this
-CSV layout. Consequently, the runner is reproducible from prepared inputs, but
-the public repository does not yet provide a complete raw-data-to-paper-result
-recipe. The exact schema, commands, output layout, and artifact compatibility
-rules are in the [experiment guide](experiment/README.md).
+The default is the cleaned `S` variant. The downloader also supports `M` and
+`oracle` with `--longmem-variant`. Pinned revisions, checksums, the generated CSV
+schema, output layout, and artifact compatibility rules are in the
+[experiment guide](experiment/README.md).
 
 ### Evaluation
 
@@ -324,14 +334,16 @@ probes are intentionally excluded from version control.
 ## Reproducibility
 
 The benchmark layer centralizes settings and writes run metadata alongside
-artifacts, checkpoints, logs, answers, and judge output. The model downloader
-pins embedding and reranker snapshots.
+artifacts, checkpoints, logs, answers, and judge output. Dataset downloads,
+embedding weights, and reranker weights use immutable revisions and checksums.
+The LongMem converter writes a source manifest and one deterministic CSV per
+question.
 
 Exact results can still vary with the answer/judge endpoint and model revision,
-hardware, benchmark preprocessing, and external service behavior. This
-repository currently provides no canonical paper configuration, expected-score
-table, or LongMemEval raw-data converter; do not interpret a successful run as
-an exact reproduction of an unpublished reference score.
+hardware, experiment configuration, and external service behavior. This
+repository currently provides no canonical paper configuration or
+expected-score table; do not interpret a successful run as an exact reproduction
+of an unpublished reference score.
 
 ## Documentation
 
@@ -348,5 +360,5 @@ an exact reproduction of an unpublished reference score.
 - No repository license is currently present. Until one is added, normal
   copyright restrictions apply to reuse and redistribution.
 - No official GRACE-Mem paper citation has been provided in this repository.
-- LongMemEval raw-data preprocessing and canonical expected scores remain to be
-  published for end-to-end paper reproduction.
+- A canonical paper configuration and expected-score table have not yet been
+  published for exact result comparison.

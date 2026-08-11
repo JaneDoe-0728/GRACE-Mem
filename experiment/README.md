@@ -11,12 +11,12 @@ benchmark datasets are not included in the repository.
 
 ## Reproduction Scope
 
-The repository provides runnable ingest, retrieval, answer, judge, and scoring
-stages, but it does not yet provide a complete paper-reproduction bundle:
+The repository provides pinned dataset acquisition plus runnable ingest,
+retrieval, answer, judge, and scoring stages:
 
-- LoCoMo can use the official `locomo10.json` directly.
-- LongMemEval requires the per-question CSV layout documented below; a converter
-  from the official release is not currently included.
+- LoCoMo uses the official `locomo10.json` directly.
+- LongMemEval is downloaded from the official cleaned release and converted into
+  the per-question CSV layout documented below.
 - Answer and judge endpoints are external, and no canonical endpoint revision,
   full run configuration, or expected-score table is currently published.
 
@@ -40,10 +40,42 @@ artifacts instead of ingesting again.
 
 ## Data Layout
 
+### Download and Verify
+
+From the repository root, prepare both default benchmark datasets:
+
+```bash
+uv run python -m tools.download_datasets --dataset all
+```
+
+The command downloads LoCoMo and cleaned LongMemEval-S from immutable source
+revisions, verifies file size and SHA-256, and converts LongMemEval into one CSV
+per question. Dataset files are generated locally and remain gitignored.
+
+| Dataset | Revision | SHA-256 |
+|---|---|---|
+| LoCoMo `locomo10.json` | `3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376` | `79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4` |
+| LongMemEval-S cleaned | `98d7416c24c778c2fee6e6f3006e7a073259d48f` | `d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442` |
+| LongMemEval-M cleaned | `98d7416c24c778c2fee6e6f3006e7a073259d48f` | `9d79e5524794a2e6900a3aa9cb7d9152c5a3e8319c9a87c25494ba1eacee495f` |
+| LongMemEval oracle | `98d7416c24c778c2fee6e6f3006e7a073259d48f` | `821a2034d219ab45846873dd14c14f12cfe7776e73527a483f9dac095d38620c` |
+
+Prepare only one dataset or select another LongMem variant:
+
+```bash
+uv run python -m tools.download_datasets --dataset locomo
+uv run python -m tools.download_datasets --dataset longmem --longmem-variant oracle
+uv run python -m tools.download_datasets --dataset longmem --longmem-variant m
+```
+
+`S` is the default 277 MB source. `oracle` is approximately 15 MB and `M` is
+approximately 2.7 GB. Use `--verify-only` to check existing source files,
+`--download-only` to retain LongMem JSON without conversion, and `--force` to
+redownload and replace a previous generated conversion.
+
 ### LoCoMo
 
-Download LoCoMo from the
-[official repository](https://github.com/snap-research/locomo), then place the
+The downloader retrieves LoCoMo from the
+[official repository](https://github.com/snap-research/locomo) and places the
 conversation/QA file under `experiment/locomo/data/`:
 
 | File | Required | Purpose |
@@ -57,13 +89,16 @@ dataset paths with `--dataset-json` and `--sessions-jsonl`.
 
 ### LongMemEval
 
-Download the source data from the
-[official LongMemEval repository](https://github.com/xiaowu0162/LongMemEval).
-GRACE-Mem does not read that release directly.
+The downloader retrieves the cleaned source linked by the
+[official LongMemEval repository](https://github.com/xiaowu0162/LongMemEval),
+stores it under `experiment/longmem/data/`, and invokes
+[`longmem/tools/convert_dataset.py`](longmem/tools/convert_dataset.py).
 
 LongMem expects one preprocessed CSV per question under
-`experiment/longmem/script_data/<category>/`. The raw LongMemEval release is not
-read directly, and this repository does not include a converter.
+`experiment/longmem/script_data/<category>/`. The converter maps official
+hyphenated question types to the runner's underscore category names and writes
+`dataset_manifest.json` with the source revision, source checksum, question
+count, turn count, generated paths, and generated checksums.
 
 | Column | Required | Purpose |
 |---|---|---|
@@ -75,10 +110,25 @@ read directly, and this repository does not include a converter.
 | `question` | yes | Question for this CSV; configurable with `question_column` |
 | `answer` | judge only | Gold answer; required when the `judge` stage or post-hoc judge is used |
 | `question_date` | no | Query time; falls back to available dialogue/date fields |
+| `has_answer` | analysis only | Official turn-level evidence annotation |
+| `is_answer_session` | analysis only | Whether the row belongs to an official evidence session |
+| `question_id` / `question_type` | metadata | Official question identity and type |
 
 Supported category directories include `single_session_user`,
 `single_session_assistant`, `single_session_preference`, `multi_session`,
 `temporal_reasoning`, and `knowledge_update`.
+
+To convert a separately downloaded official file directly, provide its pinned
+revision and checksum:
+
+```bash
+uv run python -m experiment.longmem.tools.convert_dataset \
+  --input experiment/longmem/data/longmemeval_s_cleaned.json \
+  --output-dir experiment/longmem/script_data \
+  --variant s \
+  --source-revision 98d7416c24c778c2fee6e6f3006e7a073259d48f \
+  --source-sha256 d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442
+```
 
 ## LongMemEval
 

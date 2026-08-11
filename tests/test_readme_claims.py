@@ -280,6 +280,8 @@ DOCUMENTED_PATHS = [
     "docker-compose.yml",
     "tools/setup_env.sh",
     "tools/download_models.py",
+    "tools/download_datasets.py",
+    "experiment/longmem/tools/convert_dataset.py",
     ".env.example",
 ]
 
