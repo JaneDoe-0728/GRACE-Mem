@@ -64,6 +64,58 @@ def test_experiment_imports_use_canonical_package_names():
     assert invalid_imports == []
 
 
+def test_package_modules_do_not_mutate_sys_path_at_import_time():
+    invalid_calls: list[str] = []
+    for package_root in (ROOT / "KG", ROOT / "experiment"):
+        for path in package_root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in tree.body:
+                if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+                    continue
+                function = node.value.func
+                if not isinstance(function, ast.Attribute) or function.attr not in {"append", "insert"}:
+                    continue
+                owner = function.value
+                if (
+                    isinstance(owner, ast.Attribute)
+                    and isinstance(owner.value, ast.Name)
+                    and owner.value.id == "sys"
+                    and owner.attr == "path"
+                ):
+                    invalid_calls.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+
+    assert invalid_calls == []
+
+
+def test_script_modules_preserve_sys_path_when_imported_as_packages():
+    script = """
+import importlib
+import sys
+
+modules = (
+    'experiment.longmem.analysis.collect',
+    'experiment.longmem.analysis.summarize',
+    'experiment.locomo.vote_merge',
+    'experiment.longmem.agent_filter.score_f1_bleu',
+    'experiment.noco.noco_progress',
+    'experiment.noco.upload_progress_to_noco',
+)
+for module_name in modules:
+    before = list(sys.path)
+    importlib.import_module(module_name)
+    assert sys.path == before, module_name
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_snapshot_imports_in_a_fresh_interpreter():
     result = subprocess.run(
         [sys.executable, "-c", "import experiment.locomo.snapshot"],

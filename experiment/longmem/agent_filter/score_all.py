@@ -11,7 +11,8 @@
 import sys, glob, csv, json
 from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(_ROOT))
+if __package__ in (None, "") and str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 csv.field_size_limit(10**8)
 from experiment.locomo.stages.judge import compute_f1_and_bleu1
 

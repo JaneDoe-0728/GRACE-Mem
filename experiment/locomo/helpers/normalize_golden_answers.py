@@ -33,7 +33,9 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+_ROOT = Path(__file__).resolve().parents[4]
+if __package__ in (None, "") and str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from KG.utils.temporal.normalizer import build_time_context
 from KG.utils.temporal.classifier import classify_single_expression

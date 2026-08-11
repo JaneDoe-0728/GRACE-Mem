@@ -22,7 +22,9 @@ import time
 from pathlib import Path
 from typing import Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+_ROOT = Path(__file__).resolve().parents[2]
+if __package__ in (None, "") and str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from KG.utils.raw_context_lookup import RawContextLookup
 from KG.utils.query_time_parser import parse_query_time

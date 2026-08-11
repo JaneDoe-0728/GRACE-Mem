@@ -22,14 +22,29 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 
-# Allow importing noco-db-uploader
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(REPO_ROOT / "noco-db-uploader"))
+if __package__ in (None, "") and str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from src import upload_file  # noqa: E402
+from experiment.noco.client_loader import load_noco_client_class
 
 EXCLUDE_COLS = {"stuck_history"}
 OUTPUT_DIR = REPO_ROOT / "experiment" / "multi_dataset_output"
+
+
+def _upload_file(file_path: str, *, table_title: str, table_name: str) -> str:
+    client_class = load_noco_client_class()
+    client = client_class(os.environ["NOCO_URL"], os.environ["API_TOKEN"])
+    project_id = os.environ["PROJECT_ID"]
+    source_id = os.getenv("SOURCE_ID") or client.get_first_source_id(project_id)
+    return client.upload_file(
+        file_path=file_path,
+        project_id=project_id,
+        source_id=source_id,
+        org=os.getenv("ORG", "noco"),
+        table_title=table_title,
+        table_name=table_name,
+    )
 
 
 def upload_progress(csv_path: Path, table_name: str) -> None:
@@ -47,7 +62,7 @@ def upload_progress(csv_path: Path, table_name: str) -> None:
         tmp_path = tmp.name
 
     try:
-        table_id = upload_file(tmp_path, table_title=table_name, table_name=table_name)
+        table_id = _upload_file(tmp_path, table_title=table_name, table_name=table_name)
         print(f"  Uploaded '{table_name}' → table ID: {table_id}")
     finally:
         os.unlink(tmp_path)

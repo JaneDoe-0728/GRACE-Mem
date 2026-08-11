@@ -13,14 +13,14 @@ Failures are non-fatal — a warning is logged and the main pipeline continues.
 
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Dict, Any
+
+from experiment.noco.client_loader import load_noco_client_class
 
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(REPO_ROOT / "noco-db-uploader"))
 
 _client = None
 _project_id = None
@@ -51,7 +51,7 @@ def _get_client():
     if not all([noco_url, api_token, _project_id]):
         raise EnvironmentError("NOCO_URL, API_TOKEN, PROJECT_ID must be set in .env")
 
-    from src.noco_client import NocoDBClient
+    NocoDBClient = load_noco_client_class()
     _client = NocoDBClient(noco_url, api_token)
     return _client
 
