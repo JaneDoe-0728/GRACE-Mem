@@ -1,8 +1,8 @@
-"""Readme conformance tests — local only, not committed.
+"""README conformance tests.
 
-Encodes every claim in readme.md / experiment/readme.md that was verified by
-hand, so a future edit that drifts from the code fails here instead of in a
-user's first five minutes.
+Encodes executable contracts from README.md / experiment/readme.md so a future
+edit that drifts from the code fails here instead of in a user's first five
+minutes.
 
 Layout:
   * Offline tests            — no network, no models, no DB. Always run.

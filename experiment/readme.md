@@ -5,7 +5,51 @@ This document covers the full flow (ingest → retrieve → answer → judge) fo
 1. **LongMemEval** (`longmem/watchdog.py`)
 2. **LoCoMo** (`locomo/pipeline.py`)
 
-> Prerequisite: complete the Setup in the root [readme.md](../readme.md) first (start FalkorDB, set the LLM endpoint in `.env`, run `setup_env.sh`, **and put the benchmark data in place** — neither dataset ships with the repo, see [Get the benchmark data](../readme.md#5-get-the-benchmark-data)). All ingest / retrieve / reranker parameters live in [experiment_config.py](experiment_config.py) (single source of truth).
+> Prerequisite: complete the Quick Start in the root [README.md](../README.md)
+> first: configure the LLM endpoint, start FalkorDB, install the local models,
+> and add benchmark data. All ingest, retrieve, and reranker parameters live in
+> [experiment_config.py](experiment_config.py).
+
+---
+
+## Data layout
+
+Benchmark datasets are not committed to this repository. Populate the following
+paths before running either pipeline.
+
+### LoCoMo
+
+Place the official conversation/QA file under `experiment/locomo/data/`:
+
+| File | Required | Purpose |
+|---|---|---|
+| `locomo10.json` | yes | Primary LoCoMo conversations and questions; `locomo.json` is also accepted |
+| `locomo_by_session.jsonl` | no | Session-oriented input; derived automatically when absent |
+
+For `--dataset locomo-plus`, the default filenames are
+`unified_input_samples_v2.json` and `locomo_plus_by_session.jsonl`. Override
+dataset paths with `--dataset-json` and `--sessions-jsonl`.
+
+### LongMemEval
+
+LongMem expects one preprocessed CSV per question under
+`experiment/longmem/script_data/<category>/`. The raw LongMemEval release is not
+read directly, and this repository does not include a converter.
+
+| Column | Required | Purpose |
+|---|---|---|
+| `session_id` | yes | Groups turns into a session |
+| `turn_index` | yes | Orders turns within the session |
+| `role` | yes | Identifies `user` and `assistant` rows |
+| `content` | yes | Contains the turn text |
+| `dialogue_datetime` | yes | Anchors relative-time normalization |
+| `question` | yes | Question for this CSV; configurable with `question_column` |
+| `answer` | no | Gold answer used by the judge |
+| `question_date` | no | Query time; falls back to available dialogue/date fields |
+
+Categories include `single_session_user`, `single_session_assistant`,
+`single_session_preference`, `multi_session`, `temporal_reasoning`, and
+`knowledge_update`.
 
 ---
 
@@ -202,7 +246,7 @@ RERANKER_PARAMS  = dict(use_reranker=True, reranker_topk=10, ...)
 
 - **Ingest params** (`prev_k`, `entity_sim_topk`, `entity_sim_threshold`): edit `INGEST_PARAMS`; for LoCoMo you can also override on `pipeline.py` with `--prev-k`, `--entity-sim-topk`, `--entity-sim-threshold`.
 - **`chunk_turns`** (**LoCoMo only**, default 8): turns per ingest chunk; override per run with `--chunk-turns`. Note that `summary_direct_vector_topn` / `summary_rerank_topk` in `RERANKER_PARAMS` were tuned against whole-session summaries, so changing `chunk_turns` changes the candidate-pool size and those values are worth re-sweeping.
-- **`use_split_summary`** (**LongMem only**, default `True`): when true, the LongMem pipeline rebuilds each artifact's `summaries_chroma` into `:u` / `:a` entry pairs right after ingest, and retrieval is set to `split_single_entry_raw=False` to match. Set it to `False` to keep what the Ingestor wrote and skip the rebuild. One flag drives both halves on purpose — see [Two artifact layouts](../readme.md#two-artifact-layouts). Do not set `split_single_entry_raw` by hand.
+- **`use_split_summary`** (**LongMem only**, default `True`): when true, the LongMem pipeline rebuilds each artifact's `summaries_chroma` into `:u` / `:a` entry pairs right after ingest, and retrieval is set to `split_single_entry_raw=False` to match. Set it to `False` to keep what the Ingestor wrote and skip the rebuild. One flag drives both halves on purpose; see [Benchmark pipelines](../README.md#benchmark-pipelines). Do not set `split_single_entry_raw` by hand.
 - **Retrieval params** (`ent_topk`, `rel_topk`, `*_threshold`, `filter_*`, `summary_*`): edit `RETRIEVAL_PARAMS`; read by `rag_answer()` in `qa_eval.py`.
 - **Reranker params** (`use_reranker`, `reranker_threshold`, `reranker_topk`): edit `RERANKER_PARAMS`; applied when building the retriever.
 
