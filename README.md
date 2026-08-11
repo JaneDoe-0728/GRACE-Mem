@@ -343,12 +343,6 @@ of an unpublished reference score.
 | [Agent Filter guide](experiment/agent_filter/README.md) | Evidence refinement, VECTOR, adjudication, and traces |
 | [.env example](.env.example) | Runtime endpoint and graph configuration |
 
-## Release Status
-
-- No official GRACE-Mem paper citation has been provided in this repository.
-- A canonical paper configuration and expected-score table have not yet been
-  published for exact result comparison.
-
 ## License
 
 GRACE-Mem is released under the [MIT License](LICENSE).
