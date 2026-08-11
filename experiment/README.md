@@ -226,6 +226,7 @@ uv run python experiment/score.py <run-tag>
 
 The exact carry/rejudge rule, LongMemEval abstention handling, result columns,
 and aggregate files are defined in the [evaluation protocol](../EVALUATION.md).
+The same document defines the gold-evidence oracle and its context-window rule.
 
 ## Shared Configuration
 

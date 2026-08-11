@@ -111,6 +111,24 @@ Pass `--agent` to include fallback/kept/added/dropped metrics from Agent Filter
 traces, `--column <name>` for a deliberate legacy/custom comparison, or
 `--json <path>` for machine-readable output.
 
+## Gold-Evidence Oracle
+
+The shared oracle answers from annotated gold turns without running retrieval:
+
+```bash
+uv run python experiment/oracle.py locomo oracle-locomo --samples 0-9
+uv run python experiment/oracle.py longmem oracle-longmem
+```
+
+`--window 0` uses only annotated turns. `--window N` includes N neighboring
+turns on each side within the same session. LoCoMo image captions are excluded
+unless `--include-photo` is supplied. Use a different run tag for each window or
+photo condition.
+
+Oracle generation writes the normal benchmark output layout. Pass `--judge` to
+run the standardized judge immediately, or run `experiment/judge.py` separately.
+Every oracle output includes `oracle_config.json` with the resolved settings.
+
 ## Reproducibility Checklist
 
 For every reported run, retain:

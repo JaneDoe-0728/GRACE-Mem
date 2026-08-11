@@ -23,14 +23,15 @@ import pandas as pd
 from KG.llm import LLMClient
 from experiment.agent_filter.corpus import load_corpus
 from experiment.agent_filter.harness import refine_context
-from experiment.agent_filter.oracle_eval import gold_sids
+from experiment.oracle import longmem_gold_sids
 
 DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
 
 
 def fake_retrieved_context(src_csv: Path, *, drop_gold: int, n_distractors: int) -> tuple[str, list[str], list[str]]:
     corpus = load_corpus(src_csv)
-    gold = corpus.normalize_sids(gold_sids(src_csv))
+    frame = pd.read_csv(src_csv, encoding="utf-8-sig")
+    gold = corpus.normalize_sids(longmem_gold_sids(frame))
     kept_gold = gold[:-drop_gold] if drop_gold else gold
     gold_set = set(gold)
     distractors = [t.sid for t in corpus.turns[:: max(1, len(corpus.turns) // (n_distractors * 3))]

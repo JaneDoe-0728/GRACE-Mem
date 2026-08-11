@@ -96,6 +96,7 @@ modules = (
     'experiment.longmem.analysis.collect',
     'experiment.longmem.analysis.summarize',
     'experiment.locomo.vote_merge',
+    'experiment.oracle',
     'experiment.score',
 )
 for module_name in modules:
