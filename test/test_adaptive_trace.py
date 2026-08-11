@@ -1,44 +1,7 @@
-import sys
-import types
+from types import SimpleNamespace
+from unittest.mock import Mock
 
-
-def _install_retriever_import_stubs() -> None:
-    keyword_module = types.ModuleType("KG.llm.prompts.keyword.extraction")
-    keyword_module.keyword_extraction_PROMPT = ""
-    sys.modules["KG.llm.prompts.keyword.extraction"] = keyword_module
-
-    utils_module = types.ModuleType("KG.utils.utils")
-    utils_module.KeywordExtractionResult = object
-    sys.modules["KG.utils.utils"] = utils_module
-
-    logger_module = types.ModuleType("KG.utils.logger_config")
-
-    class _DummyTimer:
-        def sec(self) -> float:
-            return 0.0
-
-    logger_module._StepTimer = _DummyTimer
-    logger_module.make_module_jlog = lambda **_: (lambda *args, **kwargs: None)
-    sys.modules["KG.utils.logger_config"] = logger_module
-
-    cache_module = types.ModuleType("KG.storage.cache")
-    cache_module.build_id_to_meta_maps = lambda *args, **kwargs: ({}, {})
-    sys.modules["KG.storage.cache"] = cache_module
-
-    retrieval_module = types.ModuleType("KG.pipeline.retrieval_steps")
-
-    class _DummyComponent:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    retrieval_module.EntityRelationshipSearcher = _DummyComponent
-    retrieval_module.TemporalRelevanceCalculator = _DummyComponent
-    retrieval_module.EvidenceBuilder = _DummyComponent
-    retrieval_module.ContextFilter = _DummyComponent
-    sys.modules["KG.pipeline.retrieval_steps"] = retrieval_module
-
-
-_install_retriever_import_stubs()
+import pytest
 
 from KG.pipeline.retriever import Retriever
 
@@ -115,3 +78,47 @@ def test_triggered_trace_computes_overlap_from_pre_merge_pass_sets():
     assert trace["entity_overlap_pct"] == 1 / 3
     assert trace["relation_overlap_count"] == 0
     assert trace["relation_overlap_pct"] == 0.0
+
+
+def test_adaptive_research_closes_temporary_graph_when_pass2_fails(monkeypatch):
+    from KG.pipeline.retrieval_steps import adaptive
+
+    temporary_graph = Mock()
+    monkeypatch.setattr(adaptive, "compute_confidence", Mock(return_value=0.1))
+    monkeypatch.setattr(adaptive, "build_adaptive_llm_client", Mock(return_value=object()))
+    monkeypatch.setattr(adaptive, "rewrite_query", Mock(return_value=("rewritten", 0.01)))
+    monkeypatch.setattr(adaptive, "build_adaptive_graph", Mock(return_value=temporary_graph))
+
+    retriever = _retriever_without_init()
+    retriever.cfg = SimpleNamespace(
+        tau_confidence=0.5,
+        adaptive_threshold_scale=0.8,
+    )
+    retriever.MGR = object()
+    retriever.generate_query_keywords = Mock(
+        return_value=SimpleNamespace(low_level_keywords=[], high_level_keywords=[])
+    )
+    retriever.assemble_context_from_query = Mock(
+        side_effect=RuntimeError("pass2 retrieval failed")
+    )
+
+    with pytest.raises(RuntimeError, match="pass2 retrieval failed"):
+        retriever._adaptive_research(
+            question="original",
+            ctx_entities=[{"id": "e1"}],
+            ctx_rels=[{"rel_id": "r1"}],
+            ctx_text="context",
+            query_vec=object(),
+            request_id="request-1",
+            ent_topk=5,
+            rel_topk=5,
+            ent_threshold=0.5,
+            rel_threshold=0.5,
+            filter_ent_topk=5,
+            filter_rel_topk=5,
+            filter_ent_threshold=0.5,
+            filter_rel_threshold=0.5,
+            query_time=None,
+        )
+
+    temporary_graph.close.assert_called_once_with()

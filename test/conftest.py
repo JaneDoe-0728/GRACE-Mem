@@ -12,7 +12,6 @@ collect_ignore = [
     "test_reranker.py",
     "test_sa_retrieve.py",
     "test_update.py",
-    # These contracts have no matching implementation in the tracked repository.
+    # This contract targets an analysis package absent from the tracked repository.
     "test_benchmark_analysis_imports.py",
-    "test_adaptive_trace.py",
 ]

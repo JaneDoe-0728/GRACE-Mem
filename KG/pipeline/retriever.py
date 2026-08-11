@@ -1790,6 +1790,70 @@ class Retriever:
         )
         return result
 
+    @staticmethod
+    def _compute_overlap_metrics(
+        pass1_ids: List[str],
+        pass2_ids: List[str],
+    ) -> Tuple[int, Optional[float]]:
+        """Return intersection size and Jaccard overlap for unique IDs."""
+        pass1 = set(pass1_ids)
+        pass2 = set(pass2_ids)
+        union = pass1 | pass2
+        if not union:
+            return 0, None
+        overlap_count = len(pass1 & pass2)
+        return overlap_count, overlap_count / len(union)
+
+    def _build_adaptive_trace(
+        self,
+        *,
+        pass2_triggered: bool,
+        pass1_entity_ids: List[str],
+        pass1_relation_ids: List[str],
+        pass2_entity_ids: Optional[List[str]] = None,
+        pass2_relation_ids: Optional[List[str]] = None,
+        conf_pass1: Optional[float] = None,
+        conf_pass2: Optional[float] = None,
+        conf_final: Optional[float] = None,
+        rewritten_query: Optional[str] = None,
+        adaptive_skip_reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Build a stable trace from pre-merge pass results."""
+        entity_ids_2 = list(pass2_entity_ids or []) if pass2_triggered else []
+        relation_ids_2 = list(pass2_relation_ids or []) if pass2_triggered else []
+        if pass2_triggered:
+            entity_overlap_count, entity_overlap_pct = self._compute_overlap_metrics(
+                pass1_entity_ids,
+                entity_ids_2,
+            )
+            relation_overlap_count, relation_overlap_pct = self._compute_overlap_metrics(
+                pass1_relation_ids,
+                relation_ids_2,
+            )
+        else:
+            entity_overlap_count = relation_overlap_count = 0
+            entity_overlap_pct = relation_overlap_pct = None
+
+        config = getattr(self, "cfg", None)
+        trace = {
+            "pass2_triggered": pass2_triggered,
+            "conf_pass1": conf_pass1,
+            "conf_pass2": conf_pass2,
+            "conf_final": conf_final,
+            "tau_confidence": getattr(config, "tau_confidence", None),
+            "rewritten_query": rewritten_query,
+            "adaptive_skip_reason": adaptive_skip_reason,
+            "pass1_entity_ids": list(pass1_entity_ids),
+            "pass2_entity_ids": entity_ids_2,
+            "pass1_relation_ids": list(pass1_relation_ids),
+            "pass2_relation_ids": relation_ids_2,
+            "entity_overlap_count": entity_overlap_count,
+            "entity_overlap_pct": entity_overlap_pct,
+            "relation_overlap_count": relation_overlap_count,
+            "relation_overlap_pct": relation_overlap_pct,
+        }
+        return trace
+
     def _adaptive_research(
         self,
         *,
@@ -1865,12 +1929,13 @@ class Retriever:
                 conf_final=conf_1,
                 elapsed_sec=timer_adaptive.sec(),
             )
-            self._last_adaptive_trace = {
-                "pass2_triggered": False,
-                "conf_pass1": conf_1,
-                "conf_final": conf_1,
-                "tau_confidence": self.cfg.tau_confidence,
-            }
+            self._last_adaptive_trace = self._build_adaptive_trace(
+                pass2_triggered=False,
+                pass1_entity_ids=ent_ids_1,
+                pass1_relation_ids=rel_ids_1,
+                conf_pass1=conf_1,
+                conf_final=conf_1,
+            )
             return ctx_entities, ctx_rels, ctx_text, query_vec
 
         # --- Rewrite query ---
@@ -1895,14 +1960,15 @@ class Retriever:
         if rewritten_q.strip() == question.strip():
             _jlog("adaptive_skip", request_id, reason="rewrite_identical")
             print("[Adaptive] Rewrite returned original query — skipping pass-2.")
-            self._last_adaptive_trace = {
-                "pass2_triggered": False,
-                "conf_pass1": conf_1,
-                "conf_final": conf_1,
-                "tau_confidence": self.cfg.tau_confidence,
-                "rewritten_query": rewritten_q,
-                "adaptive_skip_reason": "rewrite_identical",
-            }
+            self._last_adaptive_trace = self._build_adaptive_trace(
+                pass2_triggered=False,
+                pass1_entity_ids=ent_ids_1,
+                pass1_relation_ids=rel_ids_1,
+                conf_pass1=conf_1,
+                conf_final=conf_1,
+                rewritten_query=rewritten_q,
+                adaptive_skip_reason="rewrite_identical",
+            )
             return ctx_entities, ctx_rels, ctx_text, query_vec
 
         # --- Pass-2 graph ---
@@ -1913,37 +1979,41 @@ class Retriever:
         except EnvironmentError as exc:
             _jlog("adaptive_graph_error", request_id, step="2b", error=str(exc))
 
-        # --- Pass-2 keywords ---
-        kw2 = self.generate_query_keywords(rewritten_q, request_id=request_id)
+        try:
+            # --- Pass-2 keywords ---
+            kw2 = self.generate_query_keywords(rewritten_q, request_id=request_id)
 
-        # --- Pass-2 retrieval with relaxed filter thresholds ---
-        scale = self.cfg.adaptive_threshold_scale
-        timer_p2 = _StepTimer()
-        _jlog(
-            "adaptive_pass2_start",
-            request_id,
-            step="2b",
-            rewritten_query=rewritten_q,
-            filter_ent_threshold_scaled=filter_ent_threshold * scale,
-            filter_rel_threshold_scaled=filter_rel_threshold * scale,
-            graph_override=bool(local_graph is not None),
-        )
-        ctx2_entities, ctx2_rels, ctx2_text, query_vec2 = self.assemble_context_from_query(
-            question=rewritten_q,
-            low_level_keywords=kw2.low_level_keywords,
-            high_level_keywords=kw2.high_level_keywords,
-            request_id=request_id,
-            ent_topk=ent_topk,
-            rel_topk=rel_topk,
-            ent_threshold=ent_threshold,
-            rel_threshold=rel_threshold,
-            filter_ent_topk=filter_ent_topk,
-            filter_rel_topk=filter_rel_topk,
-            filter_ent_threshold=filter_ent_threshold * scale,
-            filter_rel_threshold=filter_rel_threshold * scale,
-            query_time=query_time,
-            _graph=local_graph,
-        )
+            # --- Pass-2 retrieval with relaxed filter thresholds ---
+            scale = self.cfg.adaptive_threshold_scale
+            timer_p2 = _StepTimer()
+            _jlog(
+                "adaptive_pass2_start",
+                request_id,
+                step="2b",
+                rewritten_query=rewritten_q,
+                filter_ent_threshold_scaled=filter_ent_threshold * scale,
+                filter_rel_threshold_scaled=filter_rel_threshold * scale,
+                graph_override=bool(local_graph is not None),
+            )
+            ctx2_entities, ctx2_rels, ctx2_text, query_vec2 = self.assemble_context_from_query(
+                question=rewritten_q,
+                low_level_keywords=kw2.low_level_keywords,
+                high_level_keywords=kw2.high_level_keywords,
+                request_id=request_id,
+                ent_topk=ent_topk,
+                rel_topk=rel_topk,
+                ent_threshold=ent_threshold,
+                rel_threshold=rel_threshold,
+                filter_ent_topk=filter_ent_topk,
+                filter_rel_topk=filter_rel_topk,
+                filter_ent_threshold=filter_ent_threshold * scale,
+                filter_rel_threshold=filter_rel_threshold * scale,
+                query_time=query_time,
+                _graph=local_graph,
+            )
+        finally:
+            if local_graph is not None:
+                local_graph.close()
 
         ent_ids_2 = [e["id"] for e in ctx2_entities]
         rel_ids_2 = [r["rel_id"] for r in ctx2_rels]
@@ -1992,18 +2062,17 @@ class Retriever:
             merged_relationship_count=len(merged_rels),
             elapsed_sec=timer_adaptive.sec(),
         )
-        self._last_adaptive_trace = {
-            "pass2_triggered": True,
-            "conf_pass1": conf_1,
-            "conf_pass2": conf_2,
-            "conf_final": conf_merged,
-            "tau_confidence": self.cfg.tau_confidence,
-            "rewritten_query": rewritten_q,
-            "pass1_entity_ids": ent_ids_1,
-            "pass2_entity_ids": ent_ids_2,
-            "pass1_relation_ids": rel_ids_1,
-            "pass2_relation_ids": rel_ids_2,
-        }
+        self._last_adaptive_trace = self._build_adaptive_trace(
+            pass2_triggered=True,
+            pass1_entity_ids=ent_ids_1,
+            pass1_relation_ids=rel_ids_1,
+            pass2_entity_ids=ent_ids_2,
+            pass2_relation_ids=rel_ids_2,
+            conf_pass1=conf_1,
+            conf_pass2=conf_2,
+            conf_final=conf_merged,
+            rewritten_query=rewritten_q,
+        )
         return merged_entities, merged_rels, merged_text, query_vec
 
     def _additive_merge(
@@ -2422,6 +2491,10 @@ class Retriever:
                 "pass2_entity_ids": adaptive_trace.get("pass2_entity_ids", []),
                 "pass1_relation_ids": adaptive_trace.get("pass1_relation_ids", [relationship["rel_id"] for relationship in ctx_rels]),
                 "pass2_relation_ids": adaptive_trace.get("pass2_relation_ids", []),
+                "entity_overlap_count": adaptive_trace.get("entity_overlap_count", 0),
+                "entity_overlap_pct": adaptive_trace.get("entity_overlap_pct"),
+                "relation_overlap_count": adaptive_trace.get("relation_overlap_count", 0),
+                "relation_overlap_pct": adaptive_trace.get("relation_overlap_pct"),
                 "final_entity_ids": [entity["id"] for entity in ctx_entities],
                 "final_entity_names": [entity.get("name") or entity.get("id") for entity in ctx_entities],
                 "final_relationship_ids": [relationship["rel_id"] for relationship in ctx_rels],
