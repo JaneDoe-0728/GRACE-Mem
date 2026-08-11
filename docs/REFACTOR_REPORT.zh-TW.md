@@ -270,14 +270,14 @@ commit `ea5d063` 到 `4a27d01` 為止的變更。
 
 ### LongMem/Noco（30）
 
-- `experiment/longmem/agent_filter/grep_reachability.py`
-- `experiment/longmem/agent_filter/oracle_eval.py`
-- `experiment/longmem/agent_filter/replay_run.py`
-- `experiment/longmem/agent_filter/resample_replay.py`
-- `experiment/longmem/agent_filter/score_all.py`
-- `experiment/longmem/agent_filter/score_f1_bleu.py`
-- `experiment/longmem/agent_filter/smoke_test.py`
-- `experiment/longmem/agent_filter/tribunal.py`
+- `experiment/agent_filter/grep_reachability.py`
+- `experiment/agent_filter/oracle_eval.py`
+- `experiment/agent_filter/replay_run.py`
+- `experiment/agent_filter/resample_replay.py`
+- `experiment/agent_filter/score_all.py`
+- `experiment/agent_filter/score_f1_bleu.py`
+- `experiment/agent_filter/smoke_test.py`
+- `experiment/agent_filter/tribunal.py`
 - `experiment/longmem/analysis/collect.py`
 - `experiment/longmem/analysis/summarize.py`
 - `experiment/longmem/gold_recall_metrics.py`

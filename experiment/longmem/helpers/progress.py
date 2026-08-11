@@ -21,13 +21,6 @@ PROGRESS_COLUMNS = [
 ]
 
 
-def build_noco_table_name(*, run_tag: str | None, target_name: str) -> str:
-    """Build the canonical LongMem NocoDB table name."""
-
-    normalized_run_tag = (run_tag or "").strip()
-    return f"{normalized_run_tag}_{target_name}" if normalized_run_tag else target_name
-
-
 def progress_path(base_output_dir: Path, filename: str = "progress.csv") -> Path:
     return base_output_dir / filename
 

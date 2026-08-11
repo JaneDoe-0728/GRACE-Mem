@@ -540,7 +540,7 @@ def run_locomo(args: argparse.Namespace) -> int:
         if args.dry_run:
             continue
         stats = _score_locomo(output_paths, target_col, args.include_adversarial)
-        aggregate = run_dir / "_correctness_aggregate.json"
+        aggregate = run_dir / f"_correctness_aggregate_{target_col}.json"
         aggregate.write_text(json.dumps(stats, indent=2) + "\n")
         print(f"[{run_tag}] {target_col}={stats['accuracy_percent']}% ({stats['correct']}/{stats['total']})")
     return 0
@@ -601,6 +601,53 @@ def _judge_longmem_file(
     return judged, skipped, target_col
 
 
+def _score_longmem(
+    paths: Iterable[Path],
+    *,
+    votes: int,
+    column: str | None,
+) -> dict:
+    total = correct = 0
+    by_category: dict[str, list[int]] = {}
+    for path in paths:
+        frame = pd.read_csv(path, encoding="utf-8-sig")
+        is_abstention = path.stem.endswith("_abs")
+        target_col = column or (
+            ABSTENTION_COLUMN
+            if is_abstention
+            else (SINGLE_VOTE_COLUMN if votes == 1 else MAJORITY_VOTE_COLUMN)
+        )
+        if frame.empty or target_col not in frame.columns:
+            continue
+        verdict = as_binary(frame.iloc[0].get(target_col))
+        if verdict is None:
+            continue
+        label = path.parent.name
+        correct += verdict
+        total += 1
+        bucket = by_category.setdefault(label, [0, 0])
+        bucket[0] += verdict
+        bucket[1] += 1
+    return {
+        "protocol": "longmem-final" if column is None and votes > 1 else "custom",
+        "columns": {
+            "general": column or (SINGLE_VOTE_COLUMN if votes == 1 else MAJORITY_VOTE_COLUMN),
+            "abstention": column or ABSTENTION_COLUMN,
+        },
+        "correct": correct,
+        "total": total,
+        "accuracy_percent": round(100 * correct / total, 2) if total else None,
+        "by_category": {
+            label: {
+                "correct": values[0],
+                "total": values[1],
+                "accuracy_percent": round(100 * values[0] / values[1], 2),
+            }
+            for label, values in sorted(by_category.items())
+        },
+    }
+
+
 def run_longmem(args: argparse.Namespace) -> int:
     output_root = Path(args.output_root)
     client_factory = _client_factory(args)
@@ -639,6 +686,18 @@ def run_longmem(args: argparse.Namespace) -> int:
                 total_skipped += skipped
                 if judged:
                     print(f"[{run_tag}/{path.parent.name}/{path.name}] judged={judged} target={target}")
+        if not args.dry_run:
+            stats = _score_longmem(
+                (path for path, _ in jobs),
+                votes=args.votes,
+                column=args.column,
+            )
+            aggregate = run_dir / "_correctness_aggregate_judge.json"
+            aggregate.write_text(json.dumps(stats, indent=2) + "\n")
+            print(
+                f"[{run_tag}] final={stats['accuracy_percent']}% "
+                f"({stats['correct']}/{stats['total']})"
+            )
     print(f"Done. judged={total_judged} skipped={total_skipped}")
     return 0
 

@@ -57,7 +57,7 @@ from experiment.longmem.stage_adapter import (
     rewrite_temporal_question as shared_rewrite_temporal_question,
     single_result_frame,
 )
-from experiment.longmem.stages import IngestStage, JudgeStage, QAEvalStage, UploadStage
+from experiment.longmem.stages import IngestStage, JudgeStage, QAEvalStage
 from experiment.longmem.utils.io import append_jsonl, ensure_dir, read_csv_frame, write_csv_frame
 from KG.utils.error_analysis import (
     append_analysis_record,
@@ -82,17 +82,11 @@ class MultiDatasetProcessor:
     def __init__(
         self,
         base_output_dir: str = "./experiment/longmem/output/default/multi_session",
-        *,
-        upload_nocodb: bool = False,
-        noco_table_name: str | None = None,
     ):
         self.base_output_dir = Path(base_output_dir)
         ensure_dir(self.base_output_dir)
-        self.upload_nocodb = upload_nocodb
-        self.noco_table_name = noco_table_name
 
-        # Shared runtime components are loaded lazily so upload-only runs
-        # do not require graph / embedding initialization.
+        # Shared runtime components are loaded lazily.
         self.llm = None
         self.graph = None
         self.embedder = None
@@ -114,7 +108,6 @@ class MultiDatasetProcessor:
         self.ingest_stage = IngestStage()
         self.qa_stage = QAEvalStage()
         self.judge_stage = JudgeStage()
-        self.upload_stage = UploadStage()
 
     def close(self) -> None:
         """Release dataset-local and shared runtime resources once."""
@@ -435,7 +428,7 @@ class MultiDatasetProcessor:
         config: DatasetConfig,
         question_date: str | None,
     ) -> str:
-        from experiment.longmem.agent_filter.harness import maybe_refine_context
+        from experiment.agent_filter.harness import maybe_refine_context
 
         return maybe_refine_context(
             question=question,
@@ -1072,8 +1065,7 @@ class MultiDatasetProcessor:
         return shared_load_progress(self.base_output_dir)
 
     def _save_progress_row(self, dataset: str, status: str, correctness: str = "",
-                           question: str = "", gold_answer: str = "", generated_answer: str = "",
-                           upload: bool = True):
+                           question: str = "", gold_answer: str = "", generated_answer: str = ""):
         row = {
             "dataset": dataset,
             "status": status,
@@ -1086,13 +1078,6 @@ class MultiDatasetProcessor:
             self.base_output_dir,
             **row,
         )
-
-        try:
-            if self.upload_nocodb and upload:
-                table_name = self.noco_table_name or self.base_output_dir.name
-                self.upload_stage.upsert_progress_row(table_name=table_name, row=row)
-        except Exception as exc:
-            logger.warning("NocoDB upsert skipped: %s", exc)
 
     def _init_progress_rows(self, configs: List[DatasetConfig]):
         shared_init_progress_rows(self.base_output_dir, [cfg.name for cfg in configs])
@@ -1117,10 +1102,9 @@ class MultiDatasetProcessor:
             run_judge: If True, run LLM-as-judge after each QA and record
                        correctness in progress.csv and the individual output CSV.
         """
-        selected_stages = set(stages or {"ingest", "qa_eval", "judge", "upload"})
+        selected_stages = set(stages or {"ingest", "qa_eval", "judge"})
         run_ingest = "ingest" in selected_stages
         run_qa = "qa_eval" in selected_stages
-        run_upload = "upload" in selected_stages
         run_judge = run_judge and "judge" in selected_stages
 
         results = []
@@ -1144,7 +1128,6 @@ class MultiDatasetProcessor:
         print(f"# Progress tracker: {self._progress_path()}")
         print(f"# Stages: {', '.join(sorted(selected_stages))}")
         print(f"# Judge enabled: {run_judge}")
-        print(f"# NocoDB upload: {self.upload_nocodb and run_upload}")
         print(f"{'#'*60}")
 
         for i, config in enumerate(configs, start=1):
@@ -1220,7 +1203,6 @@ class MultiDatasetProcessor:
                         question=question,
                         gold_answer=gold,
                         generated_answer=generated,
-                        upload=False,
                     )
                 else:
                     correctness = str(progress_data.get("correctness", correctness))
@@ -1248,24 +1230,6 @@ class MultiDatasetProcessor:
                         ],
                     )
                     merged_done.add(config.name)
-
-                if run_upload and self.upload_nocodb:
-                    try:
-                        table_name = self.noco_table_name or self.base_output_dir.name
-                        print(f"[UPLOAD] Upserting dataset {config.name} into NocoDB table '{table_name}'")
-                        self.upload_stage.upsert_progress_row(
-                            table_name=table_name,
-                            row={
-                                "dataset": config.name,
-                                "status": status,
-                                "correctness": correctness,
-                                "question": question,
-                                "gold_answer": gold,
-                                "generated_answer": generated,
-                            },
-                        )
-                    except Exception as exc:
-                        logger.warning("NocoDB upsert skipped: %s", exc)
 
                 print(f"\n✅ Dataset {config.name} completed successfully!")
 
@@ -1296,16 +1260,5 @@ class MultiDatasetProcessor:
             print(f"\n📊 Merged CSV: {merged_csv_path}")
             print(f"📋 Progress:   {self._progress_path()}")
             print(f"   Total: {len(successful)} datasets successfully processed")
-            if run_upload and self.upload_nocodb:
-                try:
-                    table_name = self.noco_table_name or self.base_output_dir.name
-                    print(f"[UPLOAD] Upserting accuracy summary into NocoDB table '{table_name}'")
-                    self.upload_stage.upsert_accuracy_summary(
-                        table_name=table_name,
-                        progress_df=self._load_progress(),
-                    )
-                except Exception as exc:
-                    logger.warning("NocoDB accuracy summary upsert skipped: %s", exc)
-
         return results
     

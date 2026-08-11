@@ -163,8 +163,7 @@ GREP_AGENT_PARAMS = dict(
     grep_agent_filter_include_graph_context=False,
     grep_agent_answer_include_graph_context=True,
     grep_agent_graph_context_max_chars=12000,
-    # evidence_floor 盲補按 rerank 原序硬塞、繞過 agent 決定,對 accuracy 零貢獻
-    # (見 docs/analysis/grep-vs-adjudicate-cross-model.md §三)。全域關閉:0=不盲補。
+    # evidence_floor 盲補按 rerank 原序硬塞、繞過 agent 決定,全域關閉:0=不盲補。
     grep_agent_evidence_floor=0,
     # 選中 sid 的 pair 夥伴(同一 exchange 的另一側)一併放入最終 context,
     # 修復「agent 選到正確 pair 的錯誤一側」的失誤。
@@ -188,7 +187,7 @@ GREP_AGENT_PARAMS = dict(
     # ── Sufficiency 迴圈 ──────────────────────────────────────────────────
     # FINAL 後由獨立 verifier 判斷證據是否足以完整回答;不足則帶著「缺什麼」
     # 的 hint 讓 agent 補搜(只加不刪,單調遞增)。0 = 關閉。
-    grep_agent_verify_rounds=0,  # v3-v6 四變體皆 ≤ v2:sufficiency 蓋棺,預設關(見 agent_filter/README)
+    grep_agent_verify_rounds=0,  # Disabled by default; see experiment/agent_filter/README.md.
     grep_agent_verify_max_calls=4,
     grep_agent_verify_categories=("multi_session", "knowledge_update"),
     # 缺口向量補搜:verifier 判不足時,把「question+missing」embed 查 summaries VDB,

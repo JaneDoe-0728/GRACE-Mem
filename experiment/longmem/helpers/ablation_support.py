@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import importlib.util
 import logging
-import os
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -61,12 +59,6 @@ VARIANTS: dict[str, dict] = {
         "summary_topk_per_item": 8,
     },
 }
-
-NOCO_TABLE = "ablation_results"
-_noco_client = None
-_noco_project_id = None
-_noco_table_id = None
-
 
 def scenario_output_root(run_tag: str, scenario: str) -> Path:
     return output_dir_for(run_tag, SCENARIO_TO_TYPE[scenario])
@@ -140,69 +132,6 @@ def write_config(retrieval: dict, reranker: dict) -> None:
 
 def latest_summary(output_dir: Path) -> Path | None:
     return latest_glob_match(output_dir, "rerun_summary_*.json")
-
-
-def ensure_noco_columns(client, table_id: str, row: dict[str, Any]) -> None:
-    schema = client.get_table_schema(table_id)
-    existing_cols = {column["column_name"].lower() for column in schema["columns"]}
-    for column in row:
-        if column.lower() not in existing_cols:
-            uidt = "LongText" if column in ("changed_params",) else "SingleLineText"
-            client.create_column(table_id, column_name=column, column_title=column, uidt=uidt)
-
-
-def get_noco_client():
-    global _noco_client, _noco_project_id
-    if _noco_client is not None:
-        return _noco_client
-
-    from dotenv import load_dotenv
-
-    load_dotenv(ROOT / ".env")
-    load_dotenv(ROOT / "noco-db-uploader" / ".env")
-    os.environ.setdefault("NOCO_TARGETS_PATH", str(ROOT / "experiment" / "noco" / "noco_targets.yaml"))
-    noco_url = os.getenv("NOCO_URL")
-    api_token = os.getenv("API_TOKEN")
-    _noco_project_id = os.getenv("PROJECT_ID")
-    if not all([noco_url, api_token, _noco_project_id]):
-        raise EnvironmentError("NOCO_URL, API_TOKEN, PROJECT_ID must be set in .env")
-
-    sys.path.insert(0, str(ROOT / "noco-db-uploader"))
-    from src.noco_client import NocoDBClient
-
-    _noco_client = NocoDBClient(noco_url, api_token)
-    return _noco_client
-
-
-def get_noco_table_id(row: dict[str, Any]) -> str:
-    global _noco_table_id
-    if _noco_table_id is not None:
-        return _noco_table_id
-    client = get_noco_client()
-    try:
-        _noco_table_id = client.get_table_id_by_name(_noco_project_id, NOCO_TABLE)
-    except ValueError:
-        source_id = client.get_first_source_id(_noco_project_id)
-        _noco_table_id = client.create_table(_noco_project_id, source_id, NOCO_TABLE, NOCO_TABLE)
-        ensure_noco_columns(client, _noco_table_id, row)
-    return _noco_table_id
-
-
-def upsert_noco(row: dict[str, Any]) -> None:
-    try:
-        client = get_noco_client()
-        table_id = get_noco_table_id(row)
-        ensure_noco_columns(client, table_id, row)
-        record = {key: str(value) for key, value in row.items()}
-        variant = record.get("variant", "")
-        existing = client.list_records(_noco_project_id, table_id, where=f"(variant,eq,{variant})")
-        if existing:
-            client.update_record(_noco_project_id, table_id, existing[0]["Id"], record)
-        else:
-            client.insert_record(_noco_project_id, table_id, record)
-        print(f"  [NOCO] upserted variant={variant}")
-    except Exception as exc:
-        logger.warning("NocoDB upsert failed (non-fatal): %s", exc)
 
 
 def upsert_csv(row: dict[str, Any]) -> None:

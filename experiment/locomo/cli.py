@@ -24,7 +24,7 @@ except Exception:
     }
 
 
-VALID_STAGES = ("ingest", "qa_eval", "judge", "upload")
+VALID_STAGES = ("ingest", "qa_eval", "judge")
 DEFAULT_STAGES = VALID_STAGES
 RETRIEVAL_ONLY_STAGES = tuple(stage for stage in VALID_STAGES if stage != "ingest")
 
@@ -84,8 +84,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="STAGE",
         help=(
             "Stages to run. Default: full pipeline "
-            "(ingest qa_eval judge upload). "
-            "Examples: --stage ingest qa_eval, --stage judge upload"
+            "(ingest qa_eval judge). "
+            "Examples: --stage ingest qa_eval, --stage judge"
         ),
     )
     parser.add_argument("--out-root", default="experiment/locomo/output")
@@ -94,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-judge",
         action="store_true",
-        help="Skip judge, aggregation, and NocoDB upload",
+        help="Skip judge and correctness aggregation",
     )
     parser.add_argument(
         "--adv",
@@ -124,7 +124,6 @@ def build_parser() -> argparse.ArgumentParser:
         "Expected layout: <run>/sample_<id>/artifacts/summaries_meta.jsonl. "
         "When omitted, summaries are read from the dataset JSON's session_summary field.",
     )
-    parser.add_argument("--nocodb", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--build-snapshots", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--sample-index", type=int, help=argparse.SUPPRESS)

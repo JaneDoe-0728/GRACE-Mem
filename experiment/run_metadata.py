@@ -14,7 +14,6 @@ from experiment.reproducibility import attach_reproducibility_metadata
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _ENV_PATHS = {
     ".env": _REPO_ROOT / ".env",
-    "noco-db-uploader/.env": _REPO_ROOT / "noco-db-uploader" / ".env",
 }
 _SECRET_HINTS = (
     "KEY",

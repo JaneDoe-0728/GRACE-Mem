@@ -4,7 +4,7 @@
 移植設計(最小改動):
   - corpus 單位 = chunk(與 evidence sid 空間一致,sid = {sample}__{session}:{chunk});
     chunk 切分完全復刻 ingest(空 turn 過濾 + pos//N,同 locomo_gold_recall_metrics)
-  - agent harness 原封復用(experiment/longmem/agent_filter/harness.refine_context)
+  - agent harness 原封復用(experiment/agent_filter/harness.refine_context)
   - 答題 prompt 復刻 stages/qa_eval.py 的原版(含 conversation_date note),保可比性
 
 Usage:
@@ -31,10 +31,10 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 
 from KG.llm import LLMClient
-from experiment.longmem.agent_filter.corpus import Corpus, Turn
-from experiment.longmem.agent_filter.harness import refine_context
-from experiment.longmem.agent_filter.ledger import append_ledger, compile_table
-from experiment.longmem.agent_filter.skills import SKILLS as _SKILLS
+from experiment.agent_filter.corpus import Corpus, Turn
+from experiment.agent_filter.harness import refine_context
+from experiment.agent_filter.ledger import append_ledger, compile_table
+from experiment.agent_filter.skills import SKILLS as _SKILLS
 _TEMPORAL_DET = dict((n, d) for n, d, _ in _SKILLS)["temporal-computation"]
 
 DATA_JSON = _ROOT / "experiment" / "locomo" / "data" / "locomo10.json"

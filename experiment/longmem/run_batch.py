@@ -4,8 +4,8 @@ Practical Example: Process Multiple Datasets
 This script automatically processes all CSV files in a folder with the same configuration.
 
 Usage:
-    python run_batch.py --stage upload
-    python run_batch.py --stage upload --child
+    python run_batch.py
+    python run_batch.py --stage qa_eval judge
 """
 
 import argparse
@@ -20,7 +20,6 @@ if __package__ in (None, ""):
 from experiment.longmem.processor import MultiDatasetProcessor
 from experiment.longmem.helpers.args import add_child_args, add_data_args, add_run_args, resolve_stages
 from experiment.longmem.helpers.datasets import discover_csv_datasets, resolve_child_datasets, select_datasets
-from experiment.longmem.helpers.progress import build_noco_table_name
 from experiment.longmem.models import DatasetConfig
 from experiment.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.longmem.utils.io import write_json_file
@@ -188,7 +187,6 @@ def main(argv: list[str] | None = None):
         env_value=os.environ.get("MDQA_STAGES"),
         no_judge=not run_judge,
     )
-    upload_nocodb = "upload" in selected_stages
     dataset_selector = args.dataset_id or os.environ.get("MDQA_DATASET_ID", "").strip() or None
     num = args.num if args.num is not None else (
         int(os.environ["MDQA_NUM_DATASETS"]) if os.environ.get("MDQA_NUM_DATASETS") else None
@@ -285,13 +283,8 @@ def main(argv: list[str] | None = None):
         if num is not None:
             datasets = datasets[:num]
 
-        noco_table_name = build_noco_table_name(run_tag=run_tag, target_name=target_name)
-        if upload_nocodb:
-            print(f"[UPLOAD] Target '{target_name}' will sync to NocoDB table '{noco_table_name}'")
         with MultiDatasetProcessor(
             base_output_dir=str(output_dir),
-            upload_nocodb=upload_nocodb,
-            noco_table_name=noco_table_name,
         ) as processor:
             results = processor.process_all(
                 datasets,
@@ -311,7 +304,6 @@ def main(argv: list[str] | None = None):
             print(f"{'='*60}")
             print(f"Output directory: {processor.base_output_dir}")
             print(f"Summary file: {summary_path}")
-            print(f"NocoDB upload enabled: {upload_nocodb}")
             print(f"Stages: {', '.join(selected_stages)}")
             print(f"\nResults:")
 

@@ -1,4 +1,4 @@
-"""Pure summary calculations shared by aggregation and upload stages."""
+"""Pure summary calculations used by benchmark aggregation."""
 
 from __future__ import annotations
 

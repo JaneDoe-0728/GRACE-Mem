@@ -27,7 +27,7 @@ if __package__ in (None, ""):
 
 from experiment.longmem.helpers.args import DEFAULT_STAGES, add_child_args, add_data_args, add_rerun_args, add_run_args, resolve_stages
 from experiment.longmem.helpers.datasets import resolve_child_datasets, select_dataset_names, select_datasets
-from experiment.longmem.helpers.progress import append_stuck_history_entry, build_noco_table_name
+from experiment.longmem.helpers.progress import append_stuck_history_entry
 from experiment.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.longmem.utils.io import (
     append_type_subdir,
@@ -622,7 +622,6 @@ def _run_rerun_mode(
         rerun_accuracy,
     )
     from experiment.longmem.rerun import LongMemRerun
-    from experiment.longmem.stages.upload import UploadStage
 
     if not artifact_dir.exists():
         logger.error("Artifact dir not found: %s", artifact_dir)
@@ -678,7 +677,7 @@ def _run_rerun_mode(
 
     # Skip already-completed datasets for the default full rerun flow,
     # and for qa_eval-only runs(--stage qa_eval [--no-judge])——讓當機後
-    # 續跑不必整包重答(2026-07-16)。judge/upload 等部分 stage 流程不跳過。
+    # 續跑不必整包重答(2026-07-16)。judge-only 流程不跳過。
     if tuple(selected_stages) == tuple(DEFAULT_STAGES) or tuple(selected_stages) == ("qa_eval",):
         to_run = [name for name in all_datasets if not _rerun_dataset_complete(output_root, name)]
         already_done = total - len(to_run)
@@ -730,28 +729,6 @@ def _run_rerun_mode(
     if success:
         update_progress_rows(output_root, success, filename="progress.csv")
         update_all_answers_csv(output_root, success)
-        if "upload" in selected_stages:
-            upload_stage = UploadStage()
-            table_name = build_noco_table_name(
-                run_tag=args.run_tag,
-                target_name=output_root.name,
-            )
-            for row in success:
-                try:
-                    upload_stage.upsert_progress_row(
-                        table_name=table_name,
-                        row={
-                            "dataset": row.get("dataset", ""),
-                            "status": "judged" if str(row.get("correctness", "")).strip() != "" else "qa_complete",
-                            "correctness": str(row.get("correctness", "")),
-                            "question": str(row.get("question", "")),
-                            "gold_answer": str(row.get("gold", "")),
-                            "generated_answer": str(row.get("answer", "")),
-                        },
-                    )
-                except Exception as exc:
-                    logger.warning("[UPLOAD] NocoDB upsert skipped for %s: %s", row.get("dataset", ""), exc)
-
     if errors:
         logger.warning("Errors: %d", len(errors))
         for row in errors:

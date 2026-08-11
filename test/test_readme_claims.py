@@ -34,9 +34,9 @@ if str(REPO_ROOT) not in sys.path:
 
 DOCUMENTS = (
     REPO_ROOT / "README.md",
+    REPO_ROOT / "EVALUATION.md",
     REPO_ROOT / "experiment" / "README.md",
-    REPO_ROOT / "KG" / "ARCHITECTURE.md",
-    REPO_ROOT / "docs" / "architecture" / "import-graph.md",
+    REPO_ROOT / "experiment" / "agent_filter" / "README.md",
     REPO_ROOT / "test" / "README.md",
 )
 
@@ -252,10 +252,10 @@ DOCUMENTED_PATHS = [
     "experiment/experiment_config.py",
     "experiment/longmem/watchdog.py",
     "experiment/locomo/pipeline.py",
-    "experiment/longmem/agent_filter/replay_run.py",
-    "experiment/longmem/agent_filter/harness.py",
+    "experiment/agent_filter/replay_run.py",
+    "experiment/agent_filter/harness.py",
     "experiment/locomo/grep_replay.py",
-    "agent_filter/README.md",
+    "experiment/agent_filter/README.md",
     "docker-compose.yml",
     "setup_env.sh",
     "download_model.py",
@@ -388,7 +388,7 @@ def test_default_stage_model_matches_the_experiment_guide():
     from experiment.locomo.cli import DEFAULT_STAGES as LOCOMO_DEFAULT_STAGES
     from experiment.longmem.helpers.args import DEFAULT_STAGES as LONGMEM_DEFAULT_STAGES
 
-    expected = ("ingest", "qa_eval", "judge", "upload")
+    expected = ("ingest", "qa_eval", "judge")
     assert LOCOMO_DEFAULT_STAGES == expected
     assert LONGMEM_DEFAULT_STAGES == expected
 

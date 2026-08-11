@@ -58,9 +58,7 @@ CLI -> benchmark orchestration -> pipeline facades -> pipeline steps -> services
 
 `KG/` never imports benchmark code from `experiment/`. The static import graph is
 cycle-free, and runtime owners close graph, LLM, and dataset-local vector-store
-resources explicitly. See [KG/ARCHITECTURE.md](KG/ARCHITECTURE.md) and the
-[import dependency baseline](docs/architecture/import-graph.md) for package
-responsibilities and enforced boundaries.
+resources explicitly.
 
 ## Quick Start
 
@@ -140,8 +138,7 @@ uv run python experiment/longmem/watchdog.py \
   --type temporal_reasoning
 ```
 
-Both commands run the default `ingest -> qa_eval -> judge -> upload` stage set.
-NocoDB upload is best-effort when its credentials are not configured. Stage
+Both commands run the default `ingest -> qa_eval -> judge` stage set. Stage
 selection, resume behavior, retrieval-only runs, and output paths are covered in
 the [experiment guide](experiment/README.md).
 
@@ -234,7 +231,7 @@ experiment/
   locomo/         LoCoMo orchestration, stages, aggregation, and analysis
   longmem/        LongMemEval processor, watchdog, rerun, and analysis tools
 agent_filter/     Post-retrieval evidence-refinement documentation
-docs/             Design notes, dependency baseline, and change records
+docs/             Refactor report requested during repository preparation
 test/             Offline regression suite plus explicitly separated live probes
 ```
 
@@ -243,11 +240,9 @@ test/             Offline regression suite plus explicitly separated live probes
 | Document | Purpose |
 |---|---|
 | [Experiment guide](experiment/README.md) | Data layout, benchmark commands, stages, outputs, and recovery |
-| [KG architecture](KG/ARCHITECTURE.md) | Package ownership, public imports, runtime data, and boundaries |
-| [Import graph baseline](docs/architecture/import-graph.md) | Dependency direction, removed cycles, and runtime ownership |
-| [Agent Filter guide](agent_filter/README.md) | Evidence-refinement workflow and evaluation notes |
+| [Evaluation protocol](EVALUATION.md) | Standard judge model, voting rules, columns, commands, and scoring |
+| [Agent Filter guide](experiment/agent_filter/README.md) | Evidence-refinement workflow and evaluation notes |
 | [Test guide](test/README.md) | Offline suite, skips, expected failures, and manual probes |
-| [Readme/chunking change record](docs/CHANGES-2026-08-03.md) | Earlier retrieval and artifact-layout corrections |
 
 ## Validation
 

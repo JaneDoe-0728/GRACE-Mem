@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 
 
-VALID_STAGES = ("ingest", "qa_eval", "judge", "upload")
+VALID_STAGES = ("ingest", "qa_eval", "judge")
 DEFAULT_STAGES = VALID_STAGES
 RETRIEVAL_ONLY_STAGES = tuple(stage for stage in VALID_STAGES if stage != "ingest")
 
@@ -64,8 +64,8 @@ def add_run_args(parser: argparse.ArgumentParser) -> None:
         metavar="STAGE",
         help=(
             "Stages to run. Default: full pipeline "
-            "(ingest qa_eval judge upload). "
-            "Examples: --stage ingest qa_eval, --stage judge upload"
+            "(ingest qa_eval judge). "
+            "Examples: --stage ingest qa_eval, --stage judge"
         ),
     )
     parser.add_argument(
@@ -76,7 +76,7 @@ def add_run_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--run-tag",
         default=None,
-        help="Run identifier used in output paths and NocoDB table names",
+        help="Run identifier used in output paths",
     )
     parser.add_argument(
         "--num",

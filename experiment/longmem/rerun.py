@@ -26,11 +26,9 @@ from experiment.longmem.helpers.rerun_support import (
     rerun_accuracy,
     setup_retrieval_loggers,
 )
-from experiment.longmem.helpers.progress import build_noco_table_name
 from experiment.longmem.snapshot import restore_graph_from_cache
 from experiment.longmem.stages.judge import JudgeStage
 from experiment.longmem.stages.qa_eval import QAEvalStage
-from experiment.longmem.stages.upload import UploadStage
 from experiment.longmem.utils.io import append_type_subdir, ensure_dir, read_csv_frame
 from KG.utils.error_analysis import (
     append_analysis_record,
@@ -112,7 +110,7 @@ class LongMemRerun:
         no_judge: bool = False,
         stages: set[str] | None = None,
     ) -> dict:
-        selected_stages = set(stages or {"qa_eval", "judge", "upload"})
+        selected_stages = set(stages or {"qa_eval", "judge"})
         run_qa = "qa_eval" in selected_stages
         run_judge = "judge" in selected_stages and not no_judge
 
@@ -171,7 +169,7 @@ class LongMemRerun:
                     retrieval_params=RETRIEVAL_PARAMS,
                     query_time=question_date,
                 )
-                from experiment.longmem.agent_filter.harness import maybe_refine_context
+                from experiment.agent_filter.harness import maybe_refine_context
                 context = maybe_refine_context(
                     question=rewritten_q,
                     context=context,
@@ -495,27 +493,6 @@ def main(argv: list[str] | None = None) -> None:
                     update_all_answers_csv(output_dir, success)
                 if result_dir is not None:
                     update_progress_rows(result_dir, success, filename=progress_filename)
-                if "upload" in selected_stages:
-                    upload_stage = UploadStage()
-                    table_name = build_noco_table_name(
-                        run_tag=args.run_tag,
-                        target_name=output_dir.name,
-                    )
-                    for row in success:
-                        try:
-                            upload_stage.upsert_progress_row(
-                                table_name=table_name,
-                                row={
-                                    "dataset": row.get("dataset", ""),
-                                    "status": "judged" if str(row.get("correctness", "")).strip() != "" else "qa_complete",
-                                    "correctness": str(row.get("correctness", "")),
-                                    "question": str(row.get("question", "")),
-                                    "gold_answer": str(row.get("gold", "")),
-                                    "generated_answer": str(row.get("answer", "")),
-                                },
-                            )
-                        except Exception as exc:
-                            print(f"[UPLOAD] NocoDB upsert skipped for {row.get('dataset', '')}: {exc}")
             if result_dir is not None:
                 ensure_dir(result_dir)
 

@@ -2,17 +2,16 @@
 """Score a LongMem output folder: overall + per-category accuracy.
 
 Reads every <category>/<dataset>.csv (one question per file, one row) under the
-given run dir and averages a correctness column. Auto-picks the column unless
---col is given.
+given run dir. By default it applies the final evaluation protocol:
+``correctness_3vote`` for general questions and ``correctness_absrubric`` for
+``*_abs.csv`` questions. ``--col`` intentionally scores one custom column.
 
 Usage:
     python experiment/longmem/score_longmem.py <run_dir_or_tag> [--col COL]
 
   <run_dir_or_tag>: a full path, or a bare run-tag resolved under
                     experiment/longmem/output/<tag>.
-  --col: correctness column. Default = first present of correctness_4omini,
-         correctness_20b, correctness_20b63, correctness_20b92, correctness_new,
-         correctness.
+  --col: optional custom correctness column for every question.
 """
 from __future__ import annotations
 
@@ -24,8 +23,8 @@ import sys
 
 CATS = ["single_session_user", "single_session_assistant", "single_session_preference",
         "multi_session", "knowledge_update", "temporal_reasoning"]
-COL_CANDIDATES = ["correctness_4omini", "correctness_20b", "correctness_20b63",
-                  "correctness_20b92", "correctness_new", "correctness"]
+GENERAL_COL = "correctness_3vote"
+ABSTENTION_COL = "correctness_absrubric"
 _SKIP = ("all_answers", "progress")
 _OUT_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                          "longmem", "output")
@@ -50,7 +49,7 @@ def _resolve(p: str) -> str:
     sys.exit(f"[error] run dir not found: {p}")
 
 
-def _pick_col(run_dir: str, forced):
+def _validate_col(run_dir: str, forced: str | None) -> None:
     cols = set()
     for c in CATS:
         for f in glob.glob(os.path.join(run_dir, c, "*.csv"))[:3]:
@@ -62,14 +61,13 @@ def _pick_col(run_dir: str, forced):
             except Exception:
                 pass
     avail = sorted(x for x in cols if "correct" in x)
-    if forced:
-        if forced not in cols:
-            sys.exit(f"[error] --col {forced} not found. available: {avail}")
-        return forced
-    for c in COL_CANDIDATES:
-        if c in cols:
-            return c
-    sys.exit(f"[error] no correctness column found. available: {avail}")
+    if forced and forced not in cols:
+        sys.exit(f"[error] --col {forced} not found. available: {avail}")
+    if not forced and not {GENERAL_COL, ABSTENTION_COL} & cols:
+        sys.exit(
+            f"[error] final protocol columns not found; run experiment/judge.py first. "
+            f"available: {avail}"
+        )
 
 
 def main():
@@ -79,10 +77,11 @@ def main():
     args = ap.parse_args()
 
     run_dir = _resolve(args.run_dir)
-    col = _pick_col(run_dir, args.col)
+    _validate_col(run_dir, args.col)
 
     print(f"run   = {run_dir}")
-    print(f"col   = {col}\n")
+    protocol = args.col or f"{GENERAL_COL} + {ABSTENTION_COL} for *_abs"
+    print(f"col   = {protocol}\n")
     print(f"{'category':26s} {'n':>5s} {'correct':>8s} {'accuracy':>9s}")
     tot_c = tot_n = 0
     for c in CATS:
@@ -95,6 +94,7 @@ def main():
                     row = next(csv.DictReader(fh), None)
             except Exception:
                 continue
+            col = args.col or (ABSTENTION_COL if os.path.splitext(os.path.basename(f))[0].endswith("_abs") else GENERAL_COL)
             if not row or col not in row:
                 continue
             r = _to01(row.get(col))

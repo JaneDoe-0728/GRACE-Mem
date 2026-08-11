@@ -28,7 +28,7 @@ from experiment.locomo.decision import (
     build_sample_plan,
     should_skip_refresh,
 )
-from experiment.locomo.aggregate import maybe_aggregate_run, maybe_upload_aggregate
+from experiment.locomo.aggregate import maybe_aggregate_run
 from experiment.locomo.helpers.run_hooks import (
     _after_worker,
     _log_success,
@@ -99,9 +99,7 @@ def _build_runtime(args) -> RunRuntime:
         artifact_dir=getattr(args, "artifact_dir", None),
     )
     if not args.sample_ids:
-        selected_stage_set = set(selected_stages)
-        if selected_stage_set != {"upload"}:
-            raise SystemExit("--sample-ids is required (e.g. 0,2,5-7)")
+        raise SystemExit("--sample-ids is required (e.g. 0,2,5-7)")
 
     dataset = normalize_dataset_name(args.dataset)
     dataset_json_path = resolve_dataset_path(
@@ -173,7 +171,7 @@ def run_orchestrator(args) -> None:
         )
     )
     run_sample_stages = any(stage in selected_stages for stage in ("ingest", "qa_eval", "judge"))
-    should_aggregate = bool({"judge", "upload"} & selected_stages)
+    should_aggregate = "judge" in selected_stages
 
     if run_sample_stages:
         for position, sample_index in enumerate(config.sample_ids):
@@ -239,25 +237,14 @@ def run_orchestrator(args) -> None:
     else:
         log_event("STAGE", "Skipping sample workers", stages=sorted(selected_stages))
 
-    aggregate_result = None
     if should_aggregate:
-        aggregate_result = maybe_aggregate_run(
+        maybe_aggregate_run(
             dataset=config.dataset,
             run_root=config.run_root,
             no_judge=config.no_judge,
             judge_dir=_judge_dir_for_aggregate(runtime, strategy),
             include_adversarial=config.include_adversarial,
         )
-    maybe_upload_aggregate(
-        aggregate_result,
-        enabled="upload" in selected_stages,
-        dataset=config.dataset,
-        run_root=config.run_root,
-        sample_ids=config.sample_ids,
-        no_judge=config.no_judge,
-        include_adversarial=config.include_adversarial,
-    )
-
     if run_sample_stages:
         print(f"\nAll {len(config.sample_ids)} samples completed.")
     else:

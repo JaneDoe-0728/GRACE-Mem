@@ -9,6 +9,7 @@ from experiment.judge import (
     SINGLE_VOTE_COLUMN,
     JudgeEngine,
     _judge_locomo_file,
+    _score_longmem,
     normalize_temporal_gold,
     parse_locomo_verdict,
     parse_longmem_verdict,
@@ -132,3 +133,23 @@ def test_locomo_csv_resume_carries_existing_correct_first_vote(tmp_path) -> None
     assert (judged, skipped, carried) == (2, 0, 1)
     assert result[MAJORITY_VOTE_COLUMN].tolist() == [1, 1]
     assert llm.temperatures == [0.0, 0.3, 0.6]
+
+
+def test_longmem_score_combines_general_and_abstention_columns(tmp_path) -> None:
+    category = tmp_path / "temporal_reasoning"
+    category.mkdir()
+    general = category / "general.csv"
+    abstention = category / "question_abs.csv"
+    pd.DataFrame([{MAJORITY_VOTE_COLUMN: 1, "correctness_absrubric": ""}]).to_csv(
+        general, index=False
+    )
+    pd.DataFrame([{MAJORITY_VOTE_COLUMN: 0, "correctness_absrubric": 1}]).to_csv(
+        abstention, index=False
+    )
+
+    stats = _score_longmem([general, abstention], votes=3, column=None)
+
+    assert stats["protocol"] == "longmem-final"
+    assert stats["correct"] == 2
+    assert stats["total"] == 2
+    assert stats["accuracy_percent"] == 100.0

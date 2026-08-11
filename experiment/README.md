@@ -17,10 +17,9 @@ Both runners expose the same ordered stage vocabulary:
 | `ingest` | Build summaries, entity/relationship indexes, and graph state |
 | `qa_eval` | Retrieve evidence and generate answers |
 | `judge` | Grade generated answers against benchmark gold answers |
-| `upload` | Best-effort NocoDB upload when credentials are configured |
 
-The default is `ingest qa_eval judge upload`. Use `--stage` to select an explicit
-subset or `--no-judge` to omit judge/upload behavior. When `--artifact-dir` is
+The default is `ingest qa_eval judge`. Use `--stage` to select an explicit
+subset or `--no-judge` to omit judge behavior. When `--artifact-dir` is
 provided, the runners switch to retrieval-only behavior and reuse existing
 artifacts instead of ingesting again.
 
@@ -216,6 +215,16 @@ uv run python experiment/locomo/aggregate.py \
 
 Aggregation reports correctness, F1, BLEU-1, and category breakdowns. It excludes
 adversarial questions unless `--include-adversarial` is supplied.
+
+For paper scoring, use the shared post-hoc judge after answer generation:
+
+```bash
+uv run python experiment/judge.py locomo <run-tag> --samples 0-9
+uv run python experiment/judge.py longmem <run-tag>
+```
+
+The exact carry/rejudge rule, LongMemEval abstention handling, result columns,
+and aggregate files are defined in the [evaluation protocol](../EVALUATION.md).
 
 ## Shared Configuration
 

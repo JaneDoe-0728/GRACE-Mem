@@ -13,7 +13,6 @@ class RunConfig:
     run_root: Path
     run_tag: str
     sample_ids: tuple[int, ...]
-    upload_nocodb: bool
     no_judge: bool
     include_adversarial: bool
     post_refresh_sleep: float
@@ -36,7 +35,6 @@ class RunConfig:
             run_root=run_root,
             run_tag=args.run_tag,
             sample_ids=tuple(sample_ids),
-            upload_nocodb=bool(args.nocodb),
             no_judge=bool(args.no_judge),
             include_adversarial=bool(args.adv),
             post_refresh_sleep=float(args.post_refresh_sleep),
