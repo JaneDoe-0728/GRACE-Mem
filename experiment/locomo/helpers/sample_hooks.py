@@ -4,13 +4,13 @@ import sys
 from pathlib import Path
 
 from KG.storage.cache import CacheStore
-from locomo.utils.graph import (
+from experiment.locomo.utils.graph import (
     ARTIFACTS_SRC,
     GRAPH_EXPORT_FILE,
     restore_graph_from_export_file,
     write_graph_export,
 )
-from locomo.utils.log import log_event
+from experiment.locomo.utils.log import log_event
 
 PIPELINE_MODULE = "experiment.locomo.pipeline"
 

@@ -8,11 +8,14 @@ import argparse
 
 import pandas as pd
 
-# ======= project import (keep consistent with your repo layout) =======
-sys.path.append(str(Path(__file__).resolve().parents[2]))
-from locomo.helpers.dataset import build_session_records_from_json, normalize_dataset_name, resolve_dataset_path  # noqa: E402
-from locomo.utils.io import load_jsonl_records  # noqa: E402
-from experiment_config import INGEST_PARAMS  # noqa: E402
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[3]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+
+from experiment.locomo.helpers.dataset import build_session_records_from_json, normalize_dataset_name, resolve_dataset_path
+from experiment.locomo.utils.io import load_jsonl_records
+from experiment.experiment_config import INGEST_PARAMS
 
 
 # ========= Config: edit here =========

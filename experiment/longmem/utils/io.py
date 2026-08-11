@@ -234,14 +234,3 @@ def append_type_subdir(base_dir: Path, type_name: str | None) -> Path:
     if not type_name:
         return base_dir
     return base_dir / type_name
-
-
-def append_progress_stuck_history(output_dir: Path, dataset_name: str, stuck_entry: str) -> None:
-    from experiment.longmem.helpers.progress import append_stuck_history_entry
-
-    append_stuck_history_entry(
-        output_dir,
-        dataset=dataset_name,
-        entry=stuck_entry,
-        filename="progress.csv",
-    )

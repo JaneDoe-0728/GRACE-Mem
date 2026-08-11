@@ -8,16 +8,19 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[3]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
-from locomo.helpers.dataset import (
+from experiment.locomo.helpers.dataset import (
     get_sample_conversation,
     get_sample_speakers,
     load_raw_samples,
     normalize_dataset_name,
     resolve_dataset_path,
 )
-from locomo.utils.io import append_jsonl_record, append_text, ensure_dir, remove_if_exists
+from experiment.locomo.utils.io import append_jsonl_record, append_text, ensure_dir, remove_if_exists
 
 SESSION_KEY_RE = re.compile(r"^session_(\d+)$")
 SESSION_DT_RE = re.compile(r"^session_(\d+)_date_time$")

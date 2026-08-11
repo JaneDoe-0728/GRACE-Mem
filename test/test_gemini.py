@@ -1,8 +1,10 @@
+import os
+
 from google import genai
 from google.genai import types
 
 # 設定 API Key
-client = genai.Client(api_key="AIzaSyDlcoYRiUERPlIwAjbQbEQhnJvo8NDpNdg")
+client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
 # 系統提示與上下文
 SYSTEM_PROMPT = (

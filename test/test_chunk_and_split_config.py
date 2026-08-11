@@ -22,19 +22,14 @@ from __future__ import annotations
 import ast
 import inspect
 import re
-import sys
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-for path in (REPO_ROOT, REPO_ROOT / "experiment"):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-
-from experiment_config import INGEST_PARAMS, RERANKER_PARAMS  # noqa: E402
-from locomo.stages import ingest as locomo_ingest  # noqa: E402
-from locomo import stage_adapter  # noqa: E402
+from experiment.experiment_config import INGEST_PARAMS, RERANKER_PARAMS
+from experiment.locomo.stages import ingest as locomo_ingest
+from experiment.locomo import stage_adapter
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -219,7 +214,7 @@ def test_worker_and_snapshot_pass_the_cli_value(rel):
 
 
 def test_locomo_cli_exposes_chunk_turns_defaulting_to_the_config():
-    from locomo.cli import parse_args
+    from experiment.locomo.cli import parse_args
 
     args = parse_args(["--sample-ids", "0"])
     assert args.chunk_turns == INGEST_PARAMS["chunk_turns"]

@@ -5,18 +5,17 @@ from pathlib import Path
 from typing import Sequence
 
 MODULE_DIR = Path(__file__).resolve().parent
-EXPERIMENT_ROOT = MODULE_DIR.parent
-REPO_ROOT = EXPERIMENT_ROOT.parent
-for _path in (EXPERIMENT_ROOT, REPO_ROOT):
-    if str(_path) not in sys.path:
-        sys.path.append(str(_path))
+if __package__ in (None, ""):
+    repo_root = MODULE_DIR.parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
-from locomo.models import RunConfig, SamplePlan
+from experiment.locomo.models import RunConfig, SamplePlan
 
 PIPELINE_MODULE = "experiment.locomo.pipeline"
 
 try:
-    from experiment_config import INGEST_PARAMS
+    from experiment.experiment_config import INGEST_PARAMS
 except Exception:
     INGEST_PARAMS = {
         "prev_k": 2,

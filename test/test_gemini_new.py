@@ -1,9 +1,10 @@
 import csv
+import os
 import time
 from google import genai
 from google.genai import types, errors
 
-client = genai.Client(api_key="AIzaSyDlcoYRiUERPlIwAjbQbEQhnJvo8NDpNdg")
+client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
 SYSTEM_PROMPT = (
     "You are a concise and accurate assistant. "

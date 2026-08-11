@@ -8,10 +8,13 @@ from pathlib import Path
 from statistics import mean
 from typing import Any, Iterable
 
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[3]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
-from locomo.helpers.dataset import category_to_label
-from locomo.utils.io import load_json_records
+from experiment.locomo.helpers.dataset import category_to_label
+from experiment.locomo.utils.io import load_json_records
 
 
 @dataclass(frozen=True)

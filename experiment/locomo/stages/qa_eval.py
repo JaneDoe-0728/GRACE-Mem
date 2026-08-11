@@ -9,8 +9,10 @@ import os
 from pathlib import Path
 from typing import Any
 
-sys.path.append(str(Path(__file__).resolve().parents[2]))
-sys.path.append(str(Path(__file__).resolve().parents[3]))
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[3]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
 try:
     from KG.storage import MGR
@@ -24,9 +26,9 @@ except Exception as e:
         "Failed to import your KG/LLM modules. Ensure PYTHONPATH includes your project root. Original error: %r" % (e,)
     )
 
-from locomo.helpers.llm import llm_post, llm_post_json
-from locomo.utils.error_analysis import append_analysis_record, compact_json, derive_drop_reasons
-from locomo.utils.io import EVAL_COLUMNS
+from experiment.locomo.helpers.llm import llm_post, llm_post_json
+from experiment.locomo.utils.error_analysis import append_analysis_record, compact_json, derive_drop_reasons
+from experiment.locomo.utils.io import EVAL_COLUMNS
 
 # retriever is set by the caller (e.g. locomo_pipeline.py) after build_pipeline().
 # When running qa_eval.py as a standalone script, set it via build_pipeline() in main().
@@ -406,10 +408,10 @@ def _extract_facts_for_evidence(raw_text: str, date_time: str | None) -> list[st
     except Exception:
         return [raw_text]
 
-from locomo.helpers.dataset import default_output_stem, load_qa_items, normalize_dataset_name, resolve_dataset_path
+from experiment.locomo.helpers.dataset import default_output_stem, load_qa_items, normalize_dataset_name, resolve_dataset_path
 
 try:
-    from experiment_config import RETRIEVAL_PARAMS, RERANKER_PARAMS
+    from experiment.experiment_config import RETRIEVAL_PARAMS, RERANKER_PARAMS
 except Exception:
     RETRIEVAL_PARAMS = {
         "ent_topk": 20,
@@ -1380,7 +1382,7 @@ class QAEvalStage:
         self.simplify_evidence = simplify_evidence
 
     def run(self) -> list[dict]:
-        import locomo.stages.qa_eval as _self
+        import experiment.locomo.stages.qa_eval as _self
         _self.retriever = self.retriever
         qa_items = load_questions(
             self.dataset_json,
@@ -1413,7 +1415,7 @@ def main():
         output_csv = Path(__file__).resolve().parent / "data" / f"{default_output_stem(dataset)}_sample{args.sample_index}_eval.csv"
 
     # Initialize retriever via build_pipeline() when running as a standalone script
-    import locomo.stages.qa_eval as _self
+    import experiment.locomo.stages.qa_eval as _self
     if _self.retriever is None:
         from KG.pipeline.factory import build_pipeline
         _p = build_pipeline(retriever_config=RERANKER_PARAMS)

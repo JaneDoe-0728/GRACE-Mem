@@ -5,10 +5,12 @@ import gc
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[2]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
-from experiment_config import INGEST_PARAMS, RETRIEVAL_PARAMS, RERANKER_PARAMS
+from experiment.experiment_config import INGEST_PARAMS, RETRIEVAL_PARAMS, RERANKER_PARAMS
 
 # LongMem-only: must match the value used when these artifacts were ingested.
 USE_SPLIT_SUMMARY = bool(INGEST_PARAMS.get("use_split_summary", True))

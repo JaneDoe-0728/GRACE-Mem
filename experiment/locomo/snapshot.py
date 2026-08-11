@@ -25,12 +25,17 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from locomo.utils.graph import (
+from experiment.locomo.helpers.dataset import (
+    build_session_records_for_conv,
+    index_source_conversations,
+    is_cognitive_item,
+    resolve_dataset_path,
+)
+from experiment.locomo.utils.graph import (
     ARTIFACTS_SRC,
     GRAPH_EXPORT_FILE,
     SNAPSHOT_META_FILE,
@@ -38,7 +43,7 @@ from locomo.utils.graph import (
     validate_vdb_artifacts,
     write_graph_export,
 )
-from locomo.utils.log import log_event
+from experiment.locomo.utils.log import log_event
 logger = logging.getLogger(__name__)
 
 
@@ -184,12 +189,6 @@ def _resolve_conv_id_and_sessions(
     Returns (conv_id, injected_session_id_or_None, source_session_records, is_cognitive).
     Raises ValueError on validation failure.
     """
-    from locomo.helpers import (
-        index_source_conversations,
-        build_session_records_for_conv,
-        is_cognitive_item,
-    )
-
     conv_id = qa_item.get("conversation_id")
     if not conv_id:
         raise ValueError(
@@ -238,25 +237,9 @@ def _snapshot_builder(args) -> None:
     Designed to run in a fresh subprocess. Resumes from the highest existing
     snapshot so partial builds are not wasted.
     """
-    # locomo/snapshot.py → .parent = locomo/ → .parent = experiment/
-    sys.path.append(str(Path(__file__).resolve().parent.parent))
-
     run_root = Path(args.run_root)
     conv_id: str = args.conv_id
     up_to_session: Optional[int] = args.up_to_session  # None → all sessions
-
-    from locomo.helpers import (
-        highest_existing_snapshot,
-        load_snapshot_files_only,
-        restore_graph,
-        save_snapshot,
-        snapshot_exists,
-    )
-    from locomo.helpers import (
-        build_session_records_for_conv,
-        index_source_conversations,
-        resolve_dataset_path,
-    )
 
     source_json = resolve_dataset_path(
         dataset="locomo",
@@ -283,7 +266,7 @@ def _snapshot_builder(args) -> None:
     from KG.storage import MGR
     from KG.graph.falkordb import graph_from_env
     from KG.pipeline.factory import build_pipeline
-    from locomo.stages import ingest
+    from experiment.locomo.stages import ingest
 
     _pipeline = build_pipeline()
     ingestor = _pipeline["ingestor"]

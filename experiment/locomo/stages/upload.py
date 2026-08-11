@@ -7,15 +7,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
 MODULE_DIR = Path(__file__).resolve().parent
-LOCOMO_ROOT = MODULE_DIR.parent
-EXPERIMENT_ROOT = LOCOMO_ROOT.parent
-REPO_ROOT = EXPERIMENT_ROOT.parent
-for _path in (EXPERIMENT_ROOT, REPO_ROOT):
-    if str(_path) not in sys.path:
-        sys.path.append(str(_path))
+if __package__ in (None, ""):
+    repo_root = MODULE_DIR.parents[2]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
-from locomo.aggregate import compute_summary_from_rows
-from locomo.utils.io import load_csv_rows, load_json_object
+from experiment.locomo.summary import compute_summary_from_rows
+from experiment.locomo.utils.io import load_csv_rows, load_json_object
 
 
 LONG_TEXT_COLUMNS = {

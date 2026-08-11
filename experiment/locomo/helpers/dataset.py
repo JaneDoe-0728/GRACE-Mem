@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-from locomo.utils.io import load_json_records
+from experiment.locomo.utils.io import load_json_records
 
 SUPPORTED_DATASETS = ("locomo", "locomo-plus")
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"

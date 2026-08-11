@@ -1,7 +1,8 @@
 import csv
+import os
 from openai import OpenAI
 
-client = OpenAI(api_key="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")
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 SYSTEM_PROMPT = (
     "You are a concise and accurate assistant. "

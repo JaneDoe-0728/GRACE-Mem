@@ -12,9 +12,57 @@ open connections and construct the pipeline objects.
   ingestor  = _pipeline["ingestor"]
 """
 
+from __future__ import annotations
 
-def build_pipeline(*, retriever_config=None, ingestor_config=None) -> dict:
-    """Open all connections and return a dict with retriever, ingestor, graph, mgr."""
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass, field
+from typing import Any, ClassVar
+
+
+@dataclass
+class PipelineRuntime(Mapping[str, Any]):
+    """Constructed pipeline components with mapping compatibility and cleanup."""
+
+    retriever: Any
+    ingestor: Any
+    graph: Any
+    mgr: Any
+    _closed: bool = field(default=False, init=False, repr=False)
+
+    _COMPONENT_NAMES: ClassVar[tuple[str, ...]] = (
+        "retriever",
+        "ingestor",
+        "graph",
+        "mgr",
+    )
+
+    def __getitem__(self, key: str) -> Any:
+        if key not in self._COMPONENT_NAMES:
+            raise KeyError(key)
+        return getattr(self, key)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._COMPONENT_NAMES)
+
+    def __len__(self) -> int:
+        return len(self._COMPONENT_NAMES)
+
+    def close(self) -> None:
+        """Close runtime-owned external connections once."""
+        if self._closed:
+            return
+        self.graph.close()
+        self._closed = True
+
+    def __enter__(self) -> "PipelineRuntime":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        self.close()
+
+
+def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRuntime:
+    """Open connections and return the constructed pipeline runtime."""
     from KG.pipeline.retriever import Retriever
     from KG.pipeline.ingestor import Ingestor
     # from KG.pipeline.ingestor_no_ops import IngestorNoEntityOps
@@ -57,4 +105,9 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> dict:
     ingestor  = Ingestor(llm=llm, graph=graph, mgr=MGR, ent_svc=ent, rel_svc=rel, config=ingestor_config)
     # ingestor = IngestorNoEntityOps(llm=llm, graph=graph, mgr=MGR, ent_svc=ent, rel_svc=rel)
 
-    return {"retriever": retriever, "ingestor": ingestor, "graph": graph, "mgr": MGR}
+    return PipelineRuntime(
+        retriever=retriever,
+        ingestor=ingestor,
+        graph=graph,
+        mgr=MGR,
+    )

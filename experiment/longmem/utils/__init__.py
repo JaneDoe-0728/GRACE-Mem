@@ -1,6 +1,5 @@
 from .io import (
     append_type_subdir,
-    append_progress_stuck_history,
     append_jsonl,
     ensure_dir,
     glob_sorted,
@@ -26,7 +25,6 @@ from .io import (
 )
 
 __all__ = [
-    "append_progress_stuck_history",
     "append_type_subdir",
     "append_jsonl",
     "ensure_dir",

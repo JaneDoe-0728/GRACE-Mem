@@ -217,7 +217,7 @@ if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
     from KG.llm import LLMClient
     from KG.pipeline.factory import build_pipeline as _build_pipeline
-    from experiment_config import RETRIEVAL_PARAMS
+    from experiment.experiment_config import RETRIEVAL_PARAMS
 
     CSV_PATH = "./experiment/longmem/script_data/temporal_reasoning/2ebe6c92.csv"
     retriever = _build_pipeline()["retriever"]

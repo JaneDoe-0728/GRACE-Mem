@@ -20,18 +20,17 @@ from typing import NamedTuple
 
 # Allow importing experiment.* and refresh_system when this file is run directly.
 _LONGMEM = Path(__file__).resolve().parent
-_EXP = _LONGMEM.parent                         # experiment/
-_ROOT = _EXP.parent                            # repo root
-sys.path.insert(0, str(_ROOT))
-sys.path.insert(0, str(_EXP))
+if __package__ in (None, ""):
+    repo_root = _LONGMEM.parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
 from experiment.longmem.helpers.args import DEFAULT_STAGES, add_child_args, add_data_args, add_rerun_args, add_run_args, resolve_stages
 from experiment.longmem.helpers.datasets import resolve_child_datasets, select_dataset_names, select_datasets
-from experiment.longmem.helpers.progress import build_noco_table_name
+from experiment.longmem.helpers.progress import append_stuck_history_entry, build_noco_table_name
 from experiment.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.longmem.utils.io import (
     append_type_subdir,
-    append_progress_stuck_history,
     append_jsonl,
     ensure_dir,
     glob_sorted,
@@ -300,7 +299,7 @@ def mark_stuck_datasets_as_skipped(
                     f"(processed {processed_count}/{total} sessions)"
                 )
                 try:
-                    append_progress_stuck_history(output_dir, name, stuck_entry)
+                    append_stuck_history_entry(output_dir, dataset=name, entry=stuck_entry)
                 except Exception as exc:
                     logger.error("Failed to update progress.csv stuck_history for '%s': %s", name, exc)
 
@@ -459,7 +458,7 @@ def mark_stuck_child_datasets_as_skipped(
                     f"(processed {processed_count}/{total} sessions)"
                 )
                 try:
-                    append_progress_stuck_history(output_dir, name, stuck_entry)
+                    append_stuck_history_entry(output_dir, dataset=name, entry=stuck_entry)
                 except Exception as exc:
                     logger.error("Failed to update progress.csv stuck_history for '%s': %s", name, exc)
 

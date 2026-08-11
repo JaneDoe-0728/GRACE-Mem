@@ -13,6 +13,7 @@ from KG.utils.common import (
     canonicalize_entity_type_label,
 )
 from KG.llm.prompts.entity_ops import ENTITY_OPS_RULES_V2, ENTITY_OPS_FEW_SHOT
+from KG.llm.token_tracking import token_tracker
 from KG.storage import build_id_to_meta_maps
 from KG.utils.logger_config import make_module_jlog
 import numpy as np
@@ -86,7 +87,6 @@ class EntityOpsProcessor:
 
         print(f"\n🚀 Processing {len(entities)} entities (parallel={self.config.max_workers})...")
 
-        from KG.llm.client import token_tracker
         ctx_dataset, ctx_stage = token_tracker._get_context()
 
         with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
@@ -106,7 +106,6 @@ class EntityOpsProcessor:
 
     def _process_with_retry(self, entity: "EntityInput", similar_map: "SimilarMap", ctx_dataset: str = "unknown", ctx_stage: str = "unknown") -> "EntityOp":
         """Retry one entity-op request while restoring the caller's token-tracker context."""
-        from KG.llm.client import token_tracker
         token_tracker.set_context(dataset=ctx_dataset, stage=ctx_stage)
         for attempt in range(self.config.max_retries):
             try:

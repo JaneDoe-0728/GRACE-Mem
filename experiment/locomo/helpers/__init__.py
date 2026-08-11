@@ -1,5 +1,5 @@
 from .llm import llm_post
-from locomo.aggregate import (
+from experiment.locomo.aggregate import (
     aggregate_judge_csv_files,
     compute_summary_from_df,
     compute_summary_from_rows,
@@ -22,7 +22,7 @@ from .dataset import (
     normalize_qa_item,
     resolve_dataset_path,
 )
-from locomo.utils.graph import (
+from experiment.locomo.utils.graph import (
     ARTIFACTS_SRC,
     GRAPH_EXPORT_FILE,
     SNAPSHOT_META_FILE,
@@ -33,7 +33,7 @@ from locomo.utils.graph import (
     _export_graph,
     _restore_graph,
 )
-from locomo.snapshot import highest_existing_snapshot
+from experiment.locomo.snapshot import highest_existing_snapshot
 
 __all__ = [
     "llm_post",

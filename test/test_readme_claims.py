@@ -377,8 +377,7 @@ def test_default_evidence_path_matches_the_experiment_pipeline():
     "(no KG context)".
     """
     from KG.pipeline.retriever import RetrieverConfig
-    sys.path.insert(0, str(REPO_ROOT / "experiment"))
-    from experiment_config import RERANKER_PARAMS
+    from experiment.experiment_config import RERANKER_PARAMS
 
     cfg = RetrieverConfig()
     assert cfg.use_split_embeddings is True
@@ -440,8 +439,7 @@ def test_locomo_aggregate_accepts_the_flags_the_experiment_readme_shows():
 
 def test_experiment_config_is_the_single_source_of_truth():
     """experiment/readme.md: 'edit only experiment_config.py'."""
-    sys.path.insert(0, str(REPO_ROOT / "experiment"))
-    import experiment_config
+    from experiment import experiment_config
 
     for name in ("REPRODUCIBILITY_PARAMS", "INGEST_PARAMS", "RETRIEVAL_PARAMS", "RERANKER_PARAMS"):
         assert isinstance(getattr(experiment_config, name), dict)

@@ -4,8 +4,8 @@ import sys
 import time
 from pathlib import Path
 
-import locomo.prompts.judge as judge_prompts
-import locomo.prompts.open_domain as open_domain_prompts
+import experiment.locomo.prompts.judge as judge_prompts
+import experiment.locomo.prompts.open_domain as open_domain_prompts
 import requests
 from dotenv import load_dotenv
 

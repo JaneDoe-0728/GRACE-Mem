@@ -6,9 +6,9 @@ import sys
 import time
 from typing import Any
 
-from locomo.models import DatasetStrategy, RunRuntime, SamplePlan, WorkerPaths
-from locomo.utils.io import ensure_dir, sync_logs, write_summary_map
-from locomo.utils.log import log_event
+from experiment.locomo.models import DatasetStrategy, RunRuntime, SamplePlan, WorkerPaths
+from experiment.locomo.utils.io import ensure_dir, sync_logs, write_summary_map
+from experiment.locomo.utils.log import log_event
 
 
 def _worker_paths_for_sample(

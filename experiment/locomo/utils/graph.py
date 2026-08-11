@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from KG.storage.paths import resolve_artifacts_dir
-from locomo.utils.log import log_event
+from experiment.locomo.utils.log import log_event
 
 # Working VDB dir, honoring KG_ARTIFACTS_DIR for per-process isolation. Resolved
 # at import time; each process must set the env var before it starts.

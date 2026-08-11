@@ -20,7 +20,7 @@ from KG.utils.temporal import (
     format_temporal_hints_for_prompt,
     rewrite_temporal_text,
 )
-from experiment.locomo.utils.error_analysis import append_analysis_record
+from KG.utils.error_analysis import append_analysis_record
 
 from KG.pipeline.ingest_steps.compress import Compressor
 from KG.pipeline.ingest_steps.extract import EntityExtractor, RelationshipExtractor

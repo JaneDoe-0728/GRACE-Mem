@@ -1,10 +1,9 @@
 import os
 import shutil
-import sys
 import json
 from pathlib import Path
 
-from locomo.utils.io import (
+from experiment.locomo.utils.io import (
     backup_artifacts_and_logs,
     ensure_dir,
     load_csv_rows,
@@ -14,8 +13,8 @@ from locomo.utils.io import (
     write_eval_csv,
     write_stats_json,
 )
-from locomo.utils.log import log_event
-from locomo.utils.error_analysis import (
+from experiment.locomo.utils.log import log_event
+from experiment.locomo.utils.error_analysis import (
     append_analysis_record,
     append_pretty_block,
     build_bridge_label,
@@ -25,14 +24,14 @@ from locomo.utils.error_analysis import (
     derive_failure_type,
     render_failure_digest,
 )
-from locomo.snapshot import (
+from experiment.locomo.snapshot import (
     _resolve_conv_id_and_sessions,
     load_snapshot_files_only,
     restore_graph,
     snapshot_dir,
     snapshot_exists,
 )
-from locomo.stage_adapter import (
+from experiment.locomo.stage_adapter import (
     build_eval_rows,
     configure_retriever,
     run_ingest_stage_for_locomo,
@@ -40,7 +39,7 @@ from locomo.stage_adapter import (
     run_judge_stage,
     skipped_judge_stats,
 )
-from locomo.helpers.sample_hooks import (
+from experiment.locomo.helpers.sample_hooks import (
     artifact_dir_for_sample,
     ensure_worker_repo_path,
     export_graph_to_artifacts,
@@ -50,10 +49,10 @@ from locomo.helpers.sample_hooks import (
     restore_graph_from_artifact_dir,
     validate_and_export_graph,
 )
-from locomo.utils.graph import ARTIFACTS_SRC, GRAPH_EXPORT_FILE, validate_graph_export
+from experiment.locomo.utils.graph import ARTIFACTS_SRC, GRAPH_EXPORT_FILE, validate_graph_export
 
 try:
-    from experiment_config import RERANKER_PARAMS, RETRIEVAL_PARAMS as _RETRIEVAL_PARAMS
+    from experiment.experiment_config import RERANKER_PARAMS, RETRIEVAL_PARAMS as _RETRIEVAL_PARAMS
 except Exception:
     RERANKER_PARAMS = {
         "use_reranker": True,
@@ -68,7 +67,7 @@ except Exception:
 RERANKER_PARAMS = {**_RETRIEVAL_PARAMS, **RERANKER_PARAMS}
 
 try:
-    from experiment_config import INGEST_PARAMS as _INGEST_PARAMS
+    from experiment.experiment_config import INGEST_PARAMS as _INGEST_PARAMS
 except Exception:
     _INGEST_PARAMS = {}
 
@@ -89,7 +88,7 @@ def _configure_sample_pretty_trace_log(*, run_root: Path, sample_index: int) -> 
 
 
 def _selected_stages(args) -> set[str]:
-    from locomo.cli import resolve_stages
+    from experiment.locomo.cli import resolve_stages
 
     return set(
         resolve_stages(
@@ -350,8 +349,8 @@ def _run_locomo_gold_summary_only(args) -> None:
     import pandas as pd
 
     from KG.llm import token_tracker
-    from locomo.stages import judge, qa_eval
-    from locomo.helpers import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.stages import judge, qa_eval
+    from experiment.locomo.helpers import normalize_dataset_name, resolve_dataset_path
 
     dataset = normalize_dataset_name(args.dataset)
     dataset_json = resolve_dataset_path(dataset=dataset, kind="qa_json", explicit_path=args.dataset_json)
@@ -434,8 +433,8 @@ def _run_locomo_gold_raw_text_only(args) -> None:
     import pandas as pd
 
     from KG.llm import token_tracker
-    from locomo.stages import judge, qa_eval
-    from locomo.helpers import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.stages import judge, qa_eval
+    from experiment.locomo.helpers import normalize_dataset_name, resolve_dataset_path
 
     dataset = normalize_dataset_name(args.dataset)
     dataset_json = resolve_dataset_path(dataset=dataset, kind="qa_json", explicit_path=args.dataset_json)
@@ -512,8 +511,8 @@ def _run_locomo_replay_summary_raw_text_from_run(args) -> None:
     import pandas as pd
 
     from KG.llm import token_tracker
-    from locomo.stages import judge, qa_eval
-    from locomo.helpers import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.stages import judge, qa_eval
+    from experiment.locomo.helpers import normalize_dataset_name, resolve_dataset_path
 
     if not args.replay_run_dir:
         raise ValueError("--replay-run-dir is required for replay_summary_raw_text_from_run mode")
@@ -603,8 +602,8 @@ def _run_locomo_replay_summary_fact_from_run(args) -> None:
     import pandas as pd
 
     from KG.llm import token_tracker
-    from locomo.stages import judge, qa_eval
-    from locomo.helpers import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.stages import judge, qa_eval
+    from experiment.locomo.helpers import normalize_dataset_name, resolve_dataset_path
 
     if not args.replay_run_dir:
         raise ValueError("--replay-run-dir is required for replay_summary_fact_from_run mode")
@@ -697,8 +696,8 @@ def run_locomo_worker(args) -> None:
     import pandas as pd
 
     from KG.llm import token_tracker
-    from locomo.stages import judge
-    from locomo.helpers import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.stages import judge
+    from experiment.locomo.helpers import normalize_dataset_name, resolve_dataset_path
 
     dataset = normalize_dataset_name(args.dataset)
     dataset_json = resolve_dataset_path(
@@ -734,7 +733,7 @@ def run_locomo_worker(args) -> None:
             reload_mgr_state_from_artifacts(MGR)
 
         from KG.pipeline.factory import build_pipeline
-        from locomo.stages import ingest, qa_eval
+        from experiment.locomo.stages import ingest, qa_eval
 
         pipeline = build_pipeline(retriever_config=RERANKER_PARAMS, ingestor_config=_INGESTOR_CONFIG)
         retriever = pipeline["retriever"]
@@ -875,19 +874,14 @@ def _run_locomo_plus_gold_summary_only(args) -> None:
     import json as _json
     import pandas as pd
 
-    experiment_root = Path(__file__).resolve().parent.parent
-    experiment_root_str = str(experiment_root)
-    if experiment_root_str not in sys.path:
-        sys.path.append(experiment_root_str)
-
-    from locomo.helpers import (
+    from experiment.locomo.helpers import (
         is_adversarial_item,
         load_raw_samples,
         normalize_qa_item,
         resolve_dataset_path,
     )
     from KG.llm import token_tracker
-    from locomo.stages import judge, qa_eval
+    from experiment.locomo.stages import judge, qa_eval
 
     dataset_json = Path(args.dataset_json)
     sample_index = args.sample_index
@@ -973,19 +967,14 @@ def _run_locomo_plus_gold_raw_text_only(args) -> None:
     import json as _json
     import pandas as pd
 
-    experiment_root = Path(__file__).resolve().parent.parent
-    experiment_root_str = str(experiment_root)
-    if experiment_root_str not in sys.path:
-        sys.path.append(experiment_root_str)
-
-    from locomo.helpers import (
+    from experiment.locomo.helpers import (
         is_adversarial_item,
         load_raw_samples,
         normalize_qa_item,
         resolve_dataset_path,
     )
     from KG.llm import token_tracker
-    from locomo.stages import judge, qa_eval
+    from experiment.locomo.stages import judge, qa_eval
 
     dataset_json = Path(args.dataset_json)
     sample_index = args.sample_index
@@ -1071,12 +1060,7 @@ def run_locomo_plus_worker(args) -> None:
 
     import pandas as pd
 
-    experiment_root = Path(__file__).resolve().parent.parent
-    experiment_root_str = str(experiment_root)
-    if experiment_root_str not in sys.path:
-        sys.path.append(experiment_root_str)
-
-    from locomo.helpers import (
+    from experiment.locomo.helpers import (
         extract_injected_session_record,
         is_adversarial_item,
         load_raw_samples,
@@ -1165,7 +1149,7 @@ def run_locomo_plus_worker(args) -> None:
         reload_mgr_state_from_artifacts(MGR)
 
     from KG.pipeline.factory import build_pipeline
-    from locomo.stages import ingest, judge, qa_eval
+    from experiment.locomo.stages import ingest, judge, qa_eval
 
     pipeline = build_pipeline(retriever_config=RERANKER_PARAMS, ingestor_config=_INGESTOR_CONFIG)
     ingestor = pipeline["ingestor"]
@@ -1296,7 +1280,7 @@ def run_locomo_plus_worker(args) -> None:
 def run_worker(args) -> None:
     ensure_worker_repo_path()
 
-    from locomo.helpers import normalize_dataset_name
+    from experiment.locomo.helpers import normalize_dataset_name
 
     dataset = normalize_dataset_name(args.dataset)
     if dataset == "locomo":

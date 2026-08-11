@@ -4,11 +4,10 @@ import sys
 from pathlib import Path
 
 MODULE_DIR = Path(__file__).resolve().parent
-EXPERIMENT_ROOT = MODULE_DIR.parent
-REPO_ROOT = EXPERIMENT_ROOT.parent
-for _path in (EXPERIMENT_ROOT, REPO_ROOT):
-    if str(_path) not in sys.path:
-        sys.path.append(str(_path))
+if __package__ in (None, ""):
+    repo_root = MODULE_DIR.parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
 from experiment.reproducibility import (
     activate_reproducibility,
@@ -17,10 +16,10 @@ from experiment.reproducibility import (
     write_reproducibility_file,
 )
 from experiment.run_metadata import namespace_to_dict, write_run_metadata
-from locomo.utils.io import ensure_dir
-from locomo.utils.log import log_event
-from locomo.models import RunConfig, RunRuntime
-from locomo.decision import (
+from experiment.locomo.utils.io import ensure_dir
+from experiment.locomo.utils.log import log_event
+from experiment.locomo.models import RunConfig, RunRuntime
+from experiment.locomo.decision import (
     _current_context,
     _judge_dir_for_aggregate,
     _next_context,
@@ -29,16 +28,16 @@ from locomo.decision import (
     build_sample_plan,
     should_skip_refresh,
 )
-from locomo.aggregate import maybe_aggregate_run, maybe_upload_aggregate
-from locomo.helpers.run_hooks import (
+from experiment.locomo.aggregate import maybe_aggregate_run, maybe_upload_aggregate
+from experiment.locomo.helpers.run_hooks import (
     _after_worker,
     _log_success,
     _record_sample_outputs,
     _refresh_system,
     _worker_paths_for_sample,
 )
-from locomo.snapshot import _snapshot_builder
-from locomo.workers import run_worker
+from experiment.locomo.snapshot import _snapshot_builder
+from experiment.locomo.workers import run_worker
 
 
 _STATELESS_RETRIEVAL_MODES = {
@@ -86,13 +85,13 @@ def _write_run_metadata(
 # ---------------------------------------------------------------------------
 
 def _build_runtime(args) -> RunRuntime:
-    from locomo.helpers import (
+    from experiment.locomo.helpers import (
         default_output_variant_dir,
         load_raw_samples,
         normalize_dataset_name,
         resolve_dataset_path,
     )
-    from locomo.cli import parse_sample_ids, resolve_stages
+    from experiment.locomo.cli import parse_sample_ids, resolve_stages
 
     selected_stages = resolve_stages(
         getattr(args, "stages", None),
@@ -159,8 +158,8 @@ def _build_runtime(args) -> RunRuntime:
 # ---------------------------------------------------------------------------
 
 def run_orchestrator(args) -> None:
-    from locomo.helpers import is_cognitive_item
-    from locomo.cli import build_worker_command, resolve_stages
+    from experiment.locomo.helpers import is_cognitive_item
+    from experiment.locomo.cli import build_worker_command, resolve_stages
 
     runtime = _build_runtime(args)
     config = runtime.config
@@ -279,7 +278,7 @@ def dispatch_pipeline(args) -> None:
 
 
 def main(argv=None) -> None:
-    from locomo.cli import parse_args
+    from experiment.locomo.cli import parse_args
 
     args = parse_args(argv)
     args.raw_argv = list(argv) if argv is not None else sys.argv[1:]

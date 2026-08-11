@@ -12,12 +12,10 @@ import argparse
 from pathlib import Path
 import os
 import sys
-_HERE = Path(__file__).resolve().parent        # experiment/longmem/
-_EXP = _HERE.parent                            # experiment/
-_ROOT = _EXP.parent                            # repo root
-sys.path.insert(0, str(_ROOT))
-sys.path.insert(0, str(_EXP))
-sys.path.insert(0, str(_HERE))
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[2]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
 from experiment.longmem.processor import MultiDatasetProcessor
 from experiment.longmem.helpers.args import add_child_args, add_data_args, add_run_args, resolve_stages
@@ -26,7 +24,7 @@ from experiment.longmem.helpers.progress import build_noco_table_name
 from experiment.longmem.models import DatasetConfig
 from experiment.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.longmem.utils.io import write_json_file
-from experiment_config import INGEST_PARAMS, RETRIEVAL_PARAMS
+from experiment.experiment_config import INGEST_PARAMS, RETRIEVAL_PARAMS
 
 
 def _parse_type_filter(value: list[str] | str | None) -> list[str] | None:

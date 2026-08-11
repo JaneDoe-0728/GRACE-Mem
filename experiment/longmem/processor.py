@@ -24,20 +24,13 @@ import os
 import pandas as pd
 from pathlib import Path
 from typing import Optional, Dict, List, Set
-import sys
 import traceback
 from datetime import datetime
-
-_HERE = Path(__file__).resolve().parent        # experiment/longmem/
-_EXP = _HERE.parent                            # experiment/
-_ROOT = _EXP.parent                            # repo root
-sys.path.insert(0, str(_ROOT))
-sys.path.insert(0, str(_EXP))
 
 from KG.storage import CacheStore, VDBManager
 from KG.pipeline.ingestor import Ingestor
 from KG.pipeline.retriever import Retriever, RetrieverConfig
-from experiment_config import INGEST_PARAMS, RERANKER_PARAMS
+from experiment.experiment_config import INGEST_PARAMS, RERANKER_PARAMS
 
 # LongMem-only: whether summaries are rebuilt into :u/:a entry pairs after ingest.
 # Drives both the rebuild step and the matching retrieval setting.

@@ -5,9 +5,12 @@ import sys
 
 import pandas as pd
 
-sys.path.append(str(Path(__file__).resolve().parents[2]))
-sys.path.append(str(Path(__file__).resolve().parents[3]))
-from locomo.helpers.dataset import (
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[3]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+
+from experiment.locomo.helpers.dataset import (
     category_to_label,
     find_evidence_turns_from_sample,
     load_qa_items,
@@ -15,7 +18,7 @@ from locomo.helpers.dataset import (
     normalize_dataset_name,
     resolve_dataset_path,
 )
-from locomo.helpers.llm import build_open_domain_plus_messages, build_open_domain_standard_messages, llm_post
+from experiment.locomo.helpers.llm import build_open_domain_plus_messages, build_open_domain_standard_messages, llm_post
 
 INPUT_CSV = "data/4o-open-domain.csv"
 OUTPUT_CSV = "data/4o-open-domain_judged.csv"

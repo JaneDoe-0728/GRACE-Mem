@@ -1,14 +1,15 @@
 # llm/client.py
 import logging
-import os, time, json, threading, requests
+import os, time, json, requests
 from pathlib import Path
 from typing import Any, Iterator
 from dotenv import load_dotenv
 from openai import OpenAI
 import httpx
 from KG.utils.common import SCHEMA_keyword
+from KG.llm.token_tracking import token_tracker
 from KG.services.entity_manager import EntityOpsProcessor, EntityOpsConfig
-from experiment.reproducibility import get_runtime_reproducibility
+from KG.runtime.reproducibility import get_runtime_reproducibility
 
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
@@ -16,127 +17,6 @@ LLM_API = os.getenv("LLM_API")
 MODEL_NAME = os.getenv("MODEL_NAME")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 logger = logging.getLogger(__name__)
-
-# --------------------------------------------------------------------------- #
-# Token tracker                                                                #
-# --------------------------------------------------------------------------- #
-_TOKEN_LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "token_usage.jsonl"
-
-# Human-readable labels for each LLM method
-_METHOD_LABELS = {
-    "chat":                   "qa_answer",           # QA 回答 / 答案評分
-    "generate_llm_extract":   "entity_extraction",   # Entity / relationship 抽取
-    "generate_llm_keyword":   "keyword_extraction",  # 檢索關鍵字抽取
-    "generate_llm_dynamic_plan": "dynamic_planning",  # 動態檢索規劃
-    "generate_llm_hyde":          "hyde_generation",   # HyDE 假設摘要生成
-}
-
-class _TokenTracker:
-    """Thread-safe token usage tracker with per-call context (dataset + stage).
-
-    Usage:
-        token_tracker.set_context(dataset="abc123", stage="ingest")
-        # ... LLM calls happen ...
-        token_tracker.set_context(dataset="abc123", stage="qa")
-
-    Each log entry in token_usage.jsonl contains:
-        ts, dataset, stage, label, prompt_tokens, completion_tokens, total_tokens
-    """
-    def __init__(self, log_path: Path = _TOKEN_LOG_PATH) -> None:
-        """Initialize shared token logging state and per-thread context storage."""
-        self._lock = threading.Lock()
-        self._log_path = log_path
-        self._log_path.parent.mkdir(parents=True, exist_ok=True)
-        self._local = threading.local()   # per-thread: dataset, stage
-        # totals keyed by (dataset, stage, label)
-        self._totals: dict[tuple, dict] = {}
-
-    def set_context(
-        self,
-        dataset: str,
-        stage: str,
-        log_dir: "Path | str | None" = None,
-        log_path: "Path | str | None" = None,
-    ) -> None:
-        """Set the current dataset, stage, and optional per-instance log path for this thread.
-
-        ``log_path`` takes precedence over ``log_dir``.  Use ``log_path`` to write
-        a per-sample file (e.g. ``tokens_usage42.jsonl``); use ``log_dir`` for a
-        shared directory with a fixed ``token_usage.jsonl`` name.
-        """
-        self._local.dataset = dataset
-        self._local.stage = stage
-        if log_path is not None:
-            p = Path(log_path)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            self._local.log_path = p
-        elif log_dir is not None:
-            p = Path(log_dir)
-            p.mkdir(parents=True, exist_ok=True)
-            self._local.log_path = p / "token_usage.jsonl"
-        else:
-            self._local.log_path = None  # fall back to global
-
-    def _get_context(self) -> tuple[str, str]:
-        """Return the current dataset and stage labels for this thread."""
-        return (
-            getattr(self._local, "dataset", "unknown"),
-            getattr(self._local, "stage", "unknown"),
-        )
-
-    def record(self, method: str, prompt_tokens: int, completion_tokens: int, elapsed: float = 0.0) -> None:
-        """Append one token-usage record and update in-memory aggregates."""
-        dataset, stage = self._get_context()
-        label = _METHOD_LABELS.get(method, method)
-        total = prompt_tokens + completion_tokens
-        entry = {
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "dataset": dataset,
-            "stage": stage,
-            "label": label,
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": total,
-            "elapsed_s": round(elapsed, 2),
-            "tok_per_s": round(total / elapsed, 1) if elapsed > 0 else None,
-        }
-        key = (dataset, stage, label)
-        # Per-dataset log (if set) + global log
-        per_dataset_path: "Path | None" = getattr(self._local, "log_path", None)
-        with self._lock:
-            for path in filter(None, [per_dataset_path, self._log_path]):
-                with path.open("a", encoding="utf-8") as f:
-                    f.write(json.dumps(entry) + "\n")
-            if key not in self._totals:
-                self._totals[key] = {"prompt": 0, "completion": 0, "calls": 0}
-            self._totals[key]["prompt"] += prompt_tokens
-            self._totals[key]["completion"] += completion_tokens
-            self._totals[key]["calls"] += 1
-
-    def summary(self) -> str:
-        """Render the accumulated token-usage totals as a text table."""
-        with self._lock:
-            lines = ["=== Token Usage Summary ===",
-                     f"  {'dataset':<20} {'stage':<10} {'label':<22} {'calls':>5}  {'prompt':>8}  {'completion':>10}  {'total':>8}",
-                     "  " + "-" * 85]
-            grand_p = grand_c = grand_calls = 0
-            for (dataset, stage, label), d in sorted(self._totals.items()):
-                lines.append(
-                    f"  {dataset:<20} {stage:<10} {label:<22} {d['calls']:>5}  "
-                    f"{d['prompt']:>8}  {d['completion']:>10}  {d['prompt']+d['completion']:>8}"
-                )
-                grand_p += d["prompt"]
-                grand_c += d["completion"]
-                grand_calls += d["calls"]
-            lines.append("  " + "-" * 85)
-            lines.append(
-                f"  {'GRAND TOTAL':<20} {'':<10} {'':<22} {grand_calls:>5}  "
-                f"{grand_p:>8}  {grand_c:>10}  {grand_p+grand_c:>8}"
-            )
-            return "\n".join(lines)
-
-# Module-level singleton shared by all LLMClient instances
-token_tracker = _TokenTracker()
 
 class _Namespace:
     """Recursively wraps a dict so attribute access mirrors the OpenAI SDK response shape."""
