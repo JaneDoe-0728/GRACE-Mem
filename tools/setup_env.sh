@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# setup_env.sh — one-time environment setup before running experiments
+# tools/setup_env.sh — one-time environment setup before running experiments
 #
 # Run this once per machine (or after pulling new deps/models):
-#   bash setup_env.sh
+#   bash tools/setup_env.sh
 #
 # Steps:
 #   1. uv sync          — install Python dependencies
 #   2. docker compose   — start FalkorDB container
-#   3. download_model   — pull embedding + reranker models (skips if present)
+#   3. download_models  — pull embedding + reranker models (skips if present)
 #   4. verify           — confirm FalkorDB reachable and model files exist
 
 set -euo pipefail
@@ -54,7 +54,7 @@ echo "      OK"
 # ── 3. Download models ────────────────────────────────────────────────────────
 
 echo "[3/4] download models (no-op if already present)"
-uv run python download_model.py
+uv run python tools/download_models.py
 echo "      OK"
 
 # ── 4. Verify ─────────────────────────────────────────────────────────────────

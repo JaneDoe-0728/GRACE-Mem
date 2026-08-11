@@ -70,13 +70,13 @@ preflight() {
 
     # Embedding model
     if [[ ! -f "${REPO_ROOT}/models/embedding_models/qwen3-0.6b/config.json" ]]; then
-        echo "PREFLIGHT FAIL: embedding model missing. Run: bash setup_env.sh" >&2
+        echo "PREFLIGHT FAIL: embedding model missing. Run: bash tools/setup_env.sh" >&2
         fail=1
     fi
 
     # Reranker model
     if [[ ! -f "${REPO_ROOT}/models/reranker/qwen3-reranker-0.6b/config.json" ]]; then
-        echo "PREFLIGHT FAIL: reranker model missing. Run: bash setup_env.sh" >&2
+        echo "PREFLIGHT FAIL: reranker model missing. Run: bash tools/setup_env.sh" >&2
         fail=1
     fi
 

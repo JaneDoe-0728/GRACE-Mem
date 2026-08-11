@@ -6,7 +6,7 @@ import threading
 import datetime
 from typing import List, Dict, Any, Tuple, Optional
 import numpy as np
-from embeddings import embedder
+from KG.embeddings import embedder
 from KG.utils.logger_config import make_module_jlog
 
 _debug_jlog = make_module_jlog(

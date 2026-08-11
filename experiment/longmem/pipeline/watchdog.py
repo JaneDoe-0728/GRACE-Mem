@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import NamedTuple
 
-# Allow importing experiment.* and refresh_system when this file is run directly.
+# Allow importing experiment.* and tools.* when this file is run directly.
 _PIPELINE_DIR = Path(__file__).resolve().parent
 _LONGMEM_ROOT = _PIPELINE_DIR.parent
 if __package__ in (None, ""):
@@ -1053,7 +1053,7 @@ def main(argv: list[str] | None = None) -> int:
             status["state"] = "refreshing"
             write_status_file(status_path, status)
             try:
-                from refresh_system import refresh_system
+                from tools.refresh_system import refresh_system
                 refresh_system()
                 logger.info("refresh_system completed successfully.")
             except Exception as ref_exc:

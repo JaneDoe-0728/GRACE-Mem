@@ -74,7 +74,7 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
     from KG.storage import MGR
     from KG.llm import LLMClient
     from KG.graph.falkordb import graph_from_env
-    from embeddings import embedder
+    from KG.embeddings import embedder
     from KG.services import EntityManager, RelationshipManager, Provenance
 
     GLOBAL_CACHE = MGR.cache

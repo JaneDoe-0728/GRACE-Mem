@@ -90,7 +90,7 @@ work without changes when using `docker-compose.yml`.
 Then run the setup script:
 
 ```bash
-bash setup_env.sh
+bash tools/setup_env.sh
 ```
 
 It performs `uv sync`, starts the primary FalkorDB container, downloads
@@ -240,7 +240,8 @@ experiment/
   __init__.py
   README.md
 docs/             Refactor report requested during repository preparation
-test/             Offline regression suite plus explicitly separated live probes
+tests/             Offline regression suite plus explicitly separated live probes
+tools/             Repository setup, model download, refresh, and audit helpers
 ```
 
 ## Documentation
@@ -250,7 +251,7 @@ test/             Offline regression suite plus explicitly separated live probes
 | [Experiment guide](experiment/README.md) | Data layout, benchmark commands, stages, outputs, and recovery |
 | [Evaluation protocol](EVALUATION.md) | Standard judge model, voting rules, columns, commands, and scoring |
 | [Agent Filter guide](experiment/agent_filter/README.md) | Evidence-refinement workflow and evaluation notes |
-| [Test guide](test/README.md) | Offline suite, skips, expected failures, and manual probes |
+| [Test guide](tests/README.md) | Offline suite, skips, expected failures, and manual probes |
 
 ## Validation
 

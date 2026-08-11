@@ -33,7 +33,7 @@ from KG.pipeline.retriever import Retriever, RetrieverConfig
 from experiment.experiment_config import RERANKER_PARAMS
 from KG.llm import LLMClient, token_tracker
 from KG.graph.falkordb import graph_from_env
-from embeddings import embedder
+from KG.embeddings import embedder
 from KG.services import EntityManager, RelationshipManager, Provenance
 from KG.utils.logger_config import make_module_jlog
 from experiment.longmem.pipeline import decision

@@ -294,6 +294,6 @@ under `tools/` because they inspect artifacts or require configured services.
 - If a process was interrupted, use the normal command again first. Completion
   checks and checkpoints are designed to resume work without rebuilding complete
   datasets.
-- Use `refresh_system.py` only when intentionally clearing active graph/model
+- Use `tools/refresh_system.py` only when intentionally clearing active graph/model
   state between manual experiments; it is not a substitute for matching artifact
   configuration.

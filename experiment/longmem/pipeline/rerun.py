@@ -128,7 +128,7 @@ class LongMemRerun:
         from KG.llm import token_tracker
         from KG.pipeline.retriever import Retriever, RetrieverConfig
         from KG.storage import VDBManager
-        from embeddings import embedder
+        from KG.embeddings import embedder
 
         mgr = None
         retriever = None

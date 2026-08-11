@@ -38,6 +38,10 @@ experiment/old longmem result
 experiment/sample_question
 logs/
 test/logs/
+tests/
+docs/REFACTOR_INSTRUCTIONS.md
+docs/REFACTOR_REPORT.zh-TW.md
+
 # AutoResearch evolve state (run-time, not architecture)
 experiment/locomo/autoresearch/findings.md
 experiment/locomo/autoresearch/progress.md

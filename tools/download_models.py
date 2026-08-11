@@ -1,8 +1,10 @@
-from huggingface_hub import snapshot_download
 from pathlib import Path
 
-# 你要存放模型的根目錄（固定跟這個.py檔同層）
-TARGET_DIR = Path(__file__).parent / "models"
+from huggingface_hub import snapshot_download
+
+# Models live at the repository root, even though this helper is under tools/.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TARGET_DIR = REPO_ROOT / "models"
 
 MODELS = {
     # # Chat 模型（需有存取權）
@@ -36,4 +38,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    

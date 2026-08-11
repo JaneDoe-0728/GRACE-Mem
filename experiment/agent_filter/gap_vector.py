@@ -22,7 +22,7 @@ _embed_fn = None
 def _get_embed():
     global _embed_fn
     if _embed_fn is None:
-        from embeddings import embedder  # lazy: 載入 qwen3-0.6b(GPU)
+        from KG.embeddings import embedder  # lazy: 載入 qwen3-0.6b(GPU)
         _embed_fn = embedder.embed
     return _embed_fn
 

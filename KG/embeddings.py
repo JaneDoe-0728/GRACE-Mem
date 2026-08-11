@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 import torch
 
-load_dotenv(Path(__file__).parent / ".env")
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(_REPO_ROOT / ".env")
 
 class HFTextEmbedding:
     """
@@ -17,7 +18,7 @@ class HFTextEmbedding:
         vecs = embedder.embed(["你好", "Hello"])
     """
 
-    MODEL_PATH = Path(__file__).parent / "models" / "embedding_models" / "qwen3-0.6b"
+    MODEL_PATH = _REPO_ROOT / "models" / "embedding_models" / "qwen3-0.6b"
     # MODEL_PATH = Path(__file__).parent.parent.parent / "models" / "embedding_models" / "bge-m3"
 
     def __init__(self, device: str | None = None, batch_size: int = 16, max_length: int = 512):
