@@ -56,14 +56,15 @@ read from environment variables by concrete adapters.
 
 ## Current Findings
 
-- 181 modules and 381 package-local import edges across `KG` and `experiment`.
-- 77 `experiment -> KG` edges, which follow the intended outer-to-core direction.
+- 181 modules and 374 package-local import edges across `KG` and `experiment`.
+- 75 `experiment -> KG` edges, which follow the intended outer-to-core direction.
 - No `KG -> experiment` reverse dependencies remain.
 - No circular dependencies remain in the static project graph.
 - Manual network/model scripts are excluded from automated pytest collection.
 
 The dependency direction and canonical package imports are locked by
-`test/test_architecture.py`.
+`test/test_architecture.py`. Fresh-interpreter import tests complement the AST
+graph because importing a submodule executes each parent package's `__init__.py`.
 
 ## Cycles Removed
 
@@ -88,6 +89,12 @@ The dependency direction and canonical package imports are locked by
 
    Snapshot code now imports dataset helpers from their owning module and calls
    snapshot-owned functions directly instead of routing through the helper facade.
+
+5. `locomo.snapshot -> locomo.helpers.__init__ -> locomo.snapshot`
+
+   This package-initialization cycle was invisible to the original AST graph.
+   Internal modules now import owners directly, and the compatibility facade
+   resolves exports lazily.
 
 ## Target Direction
 
