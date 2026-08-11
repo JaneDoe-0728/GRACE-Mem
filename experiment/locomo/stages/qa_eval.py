@@ -47,7 +47,7 @@ _replay_relationship_meta_by_label: dict[str, dict[str, Any]] = {}
 _TEMPORAL_TYPES = {"Date", "Event", "Activity"}
 
 # ---------------------------------------------------------------------------
-# Fact extraction prompt (copied from fact_extraction.py — concise mode)
+# Fact extraction prompt used by concise replay modes.
 # ---------------------------------------------------------------------------
 
 _FACT_EXTRACTION_SYSTEM_PROMPT = """
