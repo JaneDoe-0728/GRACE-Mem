@@ -185,9 +185,10 @@ uv run python -m experiment.longmem.pipeline.watchdog \
 | `--artifact-dir` | Root containing reusable `artifacts_<dataset>/` directories |
 | `--force` | Reprocess work that completion checks would otherwise skip |
 
-In batch mode, the watchdog launches `pipeline/batch.py`, which delegates each
-question CSV to `MultiDatasetProcessor`. It records completion state and restarts
-incomplete work up to `--max-restarts`. In retrieval-only mode it runs
+In batch mode, the watchdog launches `experiment.longmem.pipeline.batch` as a
+module, which delegates each question CSV to `MultiDatasetProcessor`. It records
+completion state and restarts incomplete work up to `--max-restarts`. In
+retrieval-only mode it runs
 `LongMemRerun` in-process, restores graph state from the artifact cache, and
 closes dataset-local vector clients after every question.
 
@@ -290,9 +291,9 @@ adversarial questions unless `--include-adversarial` is supplied.
 For paper scoring, use the shared post-hoc judge after answer generation:
 
 ```bash
-uv run python experiment/common/evaluation/judge.py locomo <run-tag> --samples 0-9
-uv run python experiment/common/evaluation/judge.py longmem <run-tag>
-uv run python experiment/common/evaluation/score.py <run-tag>
+uv run python -m experiment.common.evaluation.judge locomo <run-tag> --samples 0-9
+uv run python -m experiment.common.evaluation.judge longmem <run-tag>
+uv run python -m experiment.common.evaluation.score <run-tag>
 ```
 
 The exact carry/rejudge rule, LongMemEval abstention handling, result columns,
@@ -357,7 +358,7 @@ under `tools/manual/` requires configured services.
 
 ## Recovery and Diagnostics
 
-- Inspect available flags directly with `uv run python <entrypoint> --help`.
+- Inspect available flags directly with `uv run python -m <module> --help`.
 - Check the first dataset/sample logs before starting a large run.
 - LongMem watchdog status is written under `<run-root>/_watchdog/`.
 - Reusing artifacts avoids ingest cost but still requires matching data and

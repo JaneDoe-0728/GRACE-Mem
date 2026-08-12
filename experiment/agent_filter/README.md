@@ -134,9 +134,9 @@ uv run python -m tools.agent_filter_trace_viewer.build \
 Judge and score the new outputs with the shared evaluation CLIs:
 
 ```bash
-uv run python experiment/common/evaluation/judge.py longmem <agent-filter-run>
-uv run python experiment/common/evaluation/judge.py locomo <agent-filter-run> --samples 0-9
-uv run python experiment/common/evaluation/score.py <agent-filter-run> --agent
+uv run python -m experiment.common.evaluation.judge longmem <agent-filter-run>
+uv run python -m experiment.common.evaluation.judge locomo <agent-filter-run> --samples 0-9
+uv run python -m experiment.common.evaluation.score <agent-filter-run> --agent
 ```
 
 Use the same source run, question set, answer model, judge model, and evaluation

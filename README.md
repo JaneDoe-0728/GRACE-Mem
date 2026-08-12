@@ -1,62 +1,79 @@
+<div align="center">
+
 # GRACE-Mem
 
-GRACE-Mem is a graph-based long-term conversational memory framework with
-reproducibility-oriented pipelines for LoCoMo and LongMemEval.
+### Graph Retrieval with Agentic Corpus Evidence for Long-Term Conversational Memory
 
-[Overview](#overview) | [Architecture](#architecture) | [Quick Start](#quick-start) |
+**Structured memory, graph-aware retrieval, traceable evidence.**
+
+[![Python](https://img.shields.io/badge/Python-3.10--3.13-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![License](https://img.shields.io/badge/License-MIT-2ea44f)](LICENSE)
+[![uv](https://img.shields.io/badge/dependencies-uv-DE5FE9)](https://docs.astral.sh/uv/)
+[![Docker](https://img.shields.io/badge/FalkorDB-Docker-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![Benchmarks](https://img.shields.io/badge/benchmarks-LoCoMo%20%7C%20LongMemEval-555)](experiment/README.md)
+
+[Quick Start](#quick-start) | [Architecture](#architecture) |
 [Benchmarks](#benchmarks) | [Documentation](#documentation)
+
+</div>
 
 ## Overview
 
-GRACE-Mem builds persistent memory from dialogue so later questions can be
-answered with retrieved evidence instead of relying only on the prompt window.
-It is research software for memory experiments and retrieval diagnostics, not a
-hosted memory service.
+GRACE-Mem is an open-source long-term conversational memory framework that
+converts dialogue into structured, retrievable memory. It is research software
+for memory experiments and retrieval diagnostics, not a hosted memory service.
 
-The memory stores compressed dialogue records, entities, relationships,
-temporal information, and provenance links to source turns. A knowledge graph
-connects facts that may be distributed across sessions, while vector and lexical
-indexes provide semantic and exact-match discovery.
+Instead of treating memory as a flat vector store, GRACE-Mem combines a
+knowledge graph, dense and lexical retrieval, temporal information, and source
+provenance to recover evidence across conversations. It also provides
+reproducibility-oriented LoCoMo and LongMemEval pipelines, optional agentic
+evidence refinement, and offline retrieval diagnostics.
 
-At query time, GRACE-Mem combines entity and relationship retrieval, graph
-expansion, direct evidence retrieval, filtering, and reranking. The resulting
-context can optionally pass through Agent Filter, which uses GREP, READ, and an
-optional VECTOR search to refine evidence before answer generation.
+## Why GRACE-Mem?
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### Graph-Structured Memory
+
+Connect entities, relationships, and temporal facts across dialogue sessions
+instead of treating each memory as an isolated chunk.
+
+</td>
+<td width="33%" valign="top">
+
+### Evidence-Centric Retrieval
+
+Combine vector search, BM25, graph expansion, reranking, and provenance-aware
+evidence reconstruction in one retrieval path.
+
+</td>
+<td width="33%" valign="top">
+
+### Reproducible Evaluation
+
+Run staged LoCoMo and LongMemEval experiments with pinned datasets, reusable
+artifacts, run metadata, shared judging, and offline diagnostics.
+
+</td>
+</tr>
+</table>
 
 ## Architecture
 
 ![GRACE-Mem architecture](docs/architecture/flow.png)
 
-The Evidence Curation Agent shown in the retrieval panel is optional; the
-standard pipeline can send reranked evidence directly to answer generation.
+GRACE-Mem has two primary execution paths.
 
-- **Core (`grace_mem/`)**: ingestion, retrieval, graph synchronization, storage, LLM
-  access, temporal handling, and provenance.
-- **Benchmarks (`experiment/`)**: LoCoMo and LongMemEval orchestration, shared
-  judging/scoring, artifacts, and run metadata.
-- **Optional tools**: Agent Filter, replay utilities, and offline diagnostics.
-
-Dependency direction is one way:
-
-```text
-benchmarks / analysis / tools
-        -> experiment orchestration
-        -> grace_mem pipeline facades
-        -> grace_mem services, storage, graph, and LLM utilities
-```
-
-The core `grace_mem/` package does not depend on benchmark-specific code.
-
-## Workflow
-
-### Ingestion
+### Memory Construction
 
 ```text
 dialogue turns
   -> temporal normalization
   -> compression / summary representation
-  -> entity extraction and reconciliation
-  -> relationship extraction
+  -> entity and relationship extraction
+  -> entity reconciliation
   -> vector and BM25 storage
   -> FalkorDB graph synchronization
 ```
@@ -64,7 +81,7 @@ dialogue turns
 Stored evidence retains provenance back to source dialogue. Benchmark runs keep
 artifacts and metadata so retrieval-only reruns can reuse a compatible ingest.
 
-### Retrieval
+### Memory Retrieval
 
 ```text
 question + query time
@@ -76,13 +93,181 @@ question + query time
   -> answer generation
 ```
 
-## Key Features
+The Evidence Curation Agent shown in the retrieval panel is optional; the
+standard pipeline can send reranked evidence directly to answer generation.
 
-- Graph-based conversational memory with temporal and provenance information.
-- Hybrid dense and BM25 retrieval with graph expansion and reranking.
-- Optional post-retrieval evidence verification and recovery.
-- Staged LoCoMo and LongMemEval runners with reusable artifacts.
-- Shared judge, scoring, oracle, and offline diagnostic entrypoints.
+The repository keeps a one-way dependency direction:
+
+```text
+benchmarks / analysis / tools
+        -> experiment orchestration
+        -> grace_mem pipeline facades
+        -> grace_mem services, storage, graph, and LLM utilities
+```
+
+- **Core (`grace_mem/`)**: ingestion, retrieval, graph synchronization, storage,
+  LLM access, temporal handling, and provenance.
+- **Benchmarks (`experiment/`)**: LoCoMo and LongMemEval orchestration, shared
+  judging/scoring, artifacts, and run metadata.
+- **Optional tools**: Agent Filter, replay utilities, and offline diagnostics.
+
+The core `grace_mem/` package does not depend on benchmark-specific code.
+
+## Quick Start
+
+### 1. Set Up GRACE-Mem
+
+The recommended local setup uses the included FalkorDB Docker service:
+
+```bash
+git clone https://github.com/JaneDoe-0728/GRACE-Mem.git
+cd GRACE-Mem
+cp .env.example .env
+# Edit .env and configure the LLM and judge endpoints.
+bash tools/setup_env.sh
+```
+
+The setup script installs locked dependencies, starts FalkorDB, downloads the
+pinned embedding and reranker snapshots, and verifies the database and model
+files.
+
+### 2. Ingest and Retrieve One Memory
+
+With FalkorDB and the configured LLM endpoint running:
+
+```python
+from grace_mem.pipeline.factory import build_pipeline
+
+with build_pipeline() as runtime:
+    runtime.ingestor.summarize_and_ingest_turn(
+        session_id=1,
+        message_id=1,
+        user_text="I attended an AI workshop yesterday.",
+        assistant_text="What did you learn there?",
+        dialogue_datetime="2023/02/18 (Sat) 08:08",
+    )
+
+    context = runtime.retriever.build_kg_context(
+        question="Which workshop did the user attend?",
+        query_time="2023/02/18 (Sat) 08:08",
+    )
+    print(context)
+```
+
+This example:
+
+- stores one conversation turn;
+- extracts structured memory and temporal information;
+- synchronizes graph and vector indexes;
+- retrieves provenance-linked evidence for a later question.
+
+`build_pipeline()` owns the ingestor, retriever, graph client, vector stores,
+and LLM client. Using it as a context manager closes owned resources.
+
+## Benchmarks
+
+GRACE-Mem ships with reproducibility-oriented pipelines for two long-term
+memory benchmarks.
+
+| Benchmark | Focus | Pipeline |
+|---|---|---|
+| **[LoCoMo](https://github.com/snap-research/locomo)** | Long conversational memory across sessions | ingest -> retrieve -> answer -> judge |
+| **[LongMemEval](https://github.com/xiaowu0162/LongMemEval)** | Long-term memory and temporal reasoning | ingest -> retrieve -> answer -> judge |
+
+Datasets are not bundled. Download pinned source revisions, verify SHA-256
+checksums, and convert LongMemEval into runner-ready CSVs with:
+
+```bash
+uv run python -m tools.download_datasets --dataset all
+```
+
+Source JSON files and generated CSVs remain gitignored. Re-running the command
+verifies existing files and skips a complete matching conversion.
+
+### LoCoMo
+
+The downloader writes `experiment/locomo/data/locomo10.json`. Run selected
+samples with:
+
+```bash
+uv run python -m experiment.locomo.pipeline.runner \
+  --dataset locomo \
+  --sample-ids 0-9 \
+  --run-tag my-run
+```
+
+### LongMemEval
+
+The downloader writes one question CSV under
+`experiment/longmem/script_data/<category>/`. Run a category with:
+
+```bash
+uv run python -m experiment.longmem.pipeline.watchdog \
+  --run-tag my-run \
+  --type temporal_reasoning
+```
+
+The default is the cleaned `S` variant. The downloader also supports `M` and
+`oracle` with `--longmem-variant`. Pinned revisions, checksums, generated CSV
+schema, output layout, and artifact compatibility rules are in the
+[experiment guide](experiment/README.md).
+
+### Evaluation
+
+Use the shared post-hoc evaluation modules on completed runs:
+
+```bash
+uv run python -m experiment.common.evaluation.judge locomo <run-tag> --samples 0-9
+uv run python -m experiment.common.evaluation.judge longmem <run-tag>
+uv run python -m experiment.common.evaluation.score <run-tag>
+```
+
+See [EVALUATION.md](EVALUATION.md) for voting, abstention, output-column, and
+oracle rules.
+
+## Agent Filter
+
+![Illustrative Agent Filter trace](docs/architecture/agent_flow_v2.png)
+
+Agent Filter is an optional post-retrieval evidence-refinement layer. It starts
+from an existing run's `Retrieved_Context`: GREP and READ inspect the question
+corpus, while optional VECTOR performs a separate semantic search over the
+existing summary VDB. It does not rerun the full KG retrieval pipeline.
+
+The IDs and evidence counts in the figure illustrate one trace; they are not
+fixed pipeline invariants. Execution failures preserve the original context,
+but successful refinement is not a guarantee that answer quality improves.
+
+```bash
+# LongMemEval
+uv run python -m experiment.agent_filter.replay_run \
+  --source-run <existing-run> --run-tag <agent-run> --workers 4
+
+# LoCoMo
+uv run python -m experiment.agent_filter.locomo_replay \
+  --source-run <existing-run> --run-tag <agent-run> \
+  --chunk-turns 8 --samples 0-9 --workers 4 --granularity turn
+```
+
+LongMem VECTOR discovery uses `LONGMEM_ARTIFACT_ROOT` or `--artifact-root`.
+LoCoMo discovers its summary VDB under each source sample. See the
+[Agent Filter guide](experiment/agent_filter/README.md) for defaults,
+adjudication scope, scoring, and trace inspection.
+
+## Analysis and Diagnostics
+
+GRACE-Mem includes post-run tools for investigating retrieval behavior without
+changing the core runtime. Typical analyses include:
+
+- gold-evidence and supplemental recall;
+- retrieval failure and judge-flip analysis;
+- filter, reranking, and evidence-selection ablations;
+- dataset statistics and artifact inspection.
+
+Most offline diagnostics operate directly on saved benchmark artifacts, so
+expensive ingestion or retrieval stages do not need to be rerun. Some tools call
+an LLM or launch benchmark subprocesses; check each module's `--help` and the
+runtime matrix in the [experiment guide](experiment/README.md#offline-analysis).
 
 ## Installation
 
@@ -98,25 +283,7 @@ The lockfile currently selects PyTorch CUDA 12.8 wheels. A compatible NVIDIA
 runtime is the documented setup; CPU-only installations must select an
 appropriate PyTorch source before `uv sync`.
 
-### Local FalkorDB Setup
-
-This is the shortest complete setup when Docker is available:
-
-```bash
-git clone https://github.com/JaneDoe-0728/GRACE-Mem.git
-cd GRACE-Mem
-cp .env.example .env
-# Edit .env and configure the LLM and judge endpoints.
-bash tools/setup_env.sh
-```
-
-The script runs `uv sync`, starts the primary FalkorDB container, downloads the
-pinned embedding and reranker snapshots, and verifies the database and model
-files. The database listens on port `6379`; its browser UI is available at
-`http://localhost:3000`.
-
-### External FalkorDB Setup
-
+The recommended Docker installation is shown in [Quick Start](#quick-start).
 Docker is not required when an existing FalkorDB instance is available:
 
 ```bash
@@ -127,6 +294,9 @@ cp .env.example .env
 uv sync
 uv run python tools/download_models.py
 ```
+
+The bundled database listens on port `6379`; its browser UI is available at
+`http://localhost:3000`.
 
 ## Configuration
 
@@ -162,8 +332,8 @@ FalkorDB.
 
 `tools/download_models.py` installs pinned snapshots of
 `Qwen/Qwen3-Embedding-0.6B` and `Qwen/Qwen3-Reranker-0.6B` under `models/`.
-`grace_mem/embeddings.py` uses the local embedding path when available and otherwise
-falls back to the Hugging Face model ID.
+`grace_mem/embeddings.py` uses the local embedding path when available and
+otherwise falls back to the Hugging Face model ID.
 
 ### Experiment Configuration
 
@@ -172,150 +342,28 @@ retrieval, reranker, and Agent Filter defaults. CLI flags are intended for run
 selection, stage selection, artifact reuse, and output paths. See the
 [experiment guide](experiment/README.md) for the supported interface.
 
-## Quick Start
-
-With FalkorDB and the configured LLM endpoint running, ingest one turn and
-retrieve context:
-
-```python
-from grace_mem.pipeline.factory import build_pipeline
-
-with build_pipeline() as runtime:
-    runtime.ingestor.summarize_and_ingest_turn(
-        session_id=1,
-        message_id=1,
-        user_text="I attended an AI workshop yesterday.",
-        assistant_text="What did you learn there?",
-        dialogue_datetime="2023/02/18 (Sat) 08:08",
-    )
-
-    context = runtime.retriever.build_kg_context(
-        question="Which workshop did the user attend?",
-        query_time="2023/02/18 (Sat) 08:08",
-    )
-    print(context)
-```
-
-`build_pipeline()` owns the ingestor, retriever, graph client, vector stores,
-and LLM client. Using it as a context manager closes owned resources.
-
-## Benchmarks
-
-Benchmark orchestration is separate from the core package. Both runners expose
-the ordered stages `ingest`, `qa_eval`, and `judge`; use `--stage` for a subset
-or `--artifact-dir` to reuse a compatible ingest.
-
-Datasets are not bundled. Use the official sources:
-
-- [LoCoMo dataset and benchmark](https://github.com/snap-research/locomo)
-- [LongMemEval dataset and benchmark](https://github.com/xiaowu0162/LongMemEval)
-
-Download the pinned LoCoMo release and the cleaned LongMemEval-S release, verify
-their SHA-256 checksums, and convert LongMemEval into runner-ready CSVs:
-
-```bash
-uv run python -m tools.download_datasets --dataset all
-```
-
-Source JSON files and generated CSVs remain gitignored. Re-running the command
-verifies existing files and skips a complete matching conversion.
-
-### LoCoMo
-
-The downloader places `locomo10.json` at
-`experiment/locomo/data/locomo10.json`. Then run selected samples:
-
-```bash
-uv run python -m experiment.locomo.pipeline.runner \
-  --dataset locomo \
-  --sample-ids 0-9 \
-  --run-tag my-run
-```
-
-### LongMemEval
-
-The downloader converts each LongMemEval question to
-`experiment/longmem/script_data/<category>/<question-id>.csv`. Run a category
-after conversion:
-
-```bash
-uv run python -m experiment.longmem.pipeline.watchdog \
-  --run-tag my-run \
-  --type temporal_reasoning
-```
-
-The default is the cleaned `S` variant. The downloader also supports `M` and
-`oracle` with `--longmem-variant`. Pinned revisions, checksums, the generated CSV
-schema, output layout, and artifact compatibility rules are in the
-[experiment guide](experiment/README.md).
-
-### Evaluation
-
-Use the shared post-hoc evaluation commands on completed runs:
-
-```bash
-uv run python experiment/common/evaluation/judge.py locomo <run-tag> --samples 0-9
-uv run python experiment/common/evaluation/judge.py longmem <run-tag>
-uv run python experiment/common/evaluation/score.py <run-tag>
-```
-
-See [EVALUATION.md](EVALUATION.md) for voting, abstention, output-column, and
-oracle rules.
-
-## Agent Filter
-
-![Illustrative Agent Filter trace](docs/architecture/agent_flow_v2.png)
-
-The IDs and evidence counts in this figure illustrate one trace; they are not
-fixed pipeline invariants. The default retrieval and Agent Filter caps are
-configured independently.
-
-Agent Filter starts from an existing run's `Retrieved_Context`. It does not
-rerun the full KG retrieval pipeline: GREP and READ inspect the question corpus,
-while optional VECTOR performs a separate semantic search over the existing
-summary VDB. Execution failures preserve the original context, but successful
-refinement is not a guarantee that answer quality improves.
-
-```bash
-# LongMemEval
-uv run python -m experiment.agent_filter.replay_run \
-  --source-run <existing-run> --run-tag <agent-run> --workers 4
-
-# LoCoMo
-uv run python -m experiment.agent_filter.locomo_replay \
-  --source-run <existing-run> --run-tag <agent-run> \
-  --chunk-turns 8 --samples 0-9 --workers 4 --granularity turn
-```
-
-LongMem VECTOR discovery uses `LONGMEM_ARTIFACT_ROOT` or `--artifact-root`.
-LoCoMo discovers its summary VDB under each source sample. See the
-[Agent Filter guide](experiment/agent_filter/README.md) for defaults,
-adjudication scope, scoring, and trace inspection.
-
-## Analysis
-
-Offline analysis lives under each benchmark's `analysis/` package. Some tools
-only read artifacts; others call an LLM or launch benchmark subprocesses. Check
-each entrypoint's `--help` and the runtime matrix in the
-[experiment guide](experiment/README.md#offline-analysis) before running it.
-
 ## Repository Structure
+
+<details>
+<summary><strong>Expand repository layout</strong></summary>
 
 ```text
 GRACE-Mem/
-├── grace_mem/                  # core ingestion, retrieval, graph, storage, and LLM code
+├── grace_mem/                  # core memory, retrieval, storage, graph, and LLM code
 ├── experiment/
 │   ├── common/                 # shared evaluation and run helpers
 │   ├── locomo/                 # LoCoMo pipeline and analysis
 │   ├── longmem/                # LongMemEval pipeline and analysis
 │   └── agent_filter/           # optional evidence refinement
 ├── docs/architecture/          # architecture figures
-├── tools/                      # setup, model, trace, and maintenance utilities
+├── tools/                      # setup, dataset, model, trace, and maintenance tools
 ├── LICENSE
 ├── EVALUATION.md
 ├── pyproject.toml
 └── uv.lock
 ```
+
+</details>
 
 Datasets, generated artifacts, model weights, logs, secrets, and local test
 suites are intentionally excluded from version control.
