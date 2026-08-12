@@ -1,10 +1,10 @@
 """
 Watchdog runner for multi-dataset QA.
-Automatically restarts run_batch.py until all datasets complete.
+Automatically restarts the LongMem batch module until all datasets complete.
 
 Usage:
-  python watchdog.py --run-tag my-run --type single_session_user
-  python watchdog.py --run-tag my-run --child
+  python -m experiment.longmem.pipeline.watchdog --run-tag my-run --type single_session_user
+  python -m experiment.longmem.pipeline.watchdog --run-tag my-run --child
 """
 
 import argparse
@@ -48,6 +48,7 @@ from experiment.longmem.utils.io import (
 
 DEFAULT_DATA_ROOT = _LONGMEM_ROOT / "script_data"
 DEFAULT_OUTPUT_BASE = _LONGMEM_ROOT / "output"
+BATCH_MODULE = "experiment.longmem.pipeline.batch"
 
 
 class RerunTarget(NamedTuple):
@@ -76,7 +77,7 @@ def _write_watchdog_metadata(
     output_root: Path,
     artifact_dir: Path | None,
     log_dir: Path,
-    script: Path,
+    batch_module: str,
     selected_stages: list[str],
     dataset_selector: str | None,
     rerun_mode: bool,
@@ -102,7 +103,7 @@ def _write_watchdog_metadata(
                     "output_root": str(output_root.resolve()),
                     "artifact_dir": str(artifact_dir.resolve()) if artifact_dir is not None else None,
                     "log_dir": str(log_dir.resolve()),
-                    "script": str(script.resolve()),
+                    "batch_module": batch_module,
                     "python": args.python,
                     "stages": list(selected_stages),
                     "dataset_id": dataset_selector,
@@ -497,10 +498,10 @@ class RunResult(NamedTuple):
     timed_out: bool
 
 
-def run_once(py: str, script: Path, env: dict, logger: logging.Logger, timeout_sec: int) -> RunResult:
+def run_once(py: str, module: str, env: dict, logger: logging.Logger, timeout_sec: int) -> RunResult:
     import signal
 
-    cmd = [py, str(script)]
+    cmd = [py, "-m", module]
     logger.info("Launching subprocess: %s", " ".join(cmd))
     logger.info("Timeout: %ds (%.1fh)", timeout_sec, timeout_sec / 3600)
     start = time.time()
@@ -757,7 +758,6 @@ def main(argv: list[str] | None = None) -> int:
     add_rerun_args(parser)
     # Watchdog-specific args
     parser.add_argument("--python", default=sys.executable)
-    parser.add_argument("--script", default="./experiment/longmem/pipeline/batch.py")
     parser.add_argument("--sleep", type=int, default=30, help="Base seconds between restarts")
     parser.add_argument("--max-restarts", type=int, default=10, help="0 = infinite")
     parser.add_argument("--log-dir", default=None, help="Directory for watchdog logs")
@@ -789,7 +789,6 @@ def main(argv: list[str] | None = None) -> int:
     data_folder = append_type_subdir(data_root, single_type).resolve()
     output_root_base = Path(args.output_root) if args.output_root else default_output_root(run_tag)
     output_root = append_type_subdir(output_root_base, single_type).resolve() if rerun_mode else output_root_base.resolve()
-    script = Path(args.script).resolve()
     log_dir = Path(args.log_dir).resolve() if args.log_dir else default_log_dir(run_tag).resolve()
 
     logger = setup_logger(log_dir)
@@ -805,7 +804,7 @@ def main(argv: list[str] | None = None) -> int:
         output_root=metadata_root,
         artifact_dir=artifact_root,
         log_dir=log_dir,
-        script=script,
+        batch_module=BATCH_MODULE,
         selected_stages=selected_stages,
         dataset_selector=dataset_selector,
         rerun_mode=rerun_mode,
@@ -933,7 +932,7 @@ def main(argv: list[str] | None = None) -> int:
 
         status["state"] = "running"
         write_status_file(status_path, status)
-        result = run_once(args.python, script, env, logger, args.timeout)
+        result = run_once(args.python, BATCH_MODULE, env, logger, args.timeout)
         status["last_return_code"] = result.return_code
         status["state"] = "done" if result.return_code == 0 else "failed"
         write_status_file(status_path, status)
@@ -988,7 +987,7 @@ def main(argv: list[str] | None = None) -> int:
             status["state"] = "running"
             write_status_file(status_path, status)
 
-            result = run_once(args.python, script, env, logger, args.timeout)
+            result = run_once(args.python, BATCH_MODULE, env, logger, args.timeout)
             code = result.return_code
             status["last_return_code"] = code
 

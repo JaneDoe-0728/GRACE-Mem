@@ -4,18 +4,14 @@ Practical Example: Process Multiple Datasets
 This script automatically processes all CSV files in a folder with the same configuration.
 
 Usage:
-    python run_batch.py
-    python run_batch.py --stage qa_eval judge
+    python -m experiment.longmem.pipeline.batch
+    python -m experiment.longmem.pipeline.batch --stage qa_eval judge
 """
 
 import argparse
 from pathlib import Path
 import os
 import sys
-if __package__ in (None, ""):
-    repo_root = Path(__file__).resolve().parents[2]
-    if str(repo_root) not in sys.path:
-        sys.path.insert(0, str(repo_root))
 
 from experiment.longmem.pipeline.processor import MultiDatasetProcessor
 from experiment.longmem.helpers.args import add_child_args, add_data_args, add_run_args, resolve_stages

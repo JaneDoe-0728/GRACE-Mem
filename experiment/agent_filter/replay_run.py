@@ -16,24 +16,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[3]
-if __package__ in (None, "") and str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
 import pandas as pd
 
 from grace_mem.llm import LLMClient
 from experiment.agent_filter.harness import refine_context
+from experiment.common.paths import REPO_ROOT
 from experiment.longmem.stages.qa_eval import QAEvalStage
 
-OUTPUT_ROOT = _ROOT / "experiment" / "longmem" / "output"
-DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
+OUTPUT_ROOT = REPO_ROOT / "experiment" / "longmem" / "output"
+DATA_ROOT = REPO_ROOT / "experiment" / "longmem" / "script_data"
 
 CATEGORIES = [
     "single_session_user",

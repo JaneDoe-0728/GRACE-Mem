@@ -9,7 +9,7 @@ collection with two VDB entries per turn:
 KG entities/relationships are NOT touched; summary_id prov links remain valid.
 
 Usage:
-    python experiment/longmem/tools/rebuild_split_summaries.py \\
+    python -m experiment.longmem.tools.rebuild_split_summaries \\
         --run_dir experiment/longmem/output/oss-20b-0427 \\
         [--categories knowledge_update single_session_user ...] \\
         [--dry_run]
@@ -23,15 +23,12 @@ import time
 from pathlib import Path
 from typing import Optional
 
-_ROOT = Path(__file__).resolve().parents[2]
-if __package__ in (None, "") and str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
+from experiment.common.paths import REPO_ROOT
 from grace_mem.utils.raw_context_lookup import RawContextLookup
 from grace_mem.utils.query_time_parser import parse_query_time
 from grace_mem.utils.temporal import build_time_context, rewrite_temporal_text
 
-SCRIPT_DATA_DIR = "experiment/longmem/script_data"
+SCRIPT_DATA_DIR = REPO_ROOT / "experiment" / "longmem" / "script_data"
 
 
 def get_compressor():

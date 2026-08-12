@@ -8,7 +8,7 @@ The original temporal parser (grace_mem/utils/temporal) is unchanged.
 
 Usage
 -----
-    python experiment/locomo/helpers/normalize_golden_answers.py \
+    python -m experiment.locomo.helpers.normalize_golden_answers \
         [--input  experiment/locomo/data/locomo10.json] \
         [--output experiment/locomo/data/locomo10_temporal_normalized.json]
 
@@ -32,10 +32,6 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
-
-_ROOT = Path(__file__).resolve().parents[4]
-if __package__ in (None, "") and str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from grace_mem.utils.temporal.normalizer import build_time_context
 from grace_mem.utils.temporal.classifier import classify_single_expression

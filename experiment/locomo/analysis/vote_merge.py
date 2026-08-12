@@ -7,23 +7,19 @@
   vote3 新答案時才需新判(--judge 開啟)。
 
 Usage:
-    python experiment/locomo/analysis/vote_merge.py --out /tmp/vote_result.csv
+    python -m experiment.locomo.analysis.vote_merge --out /tmp/vote_result.csv
 """
 from __future__ import annotations
 
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[2]
-if __package__ in (None, "") and str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
 import pandas as pd
+from experiment.common.paths import REPO_ROOT
 
-OUT = _ROOT / "experiment" / "locomo" / "output" / "standard"
+OUT = REPO_ROOT / "experiment" / "locomo" / "output" / "standard"
 
 CLUSTER_SYSTEM = """You get a QUESTION and three candidate ANSWERS (1,2,3) from the same system.
 Decide which answers give the SAME substantive answer to the question (same

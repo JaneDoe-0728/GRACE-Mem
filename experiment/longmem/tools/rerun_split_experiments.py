@@ -11,10 +11,10 @@ qa_eval, reusing ingested artifacts, NO inline judge) into a NEW run dir
 (<orig>-rr2) -> score with the new category-aware judge into `correctness`.
 
 Usage:
-    python experiment/longmem/tools/rerun_split_experiments.py --smoke      # 1 dataset, rerank16
-    python experiment/longmem/tools/rerun_split_experiments.py --only rerank16
-    python experiment/longmem/tools/rerun_split_experiments.py              # all 8, full
-    python experiment/longmem/tools/rerun_split_experiments.py --judge-only # re-judge existing rr2 dirs
+    python -m experiment.longmem.tools.rerun_split_experiments --smoke      # 1 dataset, rerank16
+    python -m experiment.longmem.tools.rerun_split_experiments --only rerank16
+    python -m experiment.longmem.tools.rerun_split_experiments              # all 8, full
+    python -m experiment.longmem.tools.rerun_split_experiments --judge-only # re-judge existing rr2 dirs
 """
 from __future__ import annotations
 
@@ -25,13 +25,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[2]
-if __package__ in (None, "") and str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
 import pandas as pd
 
 from grace_mem.llm import LLMClient
+from experiment.common.paths import REPO_ROOT
 from experiment.common.evaluation.judge import (
     LONGMEM_CATEGORIES,
     SKIP_LONGMEM_FILES,
@@ -39,8 +36,8 @@ from experiment.common.evaluation.judge import (
     find_column,
 )
 
-CONFIG_PATH = _ROOT / "experiment" / "experiment_config.py"
-OUTPUT_DIR = _ROOT / "experiment" / "longmem" / "output"
+CONFIG_PATH = REPO_ROOT / "experiment" / "experiment_config.py"
+OUTPUT_DIR = REPO_ROOT / "experiment" / "longmem" / "output"
 # Overridable so the same driver can point at different ingest artifacts
 # (e.g. oss-120b) and tag its output distinctly without editing this file.
 ARTIFACT_DIR = os.environ.get("LONGMEM_ARTIFACT_DIR", "experiment/longmem/output/oss-20b-0427")
@@ -84,7 +81,7 @@ def run_retrieval(run_tag: str, *, smoke: bool) -> None:
     if smoke:
         cmd += ["--type", "single_session_user", "--num", "1", "--max-restarts", "1"]
     print(f"  CMD: {' '.join(cmd)}", flush=True)
-    subprocess.run(cmd, check=True, cwd=str(_ROOT))
+    subprocess.run(cmd, check=True, cwd=str(REPO_ROOT))
 
 
 def judge_dir(run_tag: str, *, llm) -> tuple[int, int]:
