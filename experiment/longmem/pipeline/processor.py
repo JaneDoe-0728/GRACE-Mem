@@ -105,6 +105,7 @@ class MultiDatasetProcessor:
         self.current_retriever: Optional[Retriever] = None
         self.current_ent: Optional[EntityManager] = None
         self.current_rel: Optional[RelationshipManager] = None
+        self._current_mgr_read_only = False
         self.ingest_stage = IngestStage()
         self.qa_stage = QAEvalStage()
         self.judge_stage = JudgeStage()
@@ -364,45 +365,51 @@ class MultiDatasetProcessor:
         {sid}:u / {sid}:a entries that the Ingestor never writes, and the whole
         provenance channel would silently drop to zero candidates.
 
-        rebuild_artifact() is idempotent — it skips an artifact dir that already has a
-        summaries_chroma_bak backup — so reruns and resumed runs are safe.
+        The ingest manager is closed before the on-disk replacement. A fresh manager
+        and Retriever are created only after the rebuilt index passes validation.
+        Rebuild failures propagate because QA with a stale or partial split index is
+        not a valid benchmark result.
         """
         if not config.use_split_summary:
             return
         if self.current_mgr is None:
-            return
+            raise RuntimeError("split-summary rebuild requires an initialized VDB manager")
 
         artifact_dir = Path(self.current_mgr.ART)
-        try:
-            from experiment.longmem.tools.rebuild_split_summaries import (
-                SCRIPT_DATA_DIR,
-                get_compressor,
-                rebuild_artifact,
-            )
+        from experiment.longmem.tools.rebuild_split_summaries import (
+            SCRIPT_DATA_DIR,
+            get_compressor,
+            rebuild_artifact,
+        )
 
-            if self._split_lookup is None:
-                from grace_mem.utils.raw_context_lookup import RawContextLookup
+        if self._split_lookup is None:
+            from grace_mem.utils.raw_context_lookup import RawContextLookup
 
-                print(f"[SPLIT] Loading raw context from {SCRIPT_DATA_DIR} ...")
-                self._split_lookup = RawContextLookup(SCRIPT_DATA_DIR)
-                self._split_lookup._ensure_loaded()
-            if self._split_compressor is None:
-                print("[SPLIT] Loading llmlingua compressor ...")
-                self._split_compressor = get_compressor()
+            print(f"[SPLIT] Loading raw context from {SCRIPT_DATA_DIR} ...")
+            self._split_lookup = RawContextLookup(SCRIPT_DATA_DIR)
+            self._split_lookup._ensure_loaded()
+        if self._split_compressor is None:
+            print("[SPLIT] Loading llmlingua compressor ...")
+            self._split_compressor = get_compressor()
 
-            result = rebuild_artifact(
-                artifact_dir, self._split_lookup, self._split_compressor, False
-            )
-            status = result.get("status")
-            print(f"[SPLIT] {artifact_dir.name}: {status}"
-                  + (f" — {result.get('reason')}" if result.get("reason") else ""))
-            if status not in ("ok", "skip"):
-                print(f"[SPLIT][WARN] unexpected rebuild status for {artifact_dir}: {result}")
-        except Exception as exc:
-            # Do not kill the run: report loudly and let the caller decide. Retrieval
-            # will fall back to the direct-vector channel only.
-            print(f"[SPLIT][ERROR] split-summary rebuild failed for {artifact_dir}: {exc}")
-            traceback.print_exc()
+        # Chroma clients must be gone before replacing their SQLite directory.
+        self.current_mgr.close(persist=True)
+        self._current_mgr_read_only = True
+        self.current_ingestor = None
+        self.current_retriever = None
+        self.current_ent = None
+        self.current_rel = None
+
+        result = rebuild_artifact(
+            artifact_dir, self._split_lookup, self._split_compressor, False
+        )
+        status = result.get("status")
+        reason = result.get("reason")
+        print(f"[SPLIT] {artifact_dir.name}: {status}" + (f" — {reason}" if reason else ""))
+        if status != "ok" and not (status == "skip" and reason == "already_rebuilt"):
+            raise RuntimeError(f"split-summary rebuild did not produce a valid index: {result}")
+
+        self._reopen_retriever(config, artifact_dir)
 
     def _build_context(self, question: str, config: DatasetConfig, query_time: str | None = None) -> str:
         return self.qa_stage.build_context(
@@ -588,6 +595,7 @@ class MultiDatasetProcessor:
 
         # Create new VDB manager for this dataset
         self.current_mgr = VDBManager(artifacts_dir)
+        self._current_mgr_read_only = False
         is_fresh = self.current_mgr.initialize()
         print(f"[INIT] VDB Manager initialized (fresh: {is_fresh})")
 
@@ -640,18 +648,7 @@ class MultiDatasetProcessor:
         # Both sides are driven by the SAME flag so the artifact layout and the
         # retrieval config can never disagree: use_split_summary=True means the
         # rebuild runs AND retrieval looks for :u/:a; False means neither.
-        _longmem_reranker_params = {
-            **RERANKER_PARAMS,
-            "split_single_entry_raw": not config.use_split_summary,
-        }
-        self.current_retriever = Retriever(
-            llm=self.llm,
-            graph=self.graph,
-            mgr=self.current_mgr,
-            embed=self.embedder.embed,
-            cache=self.current_mgr.cache,
-            config=RetrieverConfig(**_longmem_reranker_params),
-        )
+        self.current_retriever = self._build_retriever(config)
 
         # Monkey-patch the _jlog functions to use dataset-specific loggers
         # This overrides the module-level _jlog defined at import time
@@ -709,6 +706,30 @@ class MultiDatasetProcessor:
 
         print(f"[INIT] Ingestor and Retriever initialized with per-dataset logs")
 
+    def _build_retriever(self, config: DatasetConfig) -> Retriever:
+        if self.current_mgr is None:
+            raise RuntimeError("cannot build Retriever without a VDB manager")
+        reranker_params = {
+            **RERANKER_PARAMS,
+            "split_single_entry_raw": not config.use_split_summary,
+        }
+        return Retriever(
+            llm=self.llm,
+            graph=self.graph,
+            mgr=self.current_mgr,
+            embed=self.embedder.embed,
+            cache=self.current_mgr.cache,
+            config=RetrieverConfig(**reranker_params),
+        )
+
+    def _reopen_retriever(self, config: DatasetConfig, artifact_dir: Path) -> None:
+        """Open a fresh retrieval-only manager after split-index replacement."""
+        self.current_mgr = VDBManager(artifact_dir)
+        self.current_mgr.initialize()
+        self._current_mgr_read_only = True
+        self.current_retriever = self._build_retriever(config)
+        print("[SPLIT] Reopened VDB manager and Retriever on the validated split index")
+
     def _teardown_dataset(self, config: DatasetConfig):
         """Clean up after processing dataset"""
         log_dir = getattr(self, "current_log_dir", None)
@@ -717,7 +738,10 @@ class MultiDatasetProcessor:
         if self.current_mgr:
             print(f"\n[CLEANUP] Persisting VDB changes...")
             try:
-                self.current_mgr.close(persist=True, clear_cache=True)
+                self.current_mgr.close(
+                    persist=not self._current_mgr_read_only,
+                    clear_cache=True,
+                )
             except Exception as exc:
                 cleanup_error = exc
 
@@ -738,6 +762,7 @@ class MultiDatasetProcessor:
         self.current_retriever = None
         self.current_ent = None
         self.current_rel = None
+        self._current_mgr_read_only = False
         self._restore_module_loggers()
         if log_dir is not None:
             cleanup_retrieval_loggers(Path(log_dir))
@@ -827,6 +852,8 @@ class MultiDatasetProcessor:
         try:
             if should_setup_runtime:
                 self._setup_dataset(config)
+                if not run_ingest:
+                    self._current_mgr_read_only = True
 
                 print(f"\n[LOAD] Reading CSV: {config.csv_path}")
                 df = read_csv_frame(Path(config.csv_path))

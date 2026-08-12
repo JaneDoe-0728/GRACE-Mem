@@ -16,6 +16,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import shutil
 import sys
 import time
@@ -80,28 +81,111 @@ def compress_and_rewrite(text: str, compressor, dialogue_datetime: Optional[str]
     return compressed
 
 
-def rebuild_artifact(artifact_dir: Path, lookup: RawContextLookup, compressor, dry_run: bool) -> dict:
-    meta_path = artifact_dir / "summaries_meta.jsonl"
-    chroma_dir = artifact_dir / "summaries_chroma"
-    backup_dir = artifact_dir / "summaries_chroma_bak"
-
-    if not meta_path.exists():
-        return {"status": "skip", "reason": "no_meta"}
-
-    # Already rebuilt successfully (backup exists and new chroma exists)
-    if backup_dir.exists() and chroma_dir.exists() and not dry_run:
-        return {"status": "skip", "reason": "already_rebuilt"}
-
-    turns = []
-    with open(meta_path, encoding="utf-8") as f:
-        for line in f:
+def _read_turns(meta_path: Path) -> list[dict]:
+    """Load one canonical metadata row per session/message pair."""
+    turns_by_id: dict[tuple[str, int], dict] = {}
+    with meta_path.open(encoding="utf-8") as handle:
+        for line in handle:
             line = line.strip()
             if not line:
                 continue
             try:
-                turns.append(json.loads(line))
-            except json.JSONDecodeError:
+                turn = json.loads(line)
+                session_id = turn.get("session_id")
+                message_id = turn.get("message_id")
+                if session_id is None or message_id is None:
+                    continue
+                key = (str(session_id), int(message_id))
+            except (json.JSONDecodeError, TypeError, ValueError):
                 continue
+            turns_by_id[key] = turn
+    return list(turns_by_id.values())
+
+
+def _validate_split_ids(ids: set[str], expected_ids: set[str] | None = None) -> int:
+    """Validate that an index contains complete user/assistant entry pairs."""
+    if not ids:
+        raise RuntimeError("split-summary index is empty")
+
+    roles_by_base: dict[str, set[str]] = {}
+    for entry_id in ids:
+        base_id, separator, role = str(entry_id).rpartition(":")
+        if not separator or not base_id or role not in {"u", "a"}:
+            raise RuntimeError(f"invalid split-summary entry id: {entry_id!r}")
+        roles_by_base.setdefault(base_id, set()).add(role)
+
+    incomplete = sorted(base for base, roles in roles_by_base.items() if roles != {"u", "a"})
+    if incomplete:
+        raise RuntimeError(
+            "split-summary index has incomplete entry pairs: " + ", ".join(incomplete[:10])
+        )
+    if expected_ids is not None and ids != expected_ids:
+        missing = sorted(expected_ids - ids)
+        extra = sorted(ids - expected_ids)
+        raise RuntimeError(
+            "split-summary index validation failed: "
+            f"missing={missing[:10]} extra={extra[:10]}"
+        )
+    return len(roles_by_base)
+
+
+def _read_split_ids(chroma_dir: Path) -> set[str]:
+    from grace_mem.storage.chroma_vdb import SummariesVDB
+
+    vdb = SummariesVDB(dim=1024, path=str(chroma_dir), collection_name="summaries")
+    try:
+        results = vdb._collection.get(include=["metadatas"])
+        return {str(entry_id) for entry_id in (results.get("ids") or [])}
+    finally:
+        vdb.close()
+
+
+def _replace_index_transactionally(
+    *,
+    chroma_dir: Path,
+    temp_dir: Path,
+    backup_dir: Path,
+    rollback_dir: Path,
+) -> None:
+    """Install a validated temp index while retaining or restoring the old index."""
+    if rollback_dir.exists():
+        shutil.rmtree(rollback_dir)
+
+    previous_dir: Path | None = None
+    if chroma_dir.exists():
+        previous_dir = backup_dir if not backup_dir.exists() else rollback_dir
+        os.replace(chroma_dir, previous_dir)
+
+    try:
+        os.replace(temp_dir, chroma_dir)
+    except BaseException:
+        if previous_dir is not None and previous_dir.exists() and not chroma_dir.exists():
+            os.replace(previous_dir, chroma_dir)
+        raise
+    else:
+        if previous_dir == rollback_dir and rollback_dir.exists():
+            shutil.rmtree(rollback_dir)
+
+
+def rebuild_artifact(artifact_dir: Path, lookup: RawContextLookup, compressor, dry_run: bool) -> dict:
+    meta_path = artifact_dir / "summaries_meta.jsonl"
+    chroma_dir = artifact_dir / "summaries_chroma"
+    backup_dir = artifact_dir / "summaries_chroma_bak"
+    temp_dir = artifact_dir / "summaries_chroma.tmp"
+    rollback_dir = artifact_dir / "summaries_chroma.rollback"
+
+    if not meta_path.exists():
+        return {"status": "skip", "reason": "no_meta"}
+
+    # Recover the old index if a previous process stopped between the two renames.
+    if not chroma_dir.exists() and rollback_dir.exists():
+        os.replace(rollback_dir, chroma_dir)
+    elif chroma_dir.exists() and rollback_dir.exists():
+        shutil.rmtree(rollback_dir)
+    if not chroma_dir.exists() and backup_dir.exists():
+        shutil.copytree(backup_dir, chroma_dir)
+
+    turns = _read_turns(meta_path)
 
     if not turns:
         return {"status": "skip", "reason": "empty_meta"}
@@ -109,60 +193,86 @@ def rebuild_artifact(artifact_dir: Path, lookup: RawContextLookup, compressor, d
     if dry_run:
         return {"status": "dry_run", "turns": len(turns)}
 
-    # Backup old chroma dir (once only)
-    if chroma_dir.exists() and not backup_dir.exists():
-        shutil.copytree(chroma_dir, backup_dir)
+    if backup_dir.exists() and chroma_dir.exists():
+        try:
+            existing_ids = _read_split_ids(chroma_dir)
+            existing_turns = _validate_split_ids(existing_ids)
+        except Exception:
+            pass
+        else:
+            return {
+                "status": "skip",
+                "reason": "already_rebuilt",
+                "turns": existing_turns,
+                "entries": len(existing_ids),
+            }
 
-    if chroma_dir.exists():
-        shutil.rmtree(chroma_dir)
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir)
 
     from grace_mem.storage.chroma_vdb import SummariesVDB
-    vdb = SummariesVDB(dim=1024, path=str(chroma_dir), collection_name="summaries")
-
-    n_added = 0
+    vdb = None
+    expected_ids: set[str] = set()
     n_missing = 0
-    for turn in turns:
-        session_id = turn.get("session_id")
-        message_id = turn.get("message_id")
-        dialogue_datetime = turn.get("dialogue_datetime")
+    try:
+        vdb = SummariesVDB(dim=1024, path=str(temp_dir), collection_name="summaries")
+        for turn in turns:
+            session_id = turn["session_id"]
+            message_id = int(turn["message_id"])
+            dialogue_datetime = turn.get("dialogue_datetime")
+            existing_text = str(turn.get("summary_text") or turn.get("text") or "").strip()
 
-        if session_id is None or message_id is None:
-            n_missing += 1
-            continue
+            user_text = lookup.get_user_text(str(session_id), message_id) or existing_text
+            assistant_text = lookup.get_assistant_text(str(session_id), message_id)
+            assistant_summary = (
+                compress_and_rewrite(assistant_text, compressor, dialogue_datetime)
+                if assistant_text
+                else existing_text
+            )
+            user_text = str(user_text or assistant_summary or "").strip()
+            assistant_summary = str(assistant_summary or user_text or "").strip()
+            if not user_text or not assistant_summary:
+                n_missing += 1
+                continue
 
-        user_text = lookup.get_user_text(str(session_id), int(message_id))
-        assistant_text = lookup.get_assistant_text(str(session_id), int(message_id))
+            base_id = f"{session_id}:{message_id}"
+            expected_ids.update({f"{base_id}:u", f"{base_id}:a"})
+            vdb.add_split_turns(
+                session_id=session_id,
+                message_id=message_id,
+                user_text=user_text,
+                assistant_summary=assistant_summary,
+                dialogue_datetime=dialogue_datetime,
+            )
 
-        if not user_text and not assistant_text:
-            n_missing += 1
-            continue
+        actual_ids = {
+            str(entry_id)
+            for entry_id in (vdb._collection.get(include=["metadatas"]).get("ids") or [])
+        }
+        added = _validate_split_ids(actual_ids, expected_ids)
+        vdb.close()
+        vdb = None
 
-        user_text = user_text or ""
-
-        if assistant_text:
-            assistant_summary = compress_and_rewrite(assistant_text, compressor, dialogue_datetime)
-        else:
-            # Fall back to existing summary_text if assistant turn missing from CSV
-            assistant_summary = turn.get("summary_text", "")
-
-        if not user_text:
-            user_text = turn.get("summary_text", "")
-
-        if not user_text and not assistant_summary:
-            n_missing += 1
-            continue
-
-        vdb.add_split_turns(
-            session_id=session_id,
-            message_id=int(message_id),
-            user_text=user_text,
-            assistant_summary=assistant_summary,
-            dialogue_datetime=dialogue_datetime,
+        _replace_index_transactionally(
+            chroma_dir=chroma_dir,
+            temp_dir=temp_dir,
+            backup_dir=backup_dir,
+            rollback_dir=rollback_dir,
         )
-        n_added += 1
+    except BaseException:
+        if vdb is not None:
+            vdb.close()
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+        raise
 
-    vdb.close()
-    return {"status": "ok", "turns": len(turns), "added": n_added, "missing": n_missing}
+    return {
+        "status": "ok",
+        "turns": len(turns),
+        "added": added,
+        "entries": len(expected_ids),
+        "missing": n_missing,
+    }
 
 
 def export_artifact(artifact_dir: Path) -> dict:
