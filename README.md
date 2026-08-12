@@ -33,30 +33,14 @@ evidence refinement, and offline retrieval diagnostics.
 
 <table>
 <tr>
-<td width="33%" valign="top">
-
-### Graph-Structured Memory
-
-Connect entities, relationships, and temporal facts across dialogue sessions
-instead of treating each memory as an isolated chunk.
-
-</td>
-<td width="33%" valign="top">
-
-### Evidence-Centric Retrieval
-
-Combine vector search, BM25, graph expansion, reranking, and provenance-aware
-evidence reconstruction in one retrieval path.
-
-</td>
-<td width="33%" valign="top">
-
-### Reproducible Evaluation
-
-Run staged LoCoMo and LongMemEval experiments with pinned datasets, reusable
-artifacts, run metadata, shared judging, and offline diagnostics.
-
-</td>
+<th width="33%" align="left" valign="top">Graph-Structured Memory</th>
+<th width="33%" align="left" valign="top">Evidence-Centric Retrieval</th>
+<th width="33%" align="left" valign="top">Reproducible Evaluation</th>
+</tr>
+<tr>
+<td width="33%" valign="top">Connect entities, relationships, and temporal facts across dialogue sessions instead of treating each memory as an isolated chunk.</td>
+<td width="33%" valign="top">Combine vector search, BM25, graph expansion, reranking, and provenance-aware evidence reconstruction in one retrieval path.</td>
+<td width="33%" valign="top">Run staged LoCoMo and LongMemEval experiments with pinned datasets, reusable artifacts, run metadata, shared judging, and offline diagnostics.</td>
 </tr>
 </table>
 
