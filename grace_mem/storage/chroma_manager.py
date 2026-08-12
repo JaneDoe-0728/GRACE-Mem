@@ -202,10 +202,14 @@ class VDBManager:
 
     def close(self, *, persist: bool = False, clear_cache: bool = False) -> None:
         """Release initialized vector-store clients and optional in-memory state."""
-        if persist:
-            self.flush_persist()
-        else:
-            self._wait_for_persist()
+        first_error: Exception | None = None
+        try:
+            if persist:
+                self.flush_persist()
+            else:
+                self._wait_for_persist()
+        except Exception as exc:
+            first_error = exc
 
         for vdb in (
             self._entities_vdb,
@@ -218,13 +222,21 @@ class VDBManager:
                 vdb.close()
             except Exception as exc:
                 logger.warning("Failed to close vector store: %s", exc)
+                if first_error is None:
+                    first_error = exc
 
         self._entities_vdb = None
         self._relationships_vdb = None
         self._summaries_vdb = None
         self._entities_bm25 = None
         if clear_cache:
-            CacheStore.clear(self.cache)
+            try:
+                CacheStore.clear(self.cache)
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
 
     def reset_all(self, delete_files: bool = True) -> None:
         """重置所有 VDB 與快取，並可選擇刪除檔案"""

@@ -28,6 +28,7 @@ class PipelineRuntime(Mapping[str, Any]):
     graph: Any
     mgr: Any
     llm: Any | None = field(default=None, repr=False)
+    owns_mgr: bool = field(default=True, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
 
     _COMPONENT_NAMES: ClassVar[tuple[str, ...]] = (
@@ -52,12 +53,26 @@ class PipelineRuntime(Mapping[str, Any]):
         """Close runtime-owned external connections once."""
         if self._closed:
             return
-        try:
-            self.graph.close()
-        finally:
-            if self.llm is not None:
-                self.llm.close()
-            self._closed = True
+        self._closed = True
+        first_error: Exception | None = None
+
+        cleanups = []
+        if self.owns_mgr and self.mgr is not None:
+            cleanups.append(lambda: self.mgr.close(persist=True))
+        if self.graph is not None:
+            cleanups.append(self.graph.close)
+        if self.llm is not None:
+            cleanups.append(self.llm.close)
+
+        for cleanup in cleanups:
+            try:
+                cleanup()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+
+        if first_error is not None:
+            raise first_error
 
     def __enter__(self) -> "PipelineRuntime":
         return self
@@ -122,8 +137,13 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
             graph=graph,
             mgr=MGR,
             llm=llm,
+            owns_mgr=True,
         )
     except BaseException:
+        try:
+            MGR.close(persist=True)
+        except Exception:
+            pass
         if graph is not None:
             try:
                 graph.close()
