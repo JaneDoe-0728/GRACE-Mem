@@ -139,7 +139,7 @@ Entrypoint: [`longmem/pipeline/watchdog.py`](longmem/pipeline/watchdog.py)
 Full category run:
 
 ```bash
-uv run python experiment/longmem/pipeline/watchdog.py \
+uv run python -m experiment.longmem.pipeline.watchdog \
   --run-tag my-run \
   --type single_session_user
 ```
@@ -147,7 +147,7 @@ uv run python experiment/longmem/pipeline/watchdog.py \
 Select dataset IDs, lexical indexes, or index ranges:
 
 ```bash
-uv run python experiment/longmem/pipeline/watchdog.py \
+uv run python -m experiment.longmem.pipeline.watchdog \
   --run-tag my-run \
   --type temporal_reasoning \
   --dataset-id 2ebe6c92,0,3-5
@@ -156,7 +156,7 @@ uv run python experiment/longmem/pipeline/watchdog.py \
 Run only ingest and answer generation:
 
 ```bash
-uv run python experiment/longmem/pipeline/watchdog.py \
+uv run python -m experiment.longmem.pipeline.watchdog \
   --run-tag my-run \
   --type temporal_reasoning \
   --stage ingest qa_eval
@@ -165,7 +165,7 @@ uv run python experiment/longmem/pipeline/watchdog.py \
 Reuse an existing artifact run:
 
 ```bash
-uv run python experiment/longmem/pipeline/watchdog.py \
+uv run python -m experiment.longmem.pipeline.watchdog \
   --run-tag my-rerun \
   --type temporal_reasoning \
   --artifact-dir experiment/longmem/output/my-ingest-run \
@@ -216,7 +216,7 @@ Entrypoint: [`locomo/pipeline/runner.py`](locomo/pipeline/runner.py)
 Full run:
 
 ```bash
-uv run python experiment/locomo/pipeline/runner.py \
+uv run python -m experiment.locomo.pipeline.runner \
   --dataset locomo \
   --sample-ids 0-9 \
   --run-tag my-run
@@ -225,7 +225,7 @@ uv run python experiment/locomo/pipeline/runner.py \
 Reuse artifacts from an existing LoCoMo run:
 
 ```bash
-uv run python experiment/locomo/pipeline/runner.py \
+uv run python -m experiment.locomo.pipeline.runner \
   --dataset locomo \
   --sample-ids 0-9 \
   --run-tag my-rerun \
@@ -235,7 +235,7 @@ uv run python experiment/locomo/pipeline/runner.py \
 Run selected stages or include adversarial questions:
 
 ```bash
-uv run python experiment/locomo/pipeline/runner.py \
+uv run python -m experiment.locomo.pipeline.runner \
   --dataset locomo \
   --sample-ids 0-3 \
   --run-tag my-run \
@@ -279,7 +279,7 @@ experiment/locomo/output/
 Judged LoCoMo runs aggregate automatically. To rebuild aggregate output:
 
 ```bash
-uv run python experiment/locomo/analysis/aggregate.py \
+uv run python -m experiment.locomo.analysis.aggregate \
   --dataset locomo \
   --root experiment/locomo/output/standard/<run-tag>
 ```

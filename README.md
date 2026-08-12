@@ -226,7 +226,7 @@ The downloader places `locomo10.json` at
 `experiment/locomo/data/locomo10.json`. Then run selected samples:
 
 ```bash
-uv run python experiment/locomo/pipeline/runner.py \
+uv run python -m experiment.locomo.pipeline.runner \
   --dataset locomo \
   --sample-ids 0-9 \
   --run-tag my-run
@@ -239,7 +239,7 @@ The downloader converts each LongMemEval question to
 after conversion:
 
 ```bash
-uv run python experiment/longmem/pipeline/watchdog.py \
+uv run python -m experiment.longmem.pipeline.watchdog \
   --run-tag my-run \
   --type temporal_reasoning
 ```

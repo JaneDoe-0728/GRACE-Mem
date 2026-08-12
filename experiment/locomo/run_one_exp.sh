@@ -113,7 +113,7 @@ done
 # ── build command ────────────────────────────────────────────────────────────
 
 CMD=(
-    uv run python experiment/locomo/pipeline/runner.py
+    uv run python -m experiment.locomo.pipeline.runner
     --dataset locomo
     --sample-ids "${SAMPLE_IDS}"
     --run-tag "${RUN_TAG}"

@@ -8,7 +8,7 @@ as a separate pipeline invocation with a custom experiment_config.py injected
 via PYTHONPATH, so neither workers.py nor qa_eval.py need to be modified.
 
 Usage (retrieval-only, reusing baseline ingest artifacts):
-    uv run python experiment/locomo/analysis/filter_sweep.py \
+    uv run python -m experiment.locomo.analysis.filter_sweep \
         --artifact-dir experiment/locomo/output/standard/oss-20b-0429 \
         [--date-tag 0430]      # suffix appended to run tags (default: today MMDD)
         [--quick]              # 3 canonical configs only (rrf-k60/ppr-a085/rrf+ppr-a085)
