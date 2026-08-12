@@ -140,6 +140,14 @@ def _read_split_ids(chroma_dir: Path) -> set[str]:
         vdb.close()
 
 
+def _expected_split_ids(turns: list[dict]) -> set[str]:
+    expected: set[str] = set()
+    for turn in turns:
+        base_id = f"{turn['session_id']}:{int(turn['message_id'])}"
+        expected.update({f"{base_id}:u", f"{base_id}:a"})
+    return expected
+
+
 def _replace_index_transactionally(
     *,
     chroma_dir: Path,
@@ -193,10 +201,12 @@ def rebuild_artifact(artifact_dir: Path, lookup: RawContextLookup, compressor, d
     if dry_run:
         return {"status": "dry_run", "turns": len(turns)}
 
+    expected_ids = _expected_split_ids(turns)
+
     if backup_dir.exists() and chroma_dir.exists():
         try:
             existing_ids = _read_split_ids(chroma_dir)
-            existing_turns = _validate_split_ids(existing_ids)
+            existing_turns = _validate_split_ids(existing_ids, expected_ids)
         except Exception:
             pass
         else:
@@ -212,7 +222,6 @@ def rebuild_artifact(artifact_dir: Path, lookup: RawContextLookup, compressor, d
 
     from grace_mem.storage.chroma_vdb import SummariesVDB
     vdb = None
-    expected_ids: set[str] = set()
     n_missing = 0
     try:
         vdb = SummariesVDB(dim=1024, path=str(temp_dir), collection_name="summaries")
@@ -235,8 +244,6 @@ def rebuild_artifact(artifact_dir: Path, lookup: RawContextLookup, compressor, d
                 n_missing += 1
                 continue
 
-            base_id = f"{session_id}:{message_id}"
-            expected_ids.update({f"{base_id}:u", f"{base_id}:a"})
             vdb.add_split_turns(
                 session_id=session_id,
                 message_id=message_id,

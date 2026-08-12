@@ -874,6 +874,7 @@ class MultiDatasetProcessor:
             # If output exists, treat dataset as completed and skip ingestion/QA.
             if run_ingest and run_qa and decision.should_treat_output_as_complete(output_path):
                 print(f"[RESUME] Dataset {config.name} already completed (output exists), skipping.")
+                self._current_mgr_read_only = True
                 answer_data = self._read_answer_data(output_path)
                 return {
                     "dataset": config.name,
