@@ -4,7 +4,7 @@ __pycache__/
 *.pyc
 *.pyo
 models
-KG/storage/artifacts
+grace_mem/storage/artifacts
 .claude/skills
 .codex/skills
 experiment/locomo/output
@@ -25,7 +25,7 @@ experiment/docs/
 experiment/temp
 logs/
 assets/
-KG/artifacts
+grace_mem/artifacts
 .pytest_cache
 .venv
 .claude

@@ -28,7 +28,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from KG.llm import LLMClient
+from grace_mem.llm import LLMClient
 from experiment.agent_filter.corpus import Corpus, load_corpus
 from experiment.common.evaluation.judge import (
     DEFAULT_BASE_URL,

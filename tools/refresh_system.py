@@ -27,10 +27,10 @@ load_dotenv(dotenv_path=ENV_PATH)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from KG.storage import MGR
-from KG.storage.paths import resolve_artifacts_dir
-# from KG.graph.neo4j import graph_from_env
-from KG.graph.falkordb import graph_from_env
+from grace_mem.storage import MGR
+from grace_mem.storage.paths import resolve_artifacts_dir
+# from grace_mem.graph.neo4j import graph_from_env
+from grace_mem.graph.falkordb import graph_from_env
 
 
 def refresh_system():
@@ -97,7 +97,7 @@ def refresh_system():
 def main():
     """Main entry point with confirmation prompt."""
     print("\n⚠️  WARNING: This will permanently delete:")
-    print("   - All VDB files and cache (./KG/storage/artifacts)")
+    print("   - All VDB files and cache (./grace_mem/storage/artifacts)")
     print("   - All log files (./experiment/logs)")
     print("   - All data in Neo4j graph database")
 

@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from KG.storage.cache import CacheStore
+from grace_mem.storage.cache import CacheStore
 from experiment.locomo.utils.graph import (
     ARTIFACTS_SRC,
     GRAPH_EXPORT_FILE,

@@ -20,7 +20,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from KG.llm import LLMClient
+from grace_mem.llm import LLMClient
 from experiment.agent_filter.corpus import load_corpus
 from experiment.agent_filter.harness import refine_context
 from experiment.common.evaluation.oracle import longmem_gold_sids

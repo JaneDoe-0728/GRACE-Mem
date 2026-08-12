@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-from KG.storage.paths import resolve_artifacts_dir
+from grace_mem.storage.paths import resolve_artifacts_dir
 from experiment.locomo.utils.log import log_event
 
 # Working VDB dir, honoring KG_ARTIFACTS_DIR for per-process isolation. Resolved

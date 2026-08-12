@@ -1,5 +1,5 @@
 """Re-run the 8 split-embed retrieval experiments with the *current* reranker
-code (KG/utils/reranker.py), reproducing each run's original config.
+code (grace_mem/utils/reranker.py), reproducing each run's original config.
 
 Config source of truth is experiment/experiment_config.py. Only the 5 swept
 knobs differ between experiments; this driver edits ONLY those lines (regex,
@@ -31,7 +31,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from KG.llm import LLMClient
+from grace_mem.llm import LLMClient
 from experiment.common.evaluation.judge import (
     LONGMEM_CATEGORIES,
     SKIP_LONGMEM_FILES,

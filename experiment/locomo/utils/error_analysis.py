@@ -1,5 +1,5 @@
-# Re-exports from KG so existing locomo imports continue to work unchanged.
-from KG.utils.error_analysis import (
+# Re-exports from grace_mem so existing LoCoMo imports continue to work unchanged.
+from grace_mem.utils.error_analysis import (
     append_analysis_record,
     append_pretty_block,
     build_bridge_label,

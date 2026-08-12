@@ -27,15 +27,15 @@ from typing import Any, Optional, Dict, List, Set
 import traceback
 from datetime import datetime
 
-from KG.storage import VDBManager
-from KG.pipeline.ingestor import Ingestor
-from KG.pipeline.retriever import Retriever, RetrieverConfig
+from grace_mem.storage import VDBManager
+from grace_mem.pipeline.ingestor import Ingestor
+from grace_mem.pipeline.retriever import Retriever, RetrieverConfig
 from experiment.experiment_config import RERANKER_PARAMS
-from KG.llm import LLMClient, token_tracker
-from KG.graph.falkordb import graph_from_env
-from KG.embeddings import embedder
-from KG.services import EntityManager, RelationshipManager, Provenance
-from KG.utils.logger_config import make_module_jlog
+from grace_mem.llm import LLMClient, token_tracker
+from grace_mem.graph.falkordb import graph_from_env
+from grace_mem.embeddings import embedder
+from grace_mem.services import EntityManager, RelationshipManager, Provenance
+from grace_mem.utils.logger_config import make_module_jlog
 from experiment.longmem.pipeline import decision
 from experiment.longmem.pipeline.aggregate import update_all_answers_csv
 from experiment.longmem.helpers.checkpoints import (
@@ -59,7 +59,7 @@ from experiment.longmem.pipeline.stage_adapter import (
 )
 from experiment.longmem.stages import IngestStage, JudgeStage, QAEvalStage
 from experiment.longmem.utils.io import append_jsonl, ensure_dir, read_csv_frame, write_csv_frame
-from KG.utils.error_analysis import (
+from grace_mem.utils.error_analysis import (
     append_analysis_record,
     append_pretty_block,
     build_top_miss_snapshot,
@@ -381,7 +381,7 @@ class MultiDatasetProcessor:
             )
 
             if self._split_lookup is None:
-                from KG.utils.raw_context_lookup import RawContextLookup
+                from grace_mem.utils.raw_context_lookup import RawContextLookup
 
                 print(f"[SPLIT] Loading raw context from {SCRIPT_DATA_DIR} ...")
                 self._split_lookup = RawContextLookup(SCRIPT_DATA_DIR)
@@ -612,12 +612,12 @@ class MultiDatasetProcessor:
 
         # Create per-dataset loggers (override module-level loggers)
         ingestor_jlog = make_module_jlog(
-            name=f"KG.Ingestor.{config.name}",
+            name=f"grace_mem.Ingestor.{config.name}",
             filename="kg_ingestor.jsonl",
             log_dir=str(log_dir),
         )
         retriever_jlog = make_module_jlog(
-            name=f"KG.Retriever.{config.name}",
+            name=f"grace_mem.Retriever.{config.name}",
             filename="kg_retriever.jsonl",
             log_dir=str(log_dir),
         )
@@ -655,20 +655,20 @@ class MultiDatasetProcessor:
 
         # Monkey-patch the _jlog functions to use dataset-specific loggers
         # This overrides the module-level _jlog defined at import time
-        import KG.pipeline.ingestor as ingestor_module
-        import KG.pipeline.retriever as retriever_module
-        import KG.pipeline.ingest_steps.sync as sync_step_module
-        import KG.graph.falkordb as falkordb_module
-        import KG.pipeline.retrieval_steps.search as search_module
-        import KG.pipeline.retrieval_steps.filtering as filtering_module
-        import KG.pipeline.retrieval_steps.temporal as temporal_module
-        import KG.pipeline.retrieval_steps.evidence as evidence_module
+        import grace_mem.pipeline.ingestor as ingestor_module
+        import grace_mem.pipeline.retriever as retriever_module
+        import grace_mem.pipeline.ingest_steps.sync as sync_step_module
+        import grace_mem.graph.falkordb as falkordb_module
+        import grace_mem.pipeline.retrieval_steps.search as search_module
+        import grace_mem.pipeline.retrieval_steps.filtering as filtering_module
+        import grace_mem.pipeline.retrieval_steps.temporal as temporal_module
+        import grace_mem.pipeline.retrieval_steps.evidence as evidence_module
         self._bind_module_logger(ingestor_module, ingestor_jlog)
         self._bind_module_logger(sync_step_module, ingestor_jlog)
         self._bind_module_logger(
             falkordb_module,
             make_module_jlog(
-                name=f"KG.Graph.{config.name}",
+                name=f"grace_mem.Graph.{config.name}",
                 filename="kg_ingestor.jsonl",
                 log_dir=str(log_dir),
             ),
@@ -677,7 +677,7 @@ class MultiDatasetProcessor:
         self._bind_module_logger(
             search_module,
             make_module_jlog(
-                name=f"KG.Retrieval.Search.{config.name}",
+                name=f"grace_mem.Retrieval.Search.{config.name}",
                 filename="kg_retrieval_search.jsonl",
                 log_dir=str(log_dir),
             ),
@@ -685,7 +685,7 @@ class MultiDatasetProcessor:
         self._bind_module_logger(
             filtering_module,
             make_module_jlog(
-                name=f"KG.Retrieval.Filtering.{config.name}",
+                name=f"grace_mem.Retrieval.Filtering.{config.name}",
                 filename="kg_retrieval_filtering.jsonl",
                 log_dir=str(log_dir),
             ),
@@ -693,7 +693,7 @@ class MultiDatasetProcessor:
         self._bind_module_logger(
             temporal_module,
             make_module_jlog(
-                name=f"KG.Retrieval.Temporal.{config.name}",
+                name=f"grace_mem.Retrieval.Temporal.{config.name}",
                 filename="kg_retrieval_temporal.jsonl",
                 log_dir=str(log_dir),
             ),
@@ -701,7 +701,7 @@ class MultiDatasetProcessor:
         self._bind_module_logger(
             evidence_module,
             make_module_jlog(
-                name=f"KG.Retrieval.Evidence.{config.name}",
+                name=f"grace_mem.Retrieval.Evidence.{config.name}",
                 filename="kg_retrieval_evidence.jsonl",
                 log_dir=str(log_dir),
             ),

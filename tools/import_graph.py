@@ -10,7 +10,7 @@ from typing import Iterable
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_ROOTS = ("KG", "experiment")
+DEFAULT_ROOTS = ("grace_mem", "experiment")
 
 
 def module_name(path: Path, project_root: Path = PROJECT_ROOT) -> str:

@@ -16,7 +16,7 @@ Snapshot layout under <run_root>:
 
 Usage contract:
   - Call save_snapshot() AFTER MGR.flush_persist() to guarantee VDB files are on disk.
-  - Call load_snapshot_files_only() BEFORE importing KG.pipeline.factory so that
+  - Call load_snapshot_files_only() BEFORE importing grace_mem.pipeline.factory so that
     the VDB is initialized from the snapshot state, not from an empty artifacts dir.
   - After importing pipeline, call restore_graph() to reload the FalkorDB graph.
 """
@@ -77,7 +77,7 @@ def highest_existing_snapshot(
 # ---------------------------------------------------------------------------
 
 def save_snapshot(run_root: Path, conv_id: str, session_id: int, graph) -> Path:
-    """Copy KG/storage/artifacts + export FalkorDB graph to snapshot dir.
+    """Copy grace_mem/storage/artifacts + export FalkorDB graph to snapshot dir.
 
     Call AFTER MGR.flush_persist() so all VDB files are on disk.
     Writes to a tmp directory first and renames atomically to prevent half-written snapshots.
@@ -142,9 +142,9 @@ def save_snapshot(run_root: Path, conv_id: str, session_id: int, graph) -> Path:
 # ---------------------------------------------------------------------------
 
 def load_snapshot_files_only(run_root: Path, conv_id: str, session_id: int) -> None:
-    """Copy snapshot VDB files into KG/storage/artifacts.
+    """Copy snapshot VDB files into grace_mem/storage/artifacts.
 
-    MUST be called before importing KG.pipeline.factory (and therefore before
+    MUST be called before importing grace_mem.pipeline.factory (and therefore before
     any VDB or ChromaDB clients are created), so the pipeline initializes from
     the correct on-disk state.
     """
@@ -263,8 +263,8 @@ def _snapshot_builder(args) -> None:
         load_snapshot_files_only(run_root, conv_id, resume_from)
 
     # Import pipeline now (VDB initialises from whatever is in ARTIFACTS_SRC)
-    from KG.storage import MGR
-    from KG.pipeline.factory import build_pipeline
+    from grace_mem.storage import MGR
+    from grace_mem.pipeline.factory import build_pipeline
     from experiment.locomo.stages import ingest
 
     runtime = build_pipeline()

@@ -348,7 +348,7 @@ def _run_locomo_gold_summary_only(args) -> None:
     import json as _json
     import pandas as pd
 
-    from KG.llm import token_tracker
+    from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
     from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
 
@@ -432,7 +432,7 @@ def _run_locomo_gold_raw_text_only(args) -> None:
     import json as _json
     import pandas as pd
 
-    from KG.llm import token_tracker
+    from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
     from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
 
@@ -510,7 +510,7 @@ def _run_locomo_replay_summary_raw_text_from_run(args) -> None:
     import json as _json
     import pandas as pd
 
-    from KG.llm import token_tracker
+    from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
     from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
 
@@ -601,7 +601,7 @@ def _run_locomo_replay_summary_fact_from_run(args) -> None:
     import json as _json
     import pandas as pd
 
-    from KG.llm import token_tracker
+    from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
     from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
 
@@ -695,7 +695,7 @@ def run_locomo_worker(args) -> None:
 
     import pandas as pd
 
-    from KG.llm import token_tracker
+    from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge
     from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
 
@@ -728,11 +728,11 @@ def run_locomo_worker(args) -> None:
         if artifact_dir is not None:
             restore_artifacts_from_dir(artifact_dir)
 
-        from KG.storage import MGR
+        from grace_mem.storage import MGR
         if artifact_dir is not None:
             reload_mgr_state_from_artifacts(MGR)
 
-        from KG.pipeline.factory import build_pipeline
+        from grace_mem.pipeline.factory import build_pipeline
         from experiment.locomo.stages import ingest, qa_eval
 
         pipeline = build_pipeline(retriever_config=RERANKER_PARAMS, ingestor_config=_INGESTOR_CONFIG)
@@ -873,7 +873,7 @@ def _run_locomo_plus_gold_summary_only(args) -> None:
         normalize_qa_item,
         resolve_dataset_path,
     )
-    from KG.llm import token_tracker
+    from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
 
     dataset_json = Path(args.dataset_json)
@@ -966,7 +966,7 @@ def _run_locomo_plus_gold_raw_text_only(args) -> None:
         normalize_qa_item,
         resolve_dataset_path,
     )
-    from KG.llm import token_tracker
+    from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
 
     dataset_json = Path(args.dataset_json)
@@ -1098,7 +1098,7 @@ def run_locomo_plus_worker(args) -> None:
     )
     max_session_id = max(r["session_id"] for r in source_session_records)
 
-    from KG.llm import token_tracker
+    from grace_mem.llm import token_tracker
 
     token_log_path = token_usage_log_path(run_root, sample_index)
     _configure_sample_pretty_trace_log(run_root=run_root, sample_index=sample_index)
@@ -1137,11 +1137,11 @@ def run_locomo_plus_worker(args) -> None:
     else:
         log_event("SKIP", "Graph restore skipped (non-Cognitive, same conv)", conv_id=conv_id)
 
-    from KG.storage import MGR
+    from grace_mem.storage import MGR
     if artifact_dir is not None:
         reload_mgr_state_from_artifacts(MGR)
 
-    from KG.pipeline.factory import build_pipeline
+    from grace_mem.pipeline.factory import build_pipeline
     from experiment.locomo.stages import ingest, judge, qa_eval
 
     if run_qa and artifact_dir is None and not run_ingest:

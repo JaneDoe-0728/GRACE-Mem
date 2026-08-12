@@ -26,9 +26,9 @@ _ROOT = Path(__file__).resolve().parents[2]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from KG.utils.raw_context_lookup import RawContextLookup
-from KG.utils.query_time_parser import parse_query_time
-from KG.utils.temporal import build_time_context, rewrite_temporal_text
+from grace_mem.utils.raw_context_lookup import RawContextLookup
+from grace_mem.utils.query_time_parser import parse_query_time
+from grace_mem.utils.temporal import build_time_context, rewrite_temporal_text
 
 SCRIPT_DATA_DIR = "experiment/longmem/script_data"
 
@@ -116,7 +116,7 @@ def rebuild_artifact(artifact_dir: Path, lookup: RawContextLookup, compressor, d
     if chroma_dir.exists():
         shutil.rmtree(chroma_dir)
 
-    from KG.storage.chroma_vdb import SummariesVDB
+    from grace_mem.storage.chroma_vdb import SummariesVDB
     vdb = SummariesVDB(dim=1024, path=str(chroma_dir), collection_name="summaries")
 
     n_added = 0
@@ -173,7 +173,7 @@ def export_artifact(artifact_dir: Path) -> dict:
     if not chroma_dir.exists():
         return {"status": "skip", "reason": "no_chroma"}
 
-    from KG.storage.chroma_vdb import SummariesVDB
+    from grace_mem.storage.chroma_vdb import SummariesVDB
     vdb = SummariesVDB(dim=1024, path=str(chroma_dir), collection_name="summaries")
     results = vdb._collection.get(include=["metadatas"])
     vdb.close()

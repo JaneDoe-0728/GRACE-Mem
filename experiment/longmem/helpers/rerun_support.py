@@ -110,36 +110,36 @@ def output_csv_needs_rerun(csv_path: Path) -> bool:
 
 
 def setup_retrieval_loggers(dataset_name: str, log_dir: Path) -> None:
-    from KG.utils.logger_config import make_module_jlog
+    from grace_mem.utils.logger_config import make_module_jlog
 
-    import KG.pipeline.retrieval_steps.evidence as evidence_module
-    import KG.pipeline.retrieval_steps.filtering as filtering_module
-    import KG.pipeline.retrieval_steps.search as search_module
-    import KG.pipeline.retrieval_steps.temporal as temporal_module
-    import KG.pipeline.retriever as retriever_module
+    import grace_mem.pipeline.retrieval_steps.evidence as evidence_module
+    import grace_mem.pipeline.retrieval_steps.filtering as filtering_module
+    import grace_mem.pipeline.retrieval_steps.search as search_module
+    import grace_mem.pipeline.retrieval_steps.temporal as temporal_module
+    import grace_mem.pipeline.retriever as retriever_module
 
     retriever_module._jlog = make_module_jlog(
-        name=f"KG.Retriever.{dataset_name}",
+        name=f"grace_mem.Retriever.{dataset_name}",
         filename="kg_retriever.jsonl",
         log_dir=str(log_dir),
     )
     search_module._jlog = make_module_jlog(
-        name=f"KG.Retrieval.Search.{dataset_name}",
+        name=f"grace_mem.Retrieval.Search.{dataset_name}",
         filename="kg_retrieval_search.jsonl",
         log_dir=str(log_dir),
     )
     filtering_module._jlog = make_module_jlog(
-        name=f"KG.Retrieval.Filtering.{dataset_name}",
+        name=f"grace_mem.Retrieval.Filtering.{dataset_name}",
         filename="kg_retrieval_filtering.jsonl",
         log_dir=str(log_dir),
     )
     temporal_module._jlog = make_module_jlog(
-        name=f"KG.Retrieval.Temporal.{dataset_name}",
+        name=f"grace_mem.Retrieval.Temporal.{dataset_name}",
         filename="kg_retrieval_temporal.jsonl",
         log_dir=str(log_dir),
     )
     evidence_module._jlog = make_module_jlog(
-        name=f"KG.Retrieval.Evidence.{dataset_name}",
+        name=f"grace_mem.Retrieval.Evidence.{dataset_name}",
         filename="kg_retrieval_evidence.jsonl",
         log_dir=str(log_dir),
     )
@@ -171,7 +171,7 @@ def setup_retrieval_loggers(dataset_name: str, log_dir: Path) -> None:
 
 
 def cleanup_retrieval_loggers(log_dir: Path) -> None:
-    from KG.utils.logger_config import close_event_loggers
+    from grace_mem.utils.logger_config import close_event_loggers
 
     close_event_loggers(log_dir=str(log_dir))
 

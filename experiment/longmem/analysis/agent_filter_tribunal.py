@@ -33,7 +33,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 from rank_bm25 import BM25Okapi
 
-from KG.llm import LLMClient
+from grace_mem.llm import LLMClient
 from experiment.agent_filter.corpus import load_corpus
 
 DATA = _ROOT / "experiment" / "longmem" / "script_data"

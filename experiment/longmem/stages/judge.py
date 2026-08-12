@@ -119,6 +119,6 @@ if __name__ == "__main__":
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
-    from KG.llm import LLMClient
+    from grace_mem.llm import LLMClient
 
     JudgeStage().llm_as_judge_singlemode(llm=LLMClient())

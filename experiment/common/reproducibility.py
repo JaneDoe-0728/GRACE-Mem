@@ -6,7 +6,7 @@ import importlib
 from pathlib import Path
 from typing import Any
 
-from KG.runtime import reproducibility as _runtime
+from grace_mem.runtime import reproducibility as _runtime
 
 
 ReproducibilityConfig = _runtime.ReproducibilityConfig

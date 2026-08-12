@@ -1230,7 +1230,7 @@ def _agent_llm(default_llm):
     if not (base or name):
         return default_llm
     if _agent_llm_cache is None:
-        from KG.llm import LLMClient
+        from grace_mem.llm import LLMClient
         _agent_llm_cache = LLMClient(base_url=base or None, model_name=name or None)
     return _agent_llm_cache
 
@@ -1245,7 +1245,7 @@ def _verify_llm(default_llm):
     if not (base or name):
         return default_llm
     if _verify_llm_cache is None:
-        from KG.llm import LLMClient
+        from grace_mem.llm import LLMClient
         _verify_llm_cache = LLMClient(base_url=base or None, model_name=name or None, timeout=300.0)
     return _verify_llm_cache
 
@@ -1292,7 +1292,7 @@ def maybe_refine_context(
         )
     if log_dir is not None:
         try:
-            from KG.utils.error_analysis import append_analysis_record
+            from grace_mem.utils.error_analysis import append_analysis_record
             append_analysis_record(log_dir, "grep_agent", {"question": question, **trace})
         except Exception as exc:  # 記錄失敗不影響答題
             print(f"[QA] Grep agent trace logging failed: {exc}")

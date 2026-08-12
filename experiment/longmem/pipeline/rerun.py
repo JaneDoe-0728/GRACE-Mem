@@ -30,7 +30,7 @@ from experiment.longmem.artifacts.snapshot import restore_graph_from_cache
 from experiment.longmem.stages.judge import JudgeStage
 from experiment.longmem.stages.qa_eval import QAEvalStage
 from experiment.longmem.utils.io import append_type_subdir, ensure_dir, read_csv_frame
-from KG.utils.error_analysis import (
+from grace_mem.utils.error_analysis import (
     append_analysis_record,
     append_pretty_block,
     build_bridge_label,
@@ -54,8 +54,8 @@ class LongMemRerun:
     @classmethod
     def from_env(cls) -> "LongMemRerun":
         """Create a rerun runtime and roll back partially opened resources."""
-        from KG.graph.falkordb import graph_from_env
-        from KG.llm import LLMClient
+        from grace_mem.graph.falkordb import graph_from_env
+        from grace_mem.llm import LLMClient
 
         llm = LLMClient()
         graph = None
@@ -125,10 +125,10 @@ class LongMemRerun:
         if artifacts_dir is None:
             raise FileNotFoundError(f"artifacts dir not found for dataset: {dataset_name}")
 
-        from KG.llm import token_tracker
-        from KG.pipeline.retriever import Retriever, RetrieverConfig
-        from KG.storage import VDBManager
-        from KG.embeddings import embedder
+        from grace_mem.llm import token_tracker
+        from grace_mem.pipeline.retriever import Retriever, RetrieverConfig
+        from grace_mem.storage import VDBManager
+        from grace_mem.embeddings import embedder
 
         mgr = None
         retriever = None

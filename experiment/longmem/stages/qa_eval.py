@@ -6,8 +6,8 @@ from pathlib import Path
 import pandas as pd
 
 from experiment.longmem.utils.io import read_csv_frame
-from KG.utils.query_time_parser import parse_query_time
-from KG.utils.temporal import build_time_context, rewrite_temporal_text, time_rewrite_ablation_enabled
+from grace_mem.utils.query_time_parser import parse_query_time
+from grace_mem.utils.temporal import build_time_context, rewrite_temporal_text, time_rewrite_ablation_enabled
 
 
 class QAEvalStage:
@@ -215,8 +215,8 @@ if __name__ == "__main__":
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
-    from KG.llm import LLMClient
-    from KG.pipeline.factory import build_pipeline as _build_pipeline
+    from grace_mem.llm import LLMClient
+    from grace_mem.pipeline.factory import build_pipeline as _build_pipeline
     from experiment.experiment_config import RETRIEVAL_PARAMS
 
     CSV_PATH = "./experiment/longmem/script_data/temporal_reasoning/2ebe6c92.csv"

@@ -30,7 +30,7 @@ optional VECTOR search to refine evidence before answer generation.
 The Evidence Curation Agent shown in the retrieval panel is optional; the
 standard pipeline can send reranked evidence directly to answer generation.
 
-- **Core (`KG/`)**: ingestion, retrieval, graph synchronization, storage, LLM
+- **Core (`grace_mem/`)**: ingestion, retrieval, graph synchronization, storage, LLM
   access, temporal handling, and provenance.
 - **Benchmarks (`experiment/`)**: LoCoMo and LongMemEval orchestration, shared
   judging/scoring, artifacts, and run metadata.
@@ -41,11 +41,11 @@ Dependency direction is one way:
 ```text
 benchmarks / analysis / tools
         -> experiment orchestration
-        -> KG pipeline facades
-        -> KG services, storage, graph, and LLM utilities
+        -> grace_mem pipeline facades
+        -> grace_mem services, storage, graph, and LLM utilities
 ```
 
-The core `KG/` package does not depend on benchmark-specific code.
+The core `grace_mem/` package does not depend on benchmark-specific code.
 
 ## Workflow
 
@@ -162,7 +162,7 @@ FalkorDB.
 
 `tools/download_models.py` installs pinned snapshots of
 `Qwen/Qwen3-Embedding-0.6B` and `Qwen/Qwen3-Reranker-0.6B` under `models/`.
-`KG/embeddings.py` uses the local embedding path when available and otherwise
+`grace_mem/embeddings.py` uses the local embedding path when available and otherwise
 falls back to the Hugging Face model ID.
 
 ### Experiment Configuration
@@ -178,7 +178,7 @@ With FalkorDB and the configured LLM endpoint running, ingest one turn and
 retrieve context:
 
 ```python
-from KG.pipeline.factory import build_pipeline
+from grace_mem.pipeline.factory import build_pipeline
 
 with build_pipeline() as runtime:
     runtime.ingestor.summarize_and_ingest_turn(
@@ -303,7 +303,7 @@ each entrypoint's `--help` and the runtime matrix in the
 
 ```text
 GRACE-Mem/
-├── KG/                         # core ingestion, retrieval, graph, storage, and LLM code
+├── grace_mem/                  # core ingestion, retrieval, graph, storage, and LLM code
 ├── experiment/
 │   ├── common/                 # shared evaluation and run helpers
 │   ├── locomo/                 # LoCoMo pipeline and analysis

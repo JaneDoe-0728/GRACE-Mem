@@ -33,7 +33,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 from requests.exceptions import HTTPError, RequestException
 
-from KG.llm import LLMClient
+from grace_mem.llm import LLMClient
 from experiment.locomo.helpers.llm import build_judge_standard_messages
 from experiment.longmem.prompts import build_judge_messages
 

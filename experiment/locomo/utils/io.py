@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Sequence
 
-from KG.storage.paths import resolve_artifacts_dir
+from grace_mem.storage.paths import resolve_artifacts_dir
 from experiment.common.reproducibility import attach_reproducibility_metadata
 
 

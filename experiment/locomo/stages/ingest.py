@@ -287,7 +287,7 @@ def main() -> None:
     print(f"[INFO] dataset={dataset} sessions(lines)={len(sessions)}")
     print(df[["session_id", "dialogue_datetime"]].head(10).to_string(index=False))
 
-    from KG.pipeline.factory import build_pipeline
+    from grace_mem.pipeline.factory import build_pipeline
 
     with build_pipeline() as runtime:
         report = ingest_by_session_one_turn(

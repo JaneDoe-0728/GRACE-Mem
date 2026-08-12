@@ -82,7 +82,7 @@ def cluster(llm, question: str, answers: list[str]) -> list[list[int]]:
 
 
 def main():
-    from KG.llm import LLMClient
+    from grace_mem.llm import LLMClient
     from experiment.common.evaluation.judge import JudgeEngine, openai_api_key
 
     ap = argparse.ArgumentParser()

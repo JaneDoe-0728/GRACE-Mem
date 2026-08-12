@@ -4,7 +4,7 @@ Applies the project temporal parser to all QA answers, with lightweight
 pre-processing for LoCoMo-specific formatting quirks (comma separators,
 weekday-before-date expressions) that the main parser does not handle.
 
-The original temporal parser (KG/utils/temporal) is unchanged.
+The original temporal parser (grace_mem/utils/temporal) is unchanged.
 
 Usage
 -----
@@ -37,10 +37,10 @@ _ROOT = Path(__file__).resolve().parents[4]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from KG.utils.temporal.normalizer import build_time_context
-from KG.utils.temporal.classifier import classify_single_expression
-from KG.utils.temporal.resolver import resolve_match
-from KG.utils.temporal.types import ResolutionStatus
+from grace_mem.utils.temporal.normalizer import build_time_context
+from grace_mem.utils.temporal.classifier import classify_single_expression
+from grace_mem.utils.temporal.resolver import resolve_match
+from grace_mem.utils.temporal.types import ResolutionStatus
 
 # ---------------------------------------------------------------------------
 # constants (local copies – do not touch the project parser)
