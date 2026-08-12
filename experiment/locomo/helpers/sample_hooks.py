@@ -116,6 +116,8 @@ def invoke_snapshot_builder(*, args, conv_id: str, max_session_id: int, run_root
         str(args.entity_sim_topk),
         "--entity-sim-threshold",
         str(args.entity_sim_threshold),
+        "--chunk-turns",
+        str(args.chunk_turns),
     ]
     if args.source_json:
         snap_cmd.extend(["--source-json", str(args.source_json)])

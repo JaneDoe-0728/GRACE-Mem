@@ -199,6 +199,8 @@ def build_worker_command(*, args, config: RunConfig, plan: SamplePlan) -> list[s
         str(args.entity_sim_topk),
         "--entity-sim-threshold",
         str(args.entity_sim_threshold),
+        "--chunk-turns",
+        str(args.chunk_turns),
         "--eval-csv",
         str(plan.worker_paths.eval_csv),
         "--judge-csv",
