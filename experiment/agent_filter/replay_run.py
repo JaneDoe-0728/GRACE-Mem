@@ -1,15 +1,19 @@
-"""Fast agent-layer replay:重用既有 run 的 Retrieved_Context,只重跑 16 summary
-之後的部分(grep agent → 答題),完全跳過檢索(embedder/reranker/falkordb 都不用)。
+"""Fast agent-layer replay: reuse an existing run's Retrieved_Context and rerun
+only what happens after the 16 summaries (grep agent -> answering), skipping
+retrieval entirely -- no embedder, no reranker, no falkordb.
 
-好處:
-  1. 快 — 每題只剩 LLM calls,且可多線程打 LM Studio(parallel=4)
-  2. 乾淨 — 兩 arm 檢索輸入 bit 級相同,消除檢索非決定性,歸因純粹
-  3. 迭代 — 之後改 agent(prompt/迴圈/參數)都用這條路徑對照
+Why:
+  1. Fast -- only LLM calls remain per question, and LM Studio can be hit from
+     several threads (parallel=4)
+  2. Clean -- both arms get bit-identical retrieval input, which removes
+     retrieval nondeterminism and keeps attribution pure
+  3. Iterable -- later agent changes (prompt, loop, parameters) all compare
+     through this same path
 
 Usage:
     python -m experiment.agent_filter.replay_run \
         --source-run rr16-base-split --run-tag rr16-grep-v3 --workers 3
-    # --limit N / --category X 做小樣本
+    # --limit N / --category X for a small sample
 """
 from __future__ import annotations
 
@@ -41,7 +45,7 @@ CATEGORIES = [
 ]
 
 _tls = threading.local()
-_trace_lock = threading.Lock()  # enriched traces 變大,序列化併發 append 避免交錯寫壞行
+_trace_lock = threading.Lock()  # enriched traces got large; serialize concurrent appends so interleaving cannot corrupt a line
 
 
 def _llm() -> LLMClient:
@@ -68,7 +72,7 @@ def process_one(src_csv: Path, out_path: Path, trace_path: Path, cat: str,
 
     stage = QAEvalStage()
     if answer_system:
-        stage.SYSTEM_PROMPT = answer_system  # instance attr 蓋過 class attr
+        stage.SYSTEM_PROMPT = answer_system  # the instance attr shadows the class attr
     llm = _llm()
     rewritten = stage.rewrite_temporal_question(question, query_time=question_date)
 
@@ -91,8 +95,10 @@ def process_one(src_csv: Path, out_path: Path, trace_path: Path, cat: str,
         )
         trace["agent_ms"] = round((time.time() - _t_agent) * 1000)
 
-    # 假說回收(生產化):agent 自報的 HYPOTHESIS 當防禦性 hint 附給答題模型。
-    # 取代 hyp-v1 的 4o-mini 事後抽取——同模型自洽、無外部依賴。
+    # Hypothesis recovery, productionized: the agent's self-reported HYPOTHESIS is
+    # attached to the answering model as a defensive hint.
+    # This replaces hyp-v1's post-hoc 4o-mini extraction -- self-consistent within
+    # one model, with no external dependency.
     hyp = trace.get("hypothesis") if trace else None
     if hyp:
         context = context + (
@@ -127,7 +133,7 @@ def process_one(src_csv: Path, out_path: Path, trace_path: Path, cat: str,
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source-run", default="rr16-base-split",
-                    help="提供 Retrieved_Context 的既有 run(檢索輸入)")
+                    help="the existing run supplying Retrieved_Context (the retrieval input)")
     ap.add_argument("--source-root", default="",
                     help="optional filesystem root containing source-run (for helper runs)")
     ap.add_argument("--run-tag", required=True)
@@ -135,11 +141,11 @@ def main() -> None:
     ap.add_argument("--category", default="")
     ap.add_argument("--limit", type=int, default=0, help="max per category (0=all)")
     ap.add_argument("--artifact-root", default=os.getenv("LONGMEM_ARTIFACT_ROOT", ""),
-                    help="summary VDB(VECTOR 工具)artifacts 根目錄。"
-                         "可用環境變數 LONGMEM_ARTIFACT_ROOT 設定;"
-                         "空字串 = 停用 VECTOR。")
+                    help="artifacts root for the summary VDB used by the VECTOR tool. "
+                         "Can also be set via the LONGMEM_ARTIFACT_ROOT env var; "
+                         "an empty string disables VECTOR.")
     ap.add_argument("--names-file", default=None,
-                    help="只跑清單內的題目(每行 category,stem)——修復先在錯題集驗證再全量")
+                    help="run only the listed questions, one 'category,stem' per line -- validate a fix on the error set before the full run")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
 
@@ -186,12 +192,13 @@ def main() -> None:
     t0 = time.time()
     done = 0
     artifact_root = Path(args.artifact_root).resolve() if args.artifact_root else None
-    # 可見度:印出 artifact-root 與實際找到的 summary VDB 數,避免 VECTOR 因路徑錯而靜默關閉
+    # Visibility: print the artifact-root and how many summary VDBs were actually
+    # found, so a wrong path cannot silently switch VECTOR off
     if artifact_root is not None:
         _n_vdb = (len(list(artifact_root.glob("*/artifacts_*/summaries_chroma")))
                   if artifact_root.exists() else 0)
         print(f"artifact-root = {artifact_root}  "
-              f"(summaries_chroma: {_n_vdb} → VECTOR {'ON' if _n_vdb else 'OFF(路徑無 VDB)'})",
+              f"(summaries_chroma: {_n_vdb} -> VECTOR {'ON' if _n_vdb else 'OFF (no VDB at this path)'})",
               flush=True)
     else:
         print("artifact-root = (none) → VECTOR OFF", flush=True)

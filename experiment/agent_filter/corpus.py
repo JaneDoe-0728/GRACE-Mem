@@ -1,12 +1,14 @@
 """Per-question raw-turn corpus for the grep agent.
 
-每題的 haystack 就是它自己的 script_data CSV。這裡把 CSV 載成 in-memory corpus,
-提供 grep / read_window 兩個工具的實作。sid 採 split-embed 慣例:
+Each question's haystack is its own script_data CSV. This module loads that CSV
+into an in-memory corpus and implements the two tools, grep and read_window.
+sids follow the split-embed convention:
 
     user turn      (turn_index t) -> {session}:{t+1}:u
     assistant turn (turn_index t) -> {session}:{t}:a
 
-也接受無後綴的 pair sid `{session}:{p}`(= user :u + assistant :a 兩個 turn)。
+A suffix-less pair sid `{session}:{p}` is also accepted (= the user :u turn plus
+the assistant :a turn).
 """
 from __future__ import annotations
 
@@ -29,7 +31,8 @@ class Turn:
 
 
 def _snippet(text: str, match: re.Match | None, width: int = 90) -> str:
-    """截取 match 附近 ±width 字元;無 match 時取開頭。"""
+    """Take +/-width characters around the match, or the beginning when there is
+    no match."""
     text = " ".join(str(text).split())
     if match is None:
         core = text[: 2 * width]
@@ -49,20 +52,23 @@ class Corpus:
 
     # ── sid resolution ──────────────────────────────────────────────────
     def resolve(self, sid: str) -> list[Turn]:
-        """回傳 sid 對應的 turn(s)。支援 :u/:a split sid 與無後綴 pair sid;
-        LLM 常把 session 前綴脫落(answer_555dfb94 → 555dfb94),做模糊補救。"""
+        """Return the turn(s) for a sid. Handles :u/:a split sids and suffix-less
+        pair sids, with a fuzzy fallback because the LLM often drops the session
+        prefix (answer_555dfb94 -> 555dfb94)."""
         sid = sid.strip()
         if sid in self.by_sid:
             return [self.by_sid[sid]]
         out = [t for suf in (":u", ":a") if (t := self.by_sid.get(sid + suf))]
         if out:
             return out
-        # LoCoMo chunk sid → turn 展開:turn 粒度 corpus 的 sid 是 {chunk}t{off},
-        # context seed 是 chunk 級({sample}__{sess}:{ci})→ 展開成該 chunk 全部 turn。
+        # Expanding a LoCoMo chunk sid into turns: a turn-granularity corpus uses
+        # sids of the form {chunk}t{off}, while the context seed is chunk-level
+        # ({sample}__{sess}:{ci}), so expand it to every turn in that chunk.
         out = [t for t in self.turns if t.sid.startswith(sid + "t")]
         if out:
             return out
-        # 模糊補救:session 部分用尾端比對(唯一命中且與原 sid 不同才遞迴,避免自旋)
+        # Fuzzy fallback: match the session part by suffix. Recurse only on a unique
+        # match that differs from the original sid, so this cannot spin.
         sess, _, rest = sid.partition(":")
         if sess and rest:
             matches = {t.session_id for t in self.turns
@@ -75,7 +81,8 @@ class Corpus:
         return []
 
     def normalize_sids(self, sids: list[str]) -> list[str]:
-        """展開成存在於 corpus 的 split sid,保序去重。"""
+        """Expand to the split sids that exist in the corpus, order-preserving and
+        deduplicated."""
         out: list[str] = []
         seen: set[str] = set()
         for s in sids:
@@ -87,9 +94,12 @@ class Corpus:
 
     # ── tools ───────────────────────────────────────────────────────────
     def grep(self, pattern: str, *, max_lines: int = 30, max_chars: int = 8000) -> str:
-        """Case-insensitive regex over raw turn text;非法 regex 退回 literal。
-        引號幾乎不會是字面目標,先剝掉;整句 pattern 0 命中時退回
-        「所有詞都出現在同一 turn」的 AND 搜尋(LLM 很愛丟整句)。"""
+        """Case-insensitive regex over the raw turn text; an invalid regex falls
+        back to a literal search.
+        Quotes are almost never the literal target, so they are stripped first. When
+        a whole-sentence pattern matches nothing, fall back to an AND search --
+        every word appearing somewhere in the same turn -- because the LLM loves to
+        throw an entire sentence at it."""
         pattern = pattern.replace('"', " ").replace("“", " ").replace("”", " ").strip()
         try:
             pat = re.compile(pattern, re.IGNORECASE)
@@ -99,7 +109,7 @@ class Corpus:
         def _scan(p: re.Pattern) -> list[tuple["Turn", re.Match, str]]:
             found = []
             for t in self.turns:
-                # 日期戳也納入搜尋範圍(GREP 2023/03 可找出三月的 turn)
+                # Date stamps are searchable too (GREP 2023/03 finds March's turns)
                 haystack = f"[{t.date}] {t.text}" if t.date else t.text
                 m = p.search(haystack)
                 if m:
@@ -136,8 +146,9 @@ class Corpus:
         return out
 
     def read_window(self, sid: str, k: int = 2, *, max_chars: int = 8000) -> str:
-        """顯示 sid 所在 session 中前後 ±k 個 turn 的原文。
-        目標 turn 給全文(答案 span 可能埋很深),鄰居 turn 截短。"""
+        """Show the raw text of the +/-k turns around the sid within its session.
+        The target turn is given in full, since the answer span can be buried deep;
+        the neighbouring turns are truncated."""
         targets = self.resolve(sid)
         if not targets:
             return f"read {sid!r}: sid not found in this corpus."
@@ -160,10 +171,12 @@ class Corpus:
         return out
 
     def display_entry(self, sid: str, *, max_chars: int = 4000) -> str | None:
-        """組出 Evidence Summary 一行的 snippet 文字(raw turn text)。
+        """Build the snippet text for one Evidence Summary line, from raw turn text.
 
-        max_chars 不能太小:LongMem 的答案是字面 span,可能埋在長 assistant turn
-        的深處,截斷 = 直接毀掉證據(oracle 實測 600 字會讓 assistant 類掉到 64%)。"""
+        max_chars must not be small: LongMem answers are literal spans that can sit
+        deep inside a long assistant turn, so truncating destroys the evidence
+        outright (measured against the oracle, 600 characters dropped the assistant
+        category to 64%)."""
         targets = self.resolve(sid)
         if not targets:
             return None
@@ -179,7 +192,7 @@ class Corpus:
 
 def load_corpus(csv_path: str | Path) -> Corpus:
     df = pd.read_csv(csv_path)
-    df.columns = [c.lstrip("﻿") for c in df.columns]
+    df.columns = [c.lstrip("\ufeff") for c in df.columns]
     turns: list[Turn] = []
     pos_counter: dict[str, int] = {}
     for _, r in df.iterrows():

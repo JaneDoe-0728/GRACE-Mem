@@ -1,12 +1,15 @@
-"""Dated Fact Ledger:答題前把 evidence 編譯成日期事實表(編譯≠判斷)。
+"""Dated Fact Ledger: compile the evidence into a table of dated facts before
+answering (compiling is not judging).
 
-範式:與 grep agent 的「選擇」正交的第二機制——「表示變換」。不推 recall
-(respects the Precision Wall),把 temporal 算術/最新值判斷從答題時的 LLM
-推理搬到編譯後的表上讀。
+The paradigm is a second mechanism orthogonal to the grep agent's *selection*:
+*representation change*. It does not push recall (it respects the Precision
+Wall); it moves temporal arithmetic and latest-value judgements out of the LLM's
+reasoning at answer time and into a lookup over the compiled table.
 
-實測(temporal+KU 子集,兩輪複製):
-  temporal:grep→ledger 疊加 81.5/82.3 vs v2 79.2(4/4 全勝)
-  KU:     ledger 單獨 74.4/74.4 vs v2 73.1(疊加會把舊值 mentions 砍掉,不可疊)
+Measured on the temporal+KU subset, two replications:
+  temporal: grep -> ledger stacked, 81.5/82.3 vs v2's 79.2 (winning 4 of 4)
+  KU:       ledger alone, 74.4/74.4 vs v2's 73.1 (stacking cuts away the stale-
+            value mentions, so the two cannot be combined here)
 """
 from __future__ import annotations
 
@@ -21,7 +24,8 @@ LEDGER_HEADER = "\n\n### Dated Fact Table (compiled from the evidence above)\n"
 
 
 def compile_table(llm, evidence: str, *, max_chars: int = 24000, max_tokens: int = 1500) -> str:
-    """把 evidence block 編譯成 dated fact table(一次 LLM call)。失敗回空字串。"""
+    """Compile the evidence block into a dated fact table in a single LLM call.
+    Returns an empty string on failure."""
     try:
         resp = llm.chat(messages=[
             {"role": "system", "content": COMPILE_SYSTEM},

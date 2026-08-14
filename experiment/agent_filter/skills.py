@@ -1,14 +1,20 @@
-"""Question-shape 驅動的 agent skill 庫。
+"""A question-shape driven skill library for the agent.
 
-從 v2-v9 的錯誤分析與成功軌跡沉澱出的搜尋戰術,按**問題形狀**(regex 偵測,
-與 benchmark 類別標籤無關)注入 agent 的任務訊息。每個 skill 是一段具體的
-作戰手冊:用什麼 anchor、怎麼下 GREP、何時 READ、選擇時保留什麼。
+Search tactics distilled from the error analysis and successful trajectories of
+v2-v9, injected into the agent's task message according to the **shape of the
+question** (detected by regex, independent of any benchmark category label). Each
+skill is a concrete playbook: which anchor to use, how to phrase the GREP, when
+to READ, and what to keep when selecting.
 
-來源依據:
-- 成功軌跡:寬搜 → 鑽入 → 答案 span 反向驗證(binaural beats 案例)
-- 失敗模式 1:彙整題漏算 mention / 只留一條(v2 錯題 16/39)
-- 失敗模式 2:KU 取到舊值(錯例 context 只剩 1-2 條)
-- 失敗模式 3:整句 phrase 0 命中、日期條件 grep 不到(March ≠ 2023/03)
+Grounded in:
+- a successful trajectory: search broad -> drill in -> verify backwards from the
+  answer span (the binaural beats case)
+- failure mode 1: aggregation questions miscount mentions, or keep only one
+  (16 of 39 v2 errors)
+- failure mode 2: KU picks up a stale value (the failing contexts were down to
+  1-2 entries)
+- failure mode 3: a whole-sentence phrase matches nothing, and date conditions
+  cannot be grepped (March is not 2023/03)
 """
 from __future__ import annotations
 
@@ -19,12 +25,14 @@ def _rx(p: str) -> re.Pattern:
     return re.compile(p, re.IGNORECASE)
 
 
-# ── 已停用:counting skill ────────────────────────────────────────────────
-# v10 配對驗證歸因:counting 命中題的保持率只有 73%(其他 skill 93-100%)——
-# 「keep every instance / more evidence beats cleaner」的建議與 precision 引擎
-# 直接衝突(與 v3-v9 的 min-keep/sufficiency 同一規律)。counting 題的真正
-# 瓶頸在答題端彙整能力,證據端救不動(v7 硬 prompt 同樣失敗)。保留文字供
-# 換更強模型時重測。
+# ── Disabled: the counting skill ─────────────────────────────────────────────
+# v10's paired-verification attribution: questions this skill fired on held up
+# only 73% of the time, against 93-100% for the other skills. Its advice -- "keep
+# every instance / more evidence beats cleaner" -- collides head-on with the
+# precision engine, the same pattern seen with min-keep and sufficiency in v3-v9.
+# The real bottleneck on counting questions is the answering side's ability to
+# aggregate, which cannot be fixed from the evidence side (v7's hard prompt failed
+# the same way). The text is kept so it can be retested against a stronger model.
 _COUNTING_SKILL_DISABLED = (
     "counting",
     _rx(r"\b(how many (?!(days?|weeks?|months?|years?|hours?|minutes?)\b)|how much|"
@@ -41,10 +49,10 @@ _COUNTING_SKILL_DISABLED = (
     "For counting questions, more evidence beats cleaner evidence.",
 )
 
-# 每個 skill: (name, detector, strategy)
-# NOTE: counting 目前預設不在此清單(見 _COUNTING_SKILL_DISABLED)。
-# 若環境變數 GREP_AGENT_COUNTING_SKILL=1,select_skills 會把它插到最前面
-# (ablation 用,120b 重測)。
+# Each skill is (name, detector, strategy).
+# NOTE: counting is not in this list by default (see _COUNTING_SKILL_DISABLED).
+# With GREP_AGENT_COUNTING_SKILL=1, select_skills inserts it at the front (for
+# ablations and retesting on 120b).
 SKILLS: list[tuple[str, re.Pattern, str]] = [
     (
         "latest-value",
@@ -102,15 +110,17 @@ SKILLS: list[tuple[str, re.Pattern, str]] = [
     ),
 ]
 
-# literal-recall 的 detector 很寬(what/which/who),作為墊底 skill;
-# 排序即優先序,最多取前 N 個命中。
+# literal-recall's detector is deliberately broad (what/which/who), so it acts as
+# the fallback skill. List order is priority order, and at most the first N
+# matches are taken.
 MAX_SKILLS = 2
 
 
 def select_skills(question: str) -> list[tuple[str, str]]:
-    """回傳 [(name, strategy)],依 SKILLS 順序最多 MAX_SKILLS 個。
+    """Return [(name, strategy)], at most MAX_SKILLS of them, in SKILLS order.
 
-    GREP_AGENT_COUNTING_SKILL=1 時把已停用的 counting skill 插到最前(ablation)。
+    With GREP_AGENT_COUNTING_SKILL=1 the disabled counting skill is inserted at
+    the front (for ablations).
     """
     import os
     active = SKILLS

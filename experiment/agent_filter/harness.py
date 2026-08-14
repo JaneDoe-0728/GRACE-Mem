@@ -1,13 +1,15 @@
 """Grep agent mini-harness (inline delivery, plain-text command protocol).
 
-流程:
-  seed = Evidence Summary 內的 16 個 sid(vector+rerank 粗篩結果)
-  → agent 用 GREP / READ 驗證候選 + 補找漏掉的字面證據
-  → FINAL sids → 用 raw turn text 重組 Evidence Summary block
-安全網:agent 失敗 / 輸出無效 / 超出預算 → 原 context 原封不動退回。
+Flow:
+  seed = the 16 sids inside the Evidence Summary (vector+rerank coarse filter)
+  -> the agent verifies the candidates with GREP / READ and hunts down the
+     literal evidence that was missed
+  -> FINAL sids -> rebuild the Evidence Summary block from raw turn text
+Safety net: if the agent fails, emits invalid output, or blows the budget, the
+original context is handed back untouched.
 
-不用 function-calling API:local 模型(gpt-oss-20b via LM Studio)對 plain-text
-單行指令協議最穩,指令用 regex 解析。
+No function-calling API: local models (gpt-oss-20b via LM Studio) are steadiest
+against a plain-text one-command-per-line protocol, parsed with regexes.
 """
 from __future__ import annotations
 
@@ -33,7 +35,8 @@ _EVIDENCE_HEADER = "### Evidence Summary"
 _SID_RE = re.compile(r"\[sid=([^\]\s]+)\]")
 
 _GREP_RE = re.compile(r"^\s*GREP\s+(.+?)\s*$", re.IGNORECASE)
-# 彙整/最新值型問題偵測(問題驅動的保留策略觸發器,與資料集類別標籤無關)
+# Detects aggregation/latest-value questions (a question-driven trigger for the
+# retention strategy, independent of any dataset category label)
 _AGG_QUESTION_RE = re.compile(
     r"\b(how many|how much|how often|how long|how frequently|total|count|sum|"
     r"number of|most recent(ly)?|latest|currently|current|in total|altogether)\b",
@@ -52,7 +55,8 @@ _COVERAGE_STOPWORDS = {
 
 
 def seed_sids_from_context(context: str) -> list[str]:
-    """依出現順序取出 Evidence Summary block 的 sid(保序去重)。"""
+    """Pull the sids out of the Evidence Summary block in order of appearance,
+    deduplicated but order-preserving."""
     idx = context.find(_EVIDENCE_HEADER)
     if idx == -1:
         return []
@@ -66,12 +70,14 @@ def seed_sids_from_context(context: str) -> list[str]:
     return out
 
 
-# Evidence Summary 每條的 rerank 分數:`[sid=...][score=0.615]`(前端候選表的 Score 欄)
+# The rerank score on each Evidence Summary entry: `[sid=...][score=0.615]`
+# (the Score column in the front-end candidate table)
 _SID_SCORE_RE = re.compile(r"\[sid=([^\]\s]+)\][^\[]*?\[score=([-\d.]+)\]")
 
 
 def seed_scores_from_context(context: str) -> dict[str, float]:
-    """取出每個 seed sid 的 rerank 分數(保留第一次出現);解析失敗略過。"""
+    """Extract the rerank score for each seed sid, keeping the first occurrence.
+    Entries that fail to parse are skipped."""
     idx = context.find(_EVIDENCE_HEADER)
     scan = context[idx:] if idx != -1 else context
     out: dict[str, float] = {}
@@ -97,8 +103,9 @@ def graph_context_from_context(context: str, *, max_chars: int = 12000) -> str:
 
 
 def _resp_diag(resp) -> dict:
-    """回應層診斷欄位:區分「模型真的空回覆」vs「輸出落在 reasoning channel /
-    tool_calls,content 讀不到」(gpt-oss harmony 常見)。附在每步 trace 上。"""
+    """Response-level diagnostics: tells "the model genuinely replied empty" apart
+    from "the output landed in the reasoning channel / tool_calls where content
+    cannot see it" (common with gpt-oss harmony). Attached to every step trace."""
     try:
         choice = resp.choices[0]
         msg = choice.message
@@ -117,7 +124,8 @@ def _resp_diag(resp) -> dict:
         ]
     content = getattr(msg, "content", None)
     if not (content or "").strip():
-        # content 空:把 message 實際帶了哪些欄位也記下來,供排除 adapter 丟欄位
+        # Empty content: record which fields the message actually carried, so an
+        # adapter dropping fields can be ruled out
         d["content_empty"] = True
         d["message_keys"] = sorted(vars(msg).keys())
     return d
@@ -163,14 +171,15 @@ def _response_command_candidates(resp) -> list[tuple[str, str]]:
     return candidates
 
 
-# gpt-oss(harmony template)有時會用原生 tool-call 語法回覆:
+# gpt-oss (harmony template) sometimes replies in native tool-call syntax:
 #   <|channel|>commentary to=READ <|constrain|>json<|message|>{"id": "...", "k": 2}
 _HARMONY_RE = re.compile(
     r"to=(?:\w+\.)?(GREP|READ|VECTOR|FINAL)\b.*?<\|message\|>\s*(\{.*?\})\s*(?:<\|\w+\|>|$)",
     re.IGNORECASE | re.DOTALL,
 )
-# 更亂的變體:to=GREP <|constrain|>="pattern"(沒有 <|message|> JSON)
-# namespace 前綴放寬:functions./tool./任何 <ns>. 都剝掉(92 機模型用 to=tool.GREP)。
+# A messier variant: to=GREP <|constrain|>="pattern" (no <|message|> JSON)
+# Namespace prefixes are treated loosely: functions./tool./any <ns>. is stripped
+# (the model on box 92 emits to=tool.GREP).
 _HARMONY_LOOSE_RE = re.compile(r"to=(?:\w+\.)?(GREP|READ|VECTOR|FINAL)\b(.*)$", re.IGNORECASE)
 
 
@@ -178,7 +187,8 @@ _CMD_NAMES = {"GREP", "READ", "VECTOR", "FINAL"}
 
 
 def _flatten_json(obj) -> tuple[list[str], list[int]]:
-    """遞迴收集 JSON payload 內的字串與整數(模型的 schema 不可預測)。"""
+    """Recursively collect the strings and integers in a JSON payload (the model's
+    schema is not predictable)."""
     strings: list[str] = []
     ints: list[int] = []
     stack = [obj]
@@ -200,7 +210,7 @@ def _flatten_json(obj) -> tuple[list[str], list[int]]:
 def _parse_harmony(reply: str) -> tuple[str, str] | None:
     m = None
     for m in _HARMONY_RE.finditer(reply):
-        pass  # 取最後一個 tool call
+        pass  # take the last tool call
     if m is None:
         return None
     kind = m.group(1).upper()
@@ -210,7 +220,7 @@ def _parse_harmony(reply: str) -> tuple[str, str] | None:
         return None
 
     strings, ints = _flatten_json(payload)
-    # payload 內若自帶指令名(如 {"cmd": ["GREP", ...]}),以它為準
+    # If the payload names the command itself (e.g. {"cmd": ["GREP", ...]}), that wins
     for s in strings:
         if s.strip().upper() in _CMD_NAMES:
             kind = s.strip().upper()
@@ -226,8 +236,9 @@ def _parse_harmony(reply: str) -> tuple[str, str] | None:
 
 
 def _parse_harmony_loose(reply: str) -> tuple[str, str] | None:
-    """最後手段:`to=GREP <|constrain|>="pattern"` 這類無 JSON 的變體。
-    取 to=CMD 之後的行尾,剝掉 harmony 標記與 constrain/json 雜訊當參數。"""
+    """Last resort: JSON-less variants such as `to=GREP <|constrain|>="pattern"`.
+    Take the rest of the line after to=CMD and strip the harmony markers and the
+    constrain/json noise to get the argument."""
     m = None
     for line in reply.splitlines():
         for m2 in _HARMONY_LOOSE_RE.finditer(line):
@@ -255,15 +266,20 @@ def _unquote(s: str) -> str:
 
 
 def _parse_command(reply: str) -> tuple[str, str] | None:
-    """從回覆的最後幾行解析出指令(允許指令前有 reasoning);
-    plain-text 協議優先,退而解析 harmony 原生 tool-call 語法。
-    harmony 標記(<|channel|> 等)先換成換行,讓塞在 <|message|> 後的
-    plain-text 指令也能被行解析抓到。"""
+    """Parse the command out of the reply's last few lines, tolerating reasoning
+    before it. The plain-text protocol is tried first, then harmony's native
+    tool-call syntax as a fallback.
+    Harmony markers (<|channel|> and friends) are turned into newlines first, so
+    a plain-text command wedged in after <|message|> is still caught by the
+    line-based parse."""
     sanitized = re.sub(r"<\|[^|]*\|>", "\n", reply)
-    # 120B(gpt-oss)harmony 雙通道黏連:多個指令擠同一行且整段重複
-    # ("GREP MelanieGREP Melanie"、"READ 0__2:0 5FINAL 0__2:0")——行首是
-    # GREP 時整行被當 pattern、行尾 FINAL 被吃掉,L1 失靈率 49.6% 的根因
-    # (2026-07-06)。小寫/數字/引號後緊跟大寫指令字 → 斷行;20B 逐行輸出不受影響。
+    # 120B (gpt-oss) harmony dual-channel run-together: several commands crammed
+    # onto one line, with the whole span repeated ("GREP MelanieGREP Melanie",
+    # "READ 0__2:0 5FINAL 0__2:0"). When the line starts with GREP the entire line
+    # is taken as the pattern and the trailing FINAL is swallowed -- the root cause
+    # of the 49.6% L1 failure rate (2026-07-06). So: an uppercase command word
+    # directly after a lowercase char/digit/quote -> break the line. 20B emits one
+    # command per line and is unaffected.
     sanitized = re.sub(r"(?<=[a-z0-9\"'\)\].:])((?:GREP|READ|VECTOR)\s|FINAL\b)",
                        r"\n\1", sanitized)
     for line in reversed(sanitized.strip().splitlines()):
@@ -272,8 +288,9 @@ def _parse_command(reply: str) -> tuple[str, str] | None:
             continue
         if m := _FINAL_RE.match(line):
             if not m.group(1).strip():
-                # 空 FINAL:若同回覆還有其他可執行指令,先執行它們
-                # (120B 常把整段計畫 GREP..READ..FINAL 一次吐完)
+                # Empty FINAL: if the same reply holds other runnable commands,
+                # run those first (120B often dumps the whole plan --
+                # GREP..READ..FINAL -- in one go)
                 continue
             return ("FINAL", m.group(1))
         if m := _GREP_RE.match(line):
@@ -400,8 +417,9 @@ def _vector_search(
     topn: int,
     min_score: float,
 ) -> str:
-    """VECTOR 指令的執行端:query embed 後查該題 summaries VDB,
-    回傳 inline 候選清單(與 GREP 同格式,agent 需自行 READ/GREP 驗證)。"""
+    """Execution side of the VECTOR command: embed the query, search that
+    question's summaries VDB, and return an inline candidate list (same format as
+    GREP; the agent still has to verify them with READ/GREP)."""
     from experiment.agent_filter.gap_vector import vector_gap_candidates
 
     cands = vector_gap_candidates(
@@ -428,9 +446,11 @@ def _rebuild_context(
     include_pair: bool = True,
     include_prefix: bool = True,
 ) -> tuple[str, list[str]]:
-    """重組 Evidence Summary block。include_pair=True 時,選中 sid 的 pair 夥伴
-    (同一個 user↔assistant exchange 的另一側)一併帶入 — agent 有時會選到正確
-    pair 的錯誤一側,成對呈現能保住關鍵證據。回傳 (context, context_sids)。"""
+    """Rebuild the Evidence Summary block. With include_pair=True a selected sid
+    brings its pair partner along (the other half of the same user<->assistant
+    exchange) -- the agent sometimes picks the wrong side of the right pair, and
+    presenting them together keeps the crucial evidence. Returns
+    (context, context_sids)."""
     idx = context.find(_EVIDENCE_HEADER)
     if include_prefix:
         head = context[:idx].rstrip("\n") if idx != -1 else context.rstrip("\n")
@@ -438,7 +458,7 @@ def _rebuild_context(
         head = ""
     lines = [head, _EVIDENCE_HEADER] if head else [_EVIDENCE_HEADER]
 
-    entries: list[str] = []  # sid(pair base 或 split sid),保序去重
+    entries: list[str] = []  # sids (pair base or split sid), order-preserving dedup
     seen: set[str] = set()
     for s in final_sids:
         key = s.rsplit(":", 1)[0] if include_pair and (s.endswith(":u") or s.endswith(":a")) else s
@@ -467,15 +487,18 @@ def _check_sufficiency(
     corpus: Corpus,
     sids: list[str],
 ) -> tuple[bool, str]:
-    """獨立審計 call:證據夠不夠完整回答?回傳 (sufficient, missing_desc)。
-    解析失敗時視為 sufficient(不要因 verifier 抽風而空轉)。"""
+    """An independent audit call: is the evidence enough to answer in full?
+    Returns (sufficient, missing_desc).
+    A parse failure counts as sufficient -- a flaky verifier must not send the
+    loop spinning."""
     lines = []
     for s in sids:
         t = corpus.resolve(s)
         if not t:
             continue
-        # 必須與最終 context 同樣完整(4000/側):verifier 看截斷版會把
-        # 「埋在長 turn 深處的細節」誤判成缺失(實測 42% 誤觸發的主因)。
+        # Must be as complete as the final context (4000 per side): shown a
+        # truncated version, the verifier misreads "detail buried deep in a long
+        # turn" as missing -- the main driver of the measured 42% false triggers.
         entry = corpus.display_entry(s, max_chars=4000 * len(t))
         lines.append(f"[{t[0].date}] {entry}")
     reply_msgs = [
@@ -508,10 +531,13 @@ def _adjudicate_candidates(
     corpus: Corpus,
     pending: list[str],
 ) -> tuple[list[str], dict]:
-    """Answer-blind 逐條裁決:獨立 call(無 agent 搜尋歷史,看不到 agent 已推出
-    的答案),對每條被 FINAL 丟掉的 seed 判 KEEP/DROP。判準=與問題主題相關,
-    非「含答案」。回傳 (KEEP 的 sids, 逐條 verdict dict)。未給 verdict 的
-    候選視為 DROP(裁決是 add-only 的回收,不裁決=不補回)。"""
+    """Answer-blind per-item adjudication: an independent call (no agent search
+    history, so it cannot see the answer the agent already reached) rules
+    KEEP/DROP on every seed that FINAL discarded. The criterion is topical
+    relevance to the question, not "contains the answer".
+    Returns (the KEEP sids, a per-item verdict dict). A candidate given no
+    verdict counts as DROP -- adjudication is an add-only recovery, so no
+    verdict means nothing is added back."""
     from experiment.agent_filter.prompts import (
         ADJUDICATE_SYSTEM,
         ADJUDICATE_USER,
@@ -533,13 +559,16 @@ def _adjudicate_candidates(
             candidates="\n".join(lines) or "(none)",
         )},
     ]
-    # reasoning model:verdict 前有隱藏思考,token 預算要夠——2048 實測會把
-    # 14 條 verdict 輸出到一半截斷(child run: 129 條 unjudged 全是這個)。
+    # Reasoning model: hidden thinking precedes the verdicts, so the token budget
+    # has to be generous -- 2048 was measured truncating a 14-verdict output
+    # halfway (in the child run, all 129 unjudged items came from this).
     resp = llm.chat(messages=msgs, temperature=0.0, max_tokens=4096)
     reply = (resp.choices[0].message.content or "").strip()
     kept: list[str] = []
-    # reply=裁決 call 原始回覆(<sid> KEEP|DROP <short reason> 逐行);保留全文供
-    # 前端還原裁決軌跡,並逐條抽 verdict+reason(reasons: sid → "KEEP|DROP: 理由")。
+    # reply = the adjudication call's raw response (one `<sid> KEEP|DROP <short
+    # reason>` per line). The full text is kept so the front end can reconstruct
+    # the adjudication trail, and verdict+reason are extracted per item
+    # (reasons: sid -> "KEEP|DROP: reason").
     verdicts: dict = {
         "kept": [], "dropped": [], "unjudged": [],
         "reply": reply, "reply_chars": len(reply), "reasons": {},
@@ -554,7 +583,9 @@ def _adjudicate_candidates(
                 continue
             judged.add(s)
             decision = m.group(1).upper()
-            # 抽該行 KEEP/DROP 之後的短理由(去掉 sid 與 verdict token)
+            # Take the short reason after KEEP/DROP on that line, dropping the sid
+            # and the verdict token. The strip set keeps fullwidth punctuation
+            # because the model emits it in reasons.  # allow-cjk
             reason = line[m.end():].strip(" \t:-—．。")
             verdicts["reasons"][s] = f"{decision}: {reason}" if reason else decision
             if decision == "KEEP":
@@ -579,8 +610,10 @@ def refine_context(
     artifact_dir: str | Path | None = None,
     corpus: Corpus | None = None,
 ) -> tuple[str, dict]:
-    """跑 grep agent,回傳 (refined_context, trace)。任何失敗都退回原 context。
-    corpus 可外部預建(如 LoCoMo chunk 級 corpus);未提供時從 csv_path 載入。"""
+    """Run the grep agent and return (refined_context, trace). Any failure falls
+    back to the original context.
+    The corpus may be prebuilt externally (e.g. a LoCoMo chunk-level corpus); when
+    it is not supplied it is loaded from csv_path."""
     p = params or {}
     mode = p.get("grep_agent_mode", "filter_fetch")
     max_calls = int(p.get("grep_agent_max_calls", 8))
@@ -595,7 +628,7 @@ def refine_context(
             corpus = load_corpus(csv_path)
         seed = seed_sids_from_context(context)
         trace["seed_sids"] = seed
-        trace["seed_scores"] = seed_scores_from_context(context)  # sid → rerank 分數
+        trace["seed_scores"] = seed_scores_from_context(context)  # sid -> rerank score
         graph_context = graph_context_from_context(
             context,
             max_chars=int(p.get("grep_agent_graph_context_max_chars", 12000)),
@@ -609,11 +642,14 @@ def refine_context(
 
         if category is None:
             category = Path(csv_path).parent.name
-        # _abs 棄答題(答案不在語料):force_verified_final 對它們必須保留全量
-        # 保護色不窄化——fvf-73 實測窄化(即使 verified 多)誘使模型放棄棄答改口。
+        # _abs abstention questions (the answer is not in the corpus):
+        # force_verified_final must keep the full protective context for these and
+        # never narrow -- fvf-73 measured that narrowing (even with plenty of
+        # verified evidence) tempts the model to abandon the abstention and answer.
         is_abstention = bool(csv_path) and Path(csv_path).stem.endswith("_abs")
         trace["is_abstention"] = is_abstention
-        # Skill 庫(question-shape 驅動)優先;沒命中才退回 category hint
+        # The skill library (driven by question shape) takes precedence; only on a
+        # miss does it fall back to the category hint
         hint = ""
         if p.get("grep_agent_use_skills", False):
             from experiment.agent_filter.skills import select_skills
@@ -623,8 +659,10 @@ def refine_context(
         if not hint:
             hint = CATEGORY_HINTS.get(category, "")
 
-        # VECTOR 工具:該題 summaries VDB 在場才開(agent 自主決定何時語意搜尋;
-        # 與已證偽的 gap_vector「verifier 推候選」不同——這裡是 agent 主動拉取)。
+        # VECTOR tool: enabled only when this question's summaries VDB is present
+        # (the agent decides for itself when to search semantically -- unlike the
+        # disproven gap_vector approach where the verifier pushed candidates, here
+        # the agent pulls).
         vector_ok = (
             bool(p.get("grep_agent_vector_search", True))
             and artifact_dir is not None
@@ -668,7 +706,8 @@ def refine_context(
                 s for s in re.split(r"[,\s]+", _SID_RE.sub("", arg)) if s and ":" in s
             ]
             if not sids and full_reply:
-                # FINAL 參數空:sid 可能寫在其他行(FINAL: 後換行列點等)
+                # Empty FINAL argument: the sids may sit on other lines (a newline
+                # and bullet list after "FINAL:", and so on)
                 sids = _SID_RE.findall(full_reply) + [
                     s.strip("*•-,.")
                     for s in re.split(r"[,\s]+", _SID_RE.sub("", full_reply))
@@ -687,7 +726,8 @@ def refine_context(
             return raw_reply, raw_reply, None, None
 
         def _run_loop(budget: int) -> list[str] | None:
-            """跑一輪 GREP/READ→FINAL 的 tool loop(主搜尋與 verify 補搜共用)。"""
+            """Run one GREP/READ->FINAL tool loop (shared by the main search and the
+            verify top-up search)."""
             parse_failures = 0
             repeat_count = 0
             prev_cmd: tuple[str, str] | None = None
@@ -720,12 +760,16 @@ def refine_context(
                 kind, arg = cmd
                 if kind == "FINAL":
                     if emit_hyp:
-                        # agent 自報的答案假說(生產化「假說回收」,取代 hyp-v1 的
-                        # 4o-mini 事後抽取)。從 reply 找 HYPOTHESIS: 行;找不到就
-                        # 退回整段 reasoning(reasoning_content 或 reply)供下游。
-                        # 只抓 HYPOTHESIS 到「行尾」;若同行/相鄰接了 FINAL 或 sid
-                        # token(agent 把兩者寫在一起),在 FINAL 前截斷,避免把 FINAL
-                        # 行的 sids 吞進 hypothesis(hyp-v1 06db6396、120b filter 實見)。
+                        # The agent's self-reported answer hypothesis (productionizing
+                        # "hypothesis recovery", replacing hyp-v1's after-the-fact
+                        # 4o-mini extraction). Look for a HYPOTHESIS: line in the
+                        # reply; failing that, fall back to the whole reasoning block
+                        # (reasoning_content or reply) for downstream use.
+                        # Capture HYPOTHESIS only to end of line; if a FINAL or sid
+                        # token follows on the same or an adjacent line (the agent
+                        # writes both together), cut before FINAL so the FINAL line's
+                        # sids are not swallowed into the hypothesis (seen in hyp-v1
+                        # 06db6396 and the 120b filter).
                         hm = re.search(r"HYPOTHESIS\s*[::]\s*([^\n]+)", reply, re.IGNORECASE)
                         hyp = hm.group(1).strip() if hm else ""
                         hyp = re.split(r"\bFINAL\b", hyp, maxsplit=1, flags=re.IGNORECASE)[0].strip()
@@ -737,7 +781,8 @@ def refine_context(
                                               **diag})
                     return _extract_final(arg, reply)
 
-                # 複讀機斷路器:同一指令連續重複就催收,三次直接跳強制 FINAL
+                # Broken-record circuit breaker: repeating the same command prompts
+                # for closure, and three in a row jumps straight to a forced FINAL
                 if cmd == prev_cmd:
                     repeat_count += 1
                     if repeat_count >= 2:
@@ -763,8 +808,9 @@ def refine_context(
                         )
                         _vhits = corpus.normalize_sids(_SID_RE.findall(result))
                         vector_candidate_sids.update(_vhits)
-                        # VECTOR 命中直接視為 verified(與 GREP/READ 同級)。
-                        # provenance gate 已移除:撈回來即可信,不再要求二次驗證。
+                        # A VECTOR hit counts as verified outright, on a par with
+                        # GREP/READ. The provenance gate is gone: whatever is pulled
+                        # back is trusted, with no second verification required.
                         verified_sids.update(_vhits)
                     else:
                         result = "VECTOR is not available for this question; use GREP or READ."
@@ -776,9 +822,13 @@ def refine_context(
                                           "reply": reply[:1200], "result": result[:1500],
                                           "ms": round((time.perf_counter() - _t0) * 1000),
                                           **diag})
-                # 收尾提醒常駐於最近 context — 模型在多輪搜尋後常忘記怎麼結束。
-                # 明示 partial FINAL 可接受:49/73 fallback 是彙整題「湊不齊全部
-                # 實例不敢交」打滿輪次;裁決層本來就會補漏,不必追求收集完整。
+                # The closing reminder lives permanently in the recent context --
+                # after several search rounds models routinely forget how to finish.
+                # It states outright that a partial FINAL is acceptable: 49 of 73
+                # fallbacks were aggregation questions burning every round because
+                # they "could not gather every instance and dared not submit". The
+                # adjudication layer fills gaps anyway, so completeness is not the
+                # goal here.
                 result += ("\n\n(When you have identified the evidence, reply with one line: "
                            "FINAL <sid> <sid> ... — copy sids exactly. A PARTIAL set is "
                            "acceptable: FINAL the turns you have confirmed so far — a separate "
@@ -798,7 +848,8 @@ def refine_context(
         ]
 
         def _ask_final(attempt: int) -> list[str]:
-            """強制收尾:附上候選 sid 清單讓模型照抄,提取 sid。"""
+            """Force closure: attach the candidate sid list for the model to copy
+            from, then extract the sids."""
             messages.append({"role": "user", "content":
                 _SALVAGE_MSGS[min(attempt, 1)].format(seeds=" ".join(seed))})
             _t0 = time.perf_counter()
@@ -820,38 +871,55 @@ def refine_context(
             return out
 
         if not (final_raw and corpus.normalize_sids(final_raw)):
-            # 沒有 FINAL / FINAL 空 / sid 無法解析 → 催收一次。二度催收無用
-            # (實測 129/138 次模型仍回工具呼叫);用 verified 命中收窄 context
-            # 也驗證為負(salvage 組 54→43%:窄而「可信」的 context 反而誘使
-            # 答題模型亂編,全量 16 條的雜訊對難題反而是保護色)。
+            # No FINAL / empty FINAL / unparseable sids -> prompt once for closure.
+            # A second prompt is useless (measured: 129 of 138 times the model still
+            # returns a tool call). Narrowing the context down to the verified hits
+            # also tested negative (salvage group 54 -> 43%): a narrow but
+            # "trustworthy" context actually tempts the answering model to invent,
+            # whereas the noise of all 16 entries acts as cover on hard questions.
             if final_raw:
                 trace["final_raw_unresolved"] = final_raw[:20]
             final_raw = _ask_final(0)
 
-        # 不確定訊號:agent 拒絕自主 FINAL = 它找不到能確認的答案證據
-        # (_abs 棄答題 fallback 率 70%)。hint 為條件式棄答提示,只掛在
-        # 全量回退路徑——「收窄 context + hint」已驗證為負(一般題 46.7→33.3)。
+        # Uncertainty signal: an agent refusing to FINAL on its own means it found
+        # no confirmable evidence for an answer (_abs abstention questions fall back
+        # 70% of the time). The hint is a conditional abstention prompt, attached
+        # only to the full-context fallback path -- "narrowed context + hint" tested
+        # negative (ordinary questions 46.7 -> 33.3).
         abstain = False
         if not (final_raw and corpus.normalize_sids(final_raw)):
-            # 強制 verified→FINAL:agent 不肯自主收尾時,把它 GREP/READ 實際
-            # 確認過的 verified sids 當 FINAL 走完整 finalize pipeline(裁決+floor
-            # +rebuild),而非退回全量 raw context 標記 fallback。設計依據:
-            #   - max-calls 拉高測試證偽「逼 agent 交砍過的窄 context」(-6),因為
-            #     bare 1-2 sid FINAL 讓答題模型脫離全量雜訊保護色而亂編。
-            #   - 但 verified→FINAL 不同:彙整題 verified 常 >16 條(agent GREP 過
-            #     數十 turn),經 cap 後 ≈ 全量大小、只是 verified-first 重排;搜空題
-            #     verified=0 → 回退全 seed = 保住保護色。兩端都不會裸窄化。
-            #   - 走 finalize_from_raw 保留 adjudicate 補回主題相關 seed + floor pad
-            #     回 12,provenance 完整,no_final 標記消失。
-            # Gate:只有 agent 確認的 verified 證據「夠多」才走 finalize 窄化;
-            # verified 不足(含 _abs 搜空題、彙整題只湊到零星幾條)→ 保留全量
-            # 保護色(fvf-73 測試:窄化傷害全集中在 verified 少的 _abs,verified
-            # 大的題全部安全或改善)。門檻預設=12(即「至少湊到一份量的確認
-            # 證據」才視為可信到能取代全量)。注:evidence_floor 盲補已於
-            # 2026-07-20 停用,此處不再借用其值,fallback 直接寫 12。
+            # Forced verified->FINAL: when the agent will not close on its own, take
+            # the verified sids it actually confirmed via GREP/READ, treat them as
+            # the FINAL, and run the full finalize pipeline (adjudicate + floor +
+            # rebuild) rather than falling back to the whole raw context marked as a
+            # fallback. Rationale:
+            #   - Raising max-calls disproved "force the agent to submit a narrowed
+            #     context" (-6): a bare 1-2 sid FINAL strips the answering model of
+            #     the full-context noise cover and it starts inventing.
+            #   - verified->FINAL is different: aggregation questions routinely
+            #     verify >16 entries (the agent has GREPed dozens of turns), so after
+            #     the cap the size is about the same as the full context, merely
+            #     reordered verified-first. Questions that searched up empty have
+            #     verified=0 -> fall back to the full seed set, keeping the cover.
+            #     Neither end produces a bare narrowed context.
+            #   - Going through finalize_from_raw preserves adjudication's recovery
+            #     of topically relevant seeds plus the floor pad back to 12,
+            #     provenance stays intact, and the no_final marker disappears.
+            # Gate: narrow via finalize only when the agent's verified evidence is
+            # plentiful enough. Insufficient verified evidence -- including _abs
+            # questions that searched up empty, and aggregation questions that only
+            # scraped together a few entries -- keeps the full protective context
+            # (fvf-73: all the harm from narrowing landed on low-verified _abs
+            # questions, while every question with lots of verified evidence was safe
+            # or improved). The threshold defaults to 12, i.e. "at least a full
+            # context's worth of confirmed evidence" before it is trusted to replace
+            # the full set. Note: the evidence_floor blind pad was retired on
+            # 2026-07-20, so its value is no longer borrowed here and the fallback is
+            # written as a literal 12.
             verified_norm = corpus.normalize_sids(list(verified_sids))
             fvf_min = int(p.get("grep_agent_force_verified_min", 12))
-            # 窄化條件:啟用 flag + 非棄答題 + verified 夠多。任一不滿足 → 保全量。
+            # Narrowing requires: the flag on, a non-abstention question, and enough
+            # verified evidence. Fail any one of those -> keep the full context.
             if (int(p.get("grep_agent_force_verified_final", 0))
                     and not is_abstention
                     and len(verified_norm) >= fvf_min):
@@ -876,14 +944,19 @@ def refine_context(
             seed_set = set(corpus.normalize_sids(seed))
             final = [s for s in final if s in seed_set]
         elif mode == "fetch_only":
-            # 只補不砍:保住 baseline context 的 serendipity,吃下 agent 的補撈 recall。
-            # LoCoMo 實測:agent 全中率 +19.8pp 但砍掉非 gold 有用內容抵銷收益 → 此模式解耦。
+            # Add without cutting: keep the baseline context's serendipity while
+            # taking the recall the agent digs up.
+            # Measured on LoCoMo: the agent's all-gold-hit rate rose 19.8pp, but
+            # cutting useful non-gold content cancelled the gain -- hence this mode
+            # decouples the two.
             seed_norm_ = corpus.normalize_sids(seed)
             final = seed_norm_ + [s for s in final if s not in set(seed_norm_)]
 
-        # Provenance gate 已移除(2026-07-22):VECTOR 命中現與 GREP/READ 同視為
-        # verified(見 VECTOR branch),GREP/READ/VECTOR 撈回來的證據一律信任;
-        # 唯一未驗證的只剩幻覺 sid,會在 _rebuild_context 因 corpus 解析不到而自然丟棄。
+        # The provenance gate was removed on 2026-07-22: a VECTOR hit now counts as
+        # verified just like GREP/READ (see the VECTOR branch), and evidence pulled
+        # back by GREP/READ/VECTOR is trusted across the board. The only unverified
+        # things left are hallucinated sids, which _rebuild_context drops naturally
+        # because the corpus cannot resolve them.
         trace["verified_sids"] = corpus.normalize_sids(list(verified_sids))
         trace["vector_candidate_sids"] = corpus.normalize_sids(list(vector_candidate_sids))
         seed_set = set(corpus.normalize_sids(seed))
@@ -896,18 +969,19 @@ def refine_context(
             )
             for s in final
         }
-        trace["final_before_cap"] = list(final)  # 截斷前(診斷 top-k truncation 用)
+        trace["final_before_cap"] = list(final)  # pre-truncation, for diagnosing top-k truncation
         final = final[:max_sids]
         if not final:
             trace["fallback"] = "empty_final"
             return context, trace
 
-        # ── Sufficiency 迴圈:verifier 判證據不足 → 帶缺口 hint 補搜,只加不刪 ──
+        # ── Sufficiency loop: when the verifier rules the evidence insufficient,
+        # search again carrying a gap hint. Additive only, never removes. ──
         verify_rounds = int(p.get("grep_agent_verify_rounds", 0))
         verify_budget = int(p.get("grep_agent_verify_max_calls", 4))
         verify_cats = p.get("grep_agent_verify_categories")
         if verify_cats is not None and category not in verify_cats:
-            verify_rounds = 0  # 選擇性啟動:非彙整型類別跳過(verify 只會稀釋)
+            verify_rounds = 0  # Selective: skip non-aggregation categories, where verify only dilutes
         trace["sufficiency"] = []
         for vr in range(verify_rounds):
             try:
@@ -915,15 +989,17 @@ def refine_context(
                     _verify_llm(llm), question=question, question_date=question_date,
                     corpus=corpus, sids=final,
                 )
-            except Exception as exc:  # verifier 掛掉不影響主流程
+            except Exception as exc:  # a verifier crash must not disturb the main flow
                 trace["sufficiency"].append({"round": vr, "error": str(exc)[:200]})
                 break
             trace["sufficiency"].append({"round": vr, "sufficient": ok, "missing": missing[:300]})
             if ok:
                 break
             gap_msg = GAP_HINT_TEMPLATE.format(missing=missing)
-            # 向量補搜:grep 的修復臂常因 paraphrase gap 空手(~87%),把缺口
-            # 描述 embed 後查 summaries VDB,撈語意近鄰給 agent 確認。
+            # Vector top-up search: grep's repair arm comes back empty roughly 87% of
+            # the time because of the paraphrase gap, so embed the gap description,
+            # search the summaries VDB, and hand the semantic neighbours to the agent
+            # to confirm.
             gap_topn = int(p.get("grep_agent_gap_vector_topn", 0))
             if artifact_dir is not None and gap_topn > 0:
                 from experiment.agent_filter.gap_vector import vector_gap_candidates
@@ -952,7 +1028,7 @@ def refine_context(
             extra = corpus.normalize_sids(extra_raw)
             if mode == "filter":
                 extra = [s for s in extra if s in set(corpus.normalize_sids(seed))]
-            # 單調遞增:verify 輪只准加,不准動已選的
+            # Monotonic: a verify round may only add, never touch what is chosen
             added_now = [s for s in extra if s not in set(final)]
             trace["sufficiency"][-1]["added"] = added_now
             if not added_now:
@@ -961,21 +1037,28 @@ def refine_context(
 
         seed_norm = corpus.normalize_sids(seed)
 
-        # ── Answer-blind 逐條裁決:agent 的 FINAL 是「答案引用」(minimal-
-        # citation 天性:先解題→只留含 answer span 的最小 turn 集),不含
-        # answer span 的支持證據被系統性丟棄(preference/multi-hop 病灶)。
-        # 對策:獨立裁決 call(看不到 agent 對話,故不知道「答案」)對每條被
-        # 丟掉的 seed 逐一 KEEP/DROP,判準=與問題主題相關。KEEP 補回 final
-        # (只加不刪,agent 自選的 0.84 precision 不動)。裁決成功時取代
-        # evidence_floor 的盲補——floor 按 rerank 原序回填,補不回偏好線索。
+        # ── Answer-blind per-item adjudication: the agent's FINAL is an "answer
+        # citation" (the minimal-citation instinct: solve first, then keep only the
+        # smallest turn set containing the answer span), so supporting evidence
+        # without the answer span is discarded systematically -- the root of the
+        # preference and multi-hop failures.
+        # The remedy: an independent adjudication call (blind to the agent's
+        # conversation, so it does not know the "answer") rules KEEP/DROP on each
+        # discarded seed, judging topical relevance to the question. KEEPs are added
+        # back to final (additive only; the agent's own 0.84-precision picks are left
+        # alone). When adjudication succeeds it replaces the evidence_floor blind pad
+        # -- the floor refills in rerank order, which cannot recover preference cues.
         adj_on = int(p.get("grep_agent_adjudicate", 0))
         adj_cats = p.get("grep_agent_adjudicate_categories")
         if adj_cats is not None and category not in adj_cats:
             adj_on = 0
-        # KEEP-all 類別:KU/temporal 的 gold 含大量「不含答案但推理必需」的支撐
-        # turn(時間錨點、dated mention),20B 裁決用「含答案」判準系統性 DROP
-        # 掉它們(B 桶病因)。這些類改成 recall-recovery-only:被丟的 seed 全補
-        # 回不經 LLM DROP。與 min-keep 不同——這是類別級「不砍」,非問題形狀觸發。
+        # KEEP-all categories: the gold for KU/temporal holds many supporting turns
+        # that carry no answer but are required for the reasoning (time anchors,
+        # dated mentions), and 20B adjudication judging by "contains the answer"
+        # DROPs them systematically -- the cause of bucket B. These categories switch
+        # to recall-recovery-only: every discarded seed is added back without passing
+        # through an LLM DROP. This differs from min-keep in being a category-level
+        # "do not cut" rather than a question-shape trigger.
         keep_all_cats = p.get("grep_agent_adjudicate_keep_all_categories")
         adjudicated = False
         if adj_on and len(final) < max_sids:
@@ -996,26 +1079,30 @@ def refine_context(
                     final = (final + [s for s in kept_adj
                                       if s not in set(final)])[:max_sids]
                     adjudicated = True
-                except Exception as exc:  # 裁決掛掉不影響主流程,floor 續行
+                except Exception as exc:  # an adjudication crash must not disturb the main flow; the floor carries on
                     trace["adjudication"] = {"error": str(exc)[:200]}
 
-        # ── Min-keep(問題驅動,非類別特化):彙整/最新值型問題(how many/
-        # how often/total/most recent/current...)需要目標事實的所有 dated
-        # mentions 共存(計數要全、取最新要能比)。agent 砍到太薄時依 rerank
-        # 原序從 seed 補滿——由問題形狀觸發,對任何資料集通用。
+        # ── Min-keep (question-driven, not category-specific): aggregation and
+        # latest-value questions (how many / how often / total / most recent /
+        # current...) need every dated mention of the target fact present at once --
+        # counting must be complete, and picking the latest requires something to
+        # compare. When the agent cuts too thin, refill from the seeds in rerank
+        # order. Triggered by question shape, so it generalizes to any dataset.
         min_keep = int(p.get("grep_agent_min_keep_aggregation", 0))
         if min_keep and len(final) < min_keep and _AGG_QUESTION_RE.search(question):
             pad = [s for s in seed_norm if s not in set(final)]
             trace["min_keep_padded"] = pad[: min_keep - len(final)]
             final = final + pad[: min_keep - len(final)]
 
-        # ── evidence_floor 盲補已於 2026-07-20 停用 ────────────────────────
-        # 按 rerank 原序硬塞、繞過 agent 決定,對 accuracy 零貢獻、只讓 kept
-        # 定性失真(見 experiment_config.grep_agent_evidence_floor 說明)。整段
-        # 註解保留以備考;grep_agent_evidence_floor 預設已為 0。
+        # ── The evidence_floor blind pad was retired on 2026-07-20 ─────────────
+        # It force-fed entries in rerank order, bypassing the agent's decision, and
+        # contributed nothing to accuracy while distorting what "kept" means
+        # qualitatively (see the notes on
+        # experiment_config.grep_agent_evidence_floor). The block is kept commented
+        # out for reference; grep_agent_evidence_floor already defaults to 0.
         # evidence_floor = int(p.get("grep_agent_evidence_floor", 0))
         # if adjudicated:
-        #     evidence_floor = 0  # 裁決已做過 informed 的逐條決定,盲補只會稀釋
+        #     evidence_floor = 0  # adjudication already decided item by item, informed; a blind pad only dilutes
         # if evidence_floor > 0 and len(final) < evidence_floor:
         #     final, coverage = _portfolio_pad(
         #         question=question,
@@ -1046,8 +1133,10 @@ def refine_context(
             return context, trace
 
         if mode == "fetch_only":
-            # 純附加:原 context 一字不動(baseline 證據可能是無 sid 的純文字,
-            # rebuild 會誤刪),只把補撈到的單位掛在後面。保證資訊 ≥ baseline。
+            # Pure append: the original context is left word for word (baseline
+            # evidence may be plain text with no sid, which rebuild would wrongly
+            # delete), with the newly fetched units hung on the end. Guarantees the
+            # information is never less than baseline.
             if not trace["added"]:
                 trace["fallback"] = "no_addition"
                 return context, trace
@@ -1094,12 +1183,14 @@ def finalize_from_raw(
     artifact_dir,
     trace: dict,
 ) -> tuple[str, dict]:
-    """v1 後段 pipeline(provenance gate → filter_fetch → adjudicate → floor →
-    rebuild)抽成獨立函式,供 planner-worker harness 復用同一套 v1 主線邏輯。
+    """The v1 back half of the pipeline (provenance gate -> filter_fetch ->
+    adjudicate -> floor -> rebuild) pulled out into its own function, so the
+    planner-worker harness can reuse the same v1 mainline logic.
 
-    行為與 refine_context 的 811-1011 段一致,唯一差異:sufficiency 迴圈需要
-    v1 的 _run_loop(planner-worker 沒有),故此路徑跳過 sufficiency(v1 預設
-    verify_rounds=0,對主線無影響)。final_raw 為 None / 空 → 回退原 context。"""
+    Behaviour matches lines 811-1011 of refine_context, with one difference: the
+    sufficiency loop needs v1's _run_loop, which planner-worker does not have, so
+    this path skips sufficiency (v1 defaults to verify_rounds=0, so the mainline
+    is unaffected). A None or empty final_raw falls back to the original context."""
     mode = p.get("grep_agent_mode", "filter_fetch")
     max_sids = int(p.get("grep_agent_max_sids", 16))
     include_answer_graph = bool(p.get("grep_agent_answer_include_graph_context", True))
@@ -1117,7 +1208,8 @@ def finalize_from_raw(
         seed_norm_ = corpus.normalize_sids(seed)
         final = seed_norm_ + [s for s in final if s not in set(seed_norm_)]
 
-    # Provenance gate 已移除(2026-07-22):VECTOR 命中視為 verified,fetch 一律信任。
+    # The provenance gate was removed on 2026-07-22: a VECTOR hit counts as
+    # verified, and anything fetched is trusted.
     trace["verified_sids"] = corpus.normalize_sids(list(verified_sids))
     trace["vector_candidate_sids"] = corpus.normalize_sids(list(vector_candidate_sids))
     seed_set = set(corpus.normalize_sids(seed))
@@ -1136,7 +1228,8 @@ def finalize_from_raw(
 
     seed_norm = corpus.normalize_sids(seed)
 
-    # Answer-blind 逐條裁決(v1 主線,adjudicate 補回被丟的主題相關 seed)
+    # Answer-blind per-item adjudication (the v1 mainline; adjudicate adds back the
+    # discarded but topically relevant seeds)
     adj_on = int(p.get("grep_agent_adjudicate", 0))
     adj_cats = p.get("grep_agent_adjudicate_categories")
     if adj_cats is not None and category not in adj_cats:
@@ -1169,7 +1262,8 @@ def finalize_from_raw(
         trace["min_keep_padded"] = pad[: min_keep - len(final)]
         final = final + pad[: min_keep - len(final)]
 
-    # ── evidence_floor 盲補已於 2026-07-20 停用(見上一處註解與 config)──────
+    # ── The evidence_floor blind pad was retired on 2026-07-20 (see the note above
+    # and the config) ──────────────────────────────────────────────────────────
     # evidence_floor = int(p.get("grep_agent_evidence_floor", 0))
     # if adjudicated:
     #     evidence_floor = 0
@@ -1222,8 +1316,9 @@ _verify_llm_cache = None
 
 
 def _agent_llm(default_llm):
-    """GREP_AGENT_LLM_API/GREP_AGENT_MODEL_NAME 可指到不同 endpoint
-    (比照 JUDGE_* 慣例);未設定時共用傳入的答題 LLM。"""
+    """GREP_AGENT_LLM_API / GREP_AGENT_MODEL_NAME can point at a different endpoint
+    (following the JUDGE_* convention); when unset, the answering LLM passed in is
+    shared."""
     global _agent_llm_cache
     base = os.getenv("GREP_AGENT_LLM_API")
     name = os.getenv("GREP_AGENT_MODEL_NAME")
@@ -1236,9 +1331,11 @@ def _agent_llm(default_llm):
 
 
 def _verify_llm(default_llm):
-    """GREP_AGENT_VERIFY_LLM_API/GREP_AGENT_VERIFY_MODEL_NAME 可把 sufficiency
-    verifier 單獨指到不同 endpoint(如 120B),agent loop 與答題不受影響——
-    v3-v6 蓋棺主因之一是 oss-20b verifier 誤判率 43%,此鉤子供換強 verifier 重測。"""
+    """GREP_AGENT_VERIFY_LLM_API / GREP_AGENT_VERIFY_MODEL_NAME can point the
+    sufficiency verifier alone at a different endpoint (120B, say) without
+    affecting the agent loop or answering. One of the main reasons v3-v6 were
+    closed out was the oss-20b verifier's 43% misjudgement rate; this hook exists
+    to retest with a stronger verifier."""
     global _verify_llm_cache
     base = os.getenv("GREP_AGENT_VERIFY_LLM_API")
     name = os.getenv("GREP_AGENT_VERIFY_MODEL_NAME")
@@ -1261,8 +1358,10 @@ def maybe_refine_context(
     log_dir=None,
     artifact_dir: str | Path | None = None,
 ) -> str:
-    """qa_eval 流程的統一掛載點(processor 與 rerun 兩條路徑共用)。
-    GREP_AGENT_PARAMS.use_grep_agent 關閉時為 no-op;任何失敗都退回原 context。"""
+    """The single mount point in the qa_eval flow, shared by both the processor and
+    rerun paths.
+    A no-op when GREP_AGENT_PARAMS.use_grep_agent is off; any failure falls back to
+    the original context."""
     from experiment.experiment_config import GREP_AGENT_PARAMS
 
     if not GREP_AGENT_PARAMS.get("use_grep_agent"):
@@ -1294,6 +1393,6 @@ def maybe_refine_context(
         try:
             from grace_mem.utils.error_analysis import append_analysis_record
             append_analysis_record(log_dir, "grep_agent", {"question": question, **trace})
-        except Exception as exc:  # 記錄失敗不影響答題
+        except Exception as exc:  # a logging failure must not affect answering
             print(f"[QA] Grep agent trace logging failed: {exc}")
     return refined

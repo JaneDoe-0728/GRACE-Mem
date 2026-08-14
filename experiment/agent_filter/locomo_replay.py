@@ -1,11 +1,15 @@
-"""LoCoMo 版 grep agent replay:重用既有 run 的 retrieved_context,agent 精煉後
-以「原版 LoCoMo 答題 prompt」重答,輸出標準 eval CSV 供 pipeline judge。
+"""The LoCoMo flavour of grep agent replay: reuse an existing run's
+retrieved_context, let the agent refine it, then answer again with the *original*
+LoCoMo answering prompt, emitting the standard eval CSV for the pipeline judge.
 
-移植設計(最小改動):
-  - corpus 單位 = chunk(與 evidence sid 空間一致,sid = {sample}__{session}:{chunk});
-    chunk 切分完全復刻 ingest(空 turn 過濾 + pos//N,同 locomo_gold_recall_metrics)
-  - agent harness 原封復用(experiment/agent_filter/harness.refine_context)
-  - 答題 prompt 復刻 stages/qa_eval.py 的原版(含 conversation_date note),保可比性
+Porting design, kept to the minimum change:
+  - corpus unit = chunk (matching the evidence sid space, sid =
+    {sample}__{session}:{chunk}); chunk splitting reproduces ingest exactly
+    (empty-turn filtering + pos//N, as in locomo_gold_recall_metrics)
+  - the agent harness is reused untouched
+    (experiment/agent_filter/harness.refine_context)
+  - the answering prompt reproduces the original in stages/qa_eval.py, including
+    the conversation_date note, to stay comparable
 
 Usage:
     LLM_API=http://localhost:1234/v1 MODEL_NAME=openai/gpt-oss-20b \
@@ -52,7 +56,8 @@ def _llm() -> LLMClient:
 
 
 def build_chunk_corpus(sample: dict, sample_idx: int, n: int, unit: str = "chunk") -> Corpus:
-    """chunk 級 corpus:切分邏輯與 ingest 完全一致(空 turn 過濾 → pos//N)。"""
+    """Chunk-level corpus: the splitting logic matches ingest exactly (filter empty
+    turns, then pos//N)."""
     conv = sample.get("conversation", {}) or {}
     turns: list[Turn] = []
     for key, sess_turns in conv.items():
@@ -75,8 +80,9 @@ def build_chunk_corpus(sample: dict, sample_idx: int, n: int, unit: str = "chunk
             chunks.setdefault(pos // n, []).append(line)
             pos += 1
         if unit == "turn":
-            # turn 粒度:每個 kept turn 獨立單位(記憶:session 級 precision 天花板
-            # ~0.06,更細單位才有 localization 空間)。sid 帶 chunk 追溯。
+            # Turn granularity: every kept turn is its own unit (recall that
+            # session-level precision ceilings out around 0.06, so only a finer unit
+            # leaves room for localization). The sid carries the chunk for tracing.
             for ci in sorted(chunks):
                 for off, line in enumerate(chunks[ci]):
                     turns.append(Turn(
@@ -103,7 +109,8 @@ def build_chunk_corpus(sample: dict, sample_idx: int, n: int, unit: str = "chunk
 
 
 def locomo_answer(llm, question: str, kg_context: str) -> str:
-    """復刻 stages/qa_eval.py 的原版答題 prompt(含 conversation date note)。"""
+    """Reproduce the original answering prompt from stages/qa_eval.py, including the
+    conversation date note."""
     tags = _T_TAG.findall(kg_context)
     date_note = (
         f"\nNote: These conversations took place around {tags[-1]}. "
@@ -159,7 +166,8 @@ def process_row(row: dict, corpus: Corpus, params: dict, trace_fh, lock,
     out["retrieved_context"] = new_ctx
     out["model_answer"] = ans
     with lock:
-        # 寫完整 trace(含 timing/commands/sufficiency/dropped),與 LongMem 的
+        # Write the full trace (timing, commands, sufficiency, dropped), matching
+        # LongMem's.
         # Keep replay_run-compatible timing and agent fields for experiment/common/evaluation/score.py.
         trace_fh.write(json.dumps({"question": q[:120], **trace}, ensure_ascii=False) + "\n")
         trace_fh.flush()
@@ -175,11 +183,11 @@ def main():
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--limit", type=int, default=0, help="max questions per sample")
     ap.add_argument("--questions-file", default=None,
-                    help="CSV(sample,question):只跑清單內的題(錯題集/保持集閘)")
+                    help="CSV of (sample, question): run only the listed questions -- the error set or the retention gate")
     ap.add_argument("--granularity", choices=["chunk", "turn"], default="chunk",
-                    help="corpus 單位:chunk(8-turn) 或 turn(單 turn,更細 localization)")
+                    help="corpus unit: chunk (8 turns) or turn (a single turn, for finer localization)")
     ap.add_argument("--ledger", action="store_true",
-                    help="temporal-shape 問題:evidence 編譯成 dated fact table 附加(compile=120B@.34)")
+                    help="temporal-shape questions: compile the evidence into a dated fact table and attach it (compile=120B@.34)")
     args = ap.parse_args()
 
     from experiment.experiment_config import GREP_AGENT_PARAMS
@@ -203,11 +211,12 @@ def main():
             print(f"[skip] sample_{si}: done"); continue
         out_dir.mkdir(parents=True, exist_ok=True)
         corpus = build_chunk_corpus(data[si], si, args.chunk_turns, unit=args.granularity)
-        # VECTOR 工具:summary VDB 就在 source folder 的 sample_<si>/artifacts/summaries_chroma。
+        # VECTOR tool: the summary VDB sits in the source folder at
+        # sample_<si>/artifacts/summaries_chroma.
         artifact_dir = OUT_ROOT / args.source_run / f"sample_{si}" / "artifacts"
         if not (artifact_dir / "summaries_chroma").exists():
             artifact_dir = None
-        print(f"  [sample_{si}] VECTOR {'ON' if artifact_dir else 'OFF(無 summaries_chroma)'}",
+        print(f"  [sample_{si}] VECTOR {'ON' if artifact_dir else 'OFF (no summaries_chroma)'}",
               flush=True)
         df = pd.read_csv(src)
         rows = df.to_dict("records")

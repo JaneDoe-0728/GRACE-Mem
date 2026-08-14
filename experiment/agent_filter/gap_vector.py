@@ -1,11 +1,15 @@
-"""缺口描述向量補搜(sufficiency 修復臂的第二把武器)。
+"""Vector top-up search from the gap description -- the second weapon in the
+sufficiency repair arm.
 
-grep 修復臂的空手率 ~87%,根因是 paraphrase gap:verifier 指出的缺失資訊
-往往不是 corpus 裡的字面 span。這裡把「question + missing 描述」embed 後
-直接查該題的 summaries VDB(:u/:a split,rebuild_split_summaries.py 產物),
-撈回 grep 搆不到的語意近鄰,交給 agent 確認。
+The grep repair arm comes back empty about 87% of the time, and the root cause is
+the paraphrase gap: the information the verifier flags as missing is often not a
+literal span anywhere in the corpus. So here the question plus the missing
+description is embedded and used to search that question's summaries VDB (the
+:u/:a split produced by rebuild_split_summaries.py), pulling back the semantic
+neighbours grep cannot reach and handing them to the agent to confirm.
 
-VDB client 與 embedder 都是 lazy 全域快取(embedder ~2-3GB GPU,只載一次)。
+Both the VDB client and the embedder are lazily cached globally (the embedder
+takes 2-3GB of GPU and is loaded only once).
 """
 from __future__ import annotations
 
@@ -22,7 +26,7 @@ _embed_fn = None
 def _get_embed():
     global _embed_fn
     if _embed_fn is None:
-        from grace_mem.embeddings import embedder  # lazy: 載入 qwen3-0.6b(GPU)
+        from grace_mem.embeddings import embedder  # lazy: loads qwen3-0.6b onto the GPU
         _embed_fn = embedder.embed
     return _embed_fn
 
@@ -48,7 +52,8 @@ def vector_gap_candidates(
     topn: int = 6,
     min_score: float = 0.30,
 ) -> list[tuple[str, float]]:
-    """回傳 [(sid, score)],已排除 exclude 內的 sid。任何失敗回空 list。"""
+    """Return [(sid, score)] with the sids in `exclude` removed. Any failure returns
+    an empty list."""
     try:
         artifact_dir = Path(artifact_dir)
         if not (artifact_dir / "summaries_chroma").exists():

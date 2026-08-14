@@ -1,9 +1,11 @@
 """Prompts for the grep agent (inline mini-harness).
 
-設計原則(來自 Grep/DCI 兩篇的教訓):
-- inline delivery:工具結果直接回到對話,絕不走 file-based。
-- 工具極簡:只有 GREP / READ / FINAL,弱模型也能穩定執行。
-- category-conditioned hint(Chronos 式 dynamic prompting)。
+Design principles, drawn from the lessons of the Grep and DCI papers:
+- inline delivery: tool results go straight back into the conversation, never
+  through files.
+- a minimal toolset: GREP / READ / FINAL only, so weak models can still run it
+  reliably.
+- category-conditioned hints (dynamic prompting, in the Chronos style).
 """
 from __future__ import annotations
 
@@ -48,10 +50,13 @@ TOOLS — reply with EXACTLY ONE command as the last line of your message:
   Do not keep searching after your greps already hit the relevant turns.
 """
 
-# HYPOTHESIS 行:生產化「假說回收」——agent 在 FINAL 前的 reasoning 常已推出
-# 答案(自問自答,25% 明寫結論),過去用 4o-mini 事後抽取(hyp-v1)。改讓 agent
-# 在交 FINAL 的同一則訊息直接多輸出一行 HYPOTHESIS,免事後抽取、同模型自洽。
-# 只在 grep_agent_emit_hypothesis=1 時注入 {hypothesis_line} 槽。
+# The HYPOTHESIS line productionizes "hypothesis recovery": the agent's reasoning
+# before FINAL has usually already reached the answer (it asks and answers itself,
+# stating the conclusion outright 25% of the time), which hyp-v1 used to extract
+# after the fact with 4o-mini. Instead the agent now emits one extra HYPOTHESIS
+# line in the same message as its FINAL -- no post-hoc extraction, and self-
+# consistent within one model.
+# The {hypothesis_line} slot is only filled when grep_agent_emit_hypothesis=1.
 HYPOTHESIS_LINE_BLOCK = (
     "Before the FINAL line, add one line stating your best answer to the QUESTION "
     "based on the evidence you found:\n"
@@ -59,13 +64,18 @@ HYPOTHESIS_LINE_BLOCK = (
     "This is your own tentative conclusion; the FINAL sids remain the evidence.\n\n"
 )
 
-# ── v2(prompt-engineering 實驗,2026-07-20)──────────────────────────────
-# 病灶診斷:20b emit 的 hint 比 4o-mini 抽取差 −6.2pp,重災區 multi_session
-# (−12.3pp)。失敗三類:①hint 推理錯 ②該有時不 emit ③冗長句錨定。
-# ③(9/54)是純格式問題——20b 傾向輸出完整句(「2 doctor's appointments in
-# March」),4o-mini 給精煉字面值(「2」)。冗長 hint 在彙整題上把答題模型錨定
-# 到帶偏差假說。此版用 few-shot + 明確禁冗長,把輸出逼近 4o-mini 的字面形態。
-# 只在 KG_HYP_PROMPT=v2 時啟用,舊行為為預設(不污染既有對照)。
+# ── v2 (prompt-engineering experiment, 2026-07-20) ─────────────────────────
+# Diagnosis: hints emitted by 20b scored 6.2pp below 4o-mini extraction, with
+# multi_session hit hardest (-12.3pp). Three failure classes: (1) the hint reasons
+# wrongly, (2) nothing is emitted when it should be, (3) a verbose sentence
+# anchors the answer.
+# Class 3 (9 of 54) is purely a formatting problem: 20b tends to emit a full
+# sentence ("2 doctor's appointments in March") where 4o-mini gives the distilled
+# literal value ("2"). On aggregation questions a verbose hint anchors the
+# answering model to a biased hypothesis. This version uses few-shot examples plus
+# an explicit ban on verbosity to push the output toward 4o-mini's literal shape.
+# Enabled only when KG_HYP_PROMPT=v2; the old behaviour stays the default so the
+# existing control is not contaminated.
 HYPOTHESIS_LINE_BLOCK_V2 = (
     "Before the FINAL line, add one line with your best answer to the QUESTION.\n"
     "Give ONLY the bare answer value — the exact word, name, number, date, or "
@@ -83,14 +93,17 @@ HYPOTHESIS_LINE_BLOCK_V2 = (
 
 
 def _active_hypothesis_block() -> str:
-    """回傳當前 hypothesis prompt 版本(env-gated,預設舊版不變)。"""
+    """Return the active hypothesis prompt version (env-gated; the old version
+    remains the default)."""
     import os
     return (HYPOTHESIS_LINE_BLOCK_V2
             if os.environ.get("KG_HYP_PROMPT", "").strip().lower() == "v2"
             else HYPOTHESIS_LINE_BLOCK)
 
-# VECTOR 工具說明:只在該題 summaries VDB 可用(artifact_dir 有 summaries_chroma)
-# 時注入 SYSTEM_PROMPT 的 {vector_tool} 槽;不可用時填空字串,agent 不會看到。
+# VECTOR tool description: injected into SYSTEM_PROMPT's {vector_tool} slot only
+# when this question's summaries VDB is available (artifact_dir contains
+# summaries_chroma). When it is not, the slot is filled with an empty string and
+# the agent never sees the tool.
 VECTOR_TOOL_BLOCK = """  VECTOR <query>        semantic search over the conversation (embedding-based).
                         Finds turns that express an idea in DIFFERENT words — use it
                         when GREP keeps missing because the conversation paraphrases
@@ -141,13 +154,18 @@ CANDIDATE evidence turns (from vector+rerank; may contain distractors, may be in
 Verify the candidates and search for missing evidence, then give FINAL sids.
 """
 
-# ── Strict answering prompt(攻擊答題端三個失敗模式)─────────────────────────
-# 1. 彙整題不加總/漏算 → 強制先列全部再計算
-# 2. abstention 題被 "use general knowledge" 鼓勵亂編 → 禁用,不足就明說
-# 3. knowledge_update 拿舊值 → 多次更新取最新(context 有日期戳)
+# ── Strict answering prompt, attacking three answering-side failure modes ────
+# 1. aggregation questions that never total up or miscount -> force listing every
+#    instance before computing
+# 2. abstention questions where "use general knowledge" encourages invention ->
+#    forbid it; say plainly when the evidence is insufficient
+# 3. knowledge_update answers taken from a stale value -> on repeated updates take
+#    the newest (the context carries date stamps)
 ANSWER_SYSTEM_STRICT = (
-    # v7 教訓:硬性棄答條款讓 gpt-oss-20b 過度拒答(50 個 downflip 有 21 個是
-    # 證據在場卻回 not enough)→ 軟化:有相關資訊就必須作答,棄答是最後手段。
+    # v7's lesson: a hard abstention clause made gpt-oss-20b refuse too readily (21
+    # of 50 downflips answered "not enough" with the evidence right there), so it is
+    # softened here: if relevant information is present an answer is required, and
+    # abstention is the last resort.
     "You are a concise and accurate assistant. Answer from the Retrieved Context.\n"
     "- Use the context as your source of truth. If it contains partial or related "
     "information, answer from it — do not refuse when relevant evidence is present.\n"
@@ -162,7 +180,8 @@ ANSWER_SYSTEM_STRICT = (
     "Answer directly."
 )
 
-# ── Sufficiency verifier(獨立審計 call,不共用 agent 對話)──────────────────
+# ── Sufficiency verifier: an independent audit call that does not share the
+# agent's conversation ──────────────────────────────────────────────────────
 SUFFICIENCY_SYSTEM = """You are a strict evidence auditor for a QA system.
 Given a QUESTION and the EVIDENCE turns selected to answer it, judge whether the
 evidence ALONE is enough to answer the question COMPLETELY and precisely.
@@ -188,7 +207,7 @@ SELECTED EVIDENCE:
 
 Is this evidence sufficient to answer the question completely? Reply SUFFICIENT or INSUFFICIENT: <missing>."""
 
-# 缺口導向的補搜指令(餵回 agent 對話)
+# The gap-directed top-up search instruction, fed back into the agent's conversation
 GAP_HINT_TEMPLATE = """An independent verifier reviewed your FINAL selection and judged the evidence
 INSUFFICIENT: {missing}
 
@@ -196,9 +215,11 @@ Continue searching with GREP to fill exactly this gap. Your previous selections 
 kept — you only need to find the MISSING evidence and ADD it. When done, reply:
 FINAL <all previous sids> <newly found sids>"""
 
-# ── 搜空→棄答 hint(附加在 answer context 尾端)────────────────────────────
-# _abs 棄答題 fallback 率 70%(答案不在語料,agent 永不 FINAL);agent「全庫
-# 搜索零驗證命中」這個訊號本身就是 abstention 的最強證據,不該當失敗丟棄。
+# ── Searched-empty -> abstention hint, appended to the end of the answer context ─
+# _abs abstention questions fall back 70% of the time (the answer is not in the
+# corpus, so the agent never reaches FINAL). The signal "searched the whole corpus
+# and verified nothing" is itself the strongest evidence for abstention, and should
+# not be thrown away as a failure.
 ABSTENTION_HINT = (
     "\n\nNOTE: An evidence-search agent has already scanned the FULL conversation "
     "history for this question and could not verify any relevant evidence. If the "
@@ -206,11 +227,16 @@ ABSTENTION_HINT = (
     "is not available in the conversation history — do not guess or invent details."
 )
 
-# ── Answer-blind 逐條裁決(獨立 call,不共用 agent 對話)────────────────────
-# 自問自答對策:agent 的 FINAL 是「答案引用」(先解題→只留含 answer span 的
-# 最小 turn 集,gold 7 條/題只拿 2 條)。這個裁決 call 看不到 agent 的搜尋
-# 歷史與其推出的答案,對每條被丟掉的 seed 只判「與問題主題相關與否」——
-# 明令禁止解題/判答案,繞開 answer-span 雷達(preference/multi-hop 的病灶)。
+# ── Answer-blind per-item adjudication: an independent call that does not share
+# the agent's conversation ─────────────────────────────────────────────────────
+# The counter to the agent asking and answering itself: its FINAL is an "answer
+# citation" (solve first, then keep only the smallest turn set containing the
+# answer span -- of 7 gold entries per question it takes just 2). This
+# adjudication call cannot see the agent's search history or the answer it
+# reached, and rules on one thing only for each discarded seed: is it topically
+# relevant to the question? Solving the question or judging the answer is
+# explicitly forbidden, which routes around the answer-span radar that causes the
+# preference and multi-hop failures.
 ADJUDICATE_SYSTEM = """You are an evidence auditor for a long-term memory QA system.
 You are given a QUESTION and candidate evidence turns that an earlier selection
 step decided to discard. Audit each candidate INDEPENDENTLY, one by one.
