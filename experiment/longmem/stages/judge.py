@@ -55,7 +55,7 @@ class JudgeStage:
         gen_col = next((c for c in df.columns if c.lower() in ["generated_answer", "model_answer"]), None)
 
         if not all([q_col, g_col, gen_col]):
-            raise ValueError("找不到必要欄位 (question, answer/gold_answer, generated_answer/model_answer)")
+            raise ValueError("required columns not found (question, answer/gold_answer, generated_answer/model_answer)")
 
         if "correctness" not in df.columns:
             df["correctness"] = ""

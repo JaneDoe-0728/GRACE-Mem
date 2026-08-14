@@ -1,13 +1,15 @@
-"""LongMem judge prompts — 逐字對齊 vectorize-io/hindsight 的 judge_answer()。
+"""LongMem judge prompts -- aligned word for word with vectorize-io/hindsight's
+judge_answer().
 
-每個 category 用不同的評分 rubric(連字號命名,與 hindsight 相同);
-longmem 的底線 category 名(single_session_user)會在 build_messages 內轉成連字號。
-judge LLM 以 JSON {reasoning, correct} 回覆(由 stages/judge.py 透過 response_format 強制 +
-容錯解析)。
+Each category uses a different scoring rubric, named with hyphens exactly as in
+hindsight; longmem's underscored category names (single_session_user) are
+converted to hyphens inside build_messages.
+The judge LLM replies as JSON {reasoning, correct}, which stages/judge.py enforces
+via response_format and parses tolerantly.
 """
 from __future__ import annotations
 
-# ── JudgeResponse 的 JSON schema(對應 hindsight 的 pydantic JudgeResponse)──────
+# ── JSON schema for JudgeResponse (mirroring hindsight's pydantic JudgeResponse) ─
 JUDGE_RESPONSE_SCHEMA: dict = {
     "type": "object",
     "properties": {
@@ -25,20 +27,26 @@ JUDGE_RESPONSE_FORMAT: dict = {
 
 
 def _to_hyphen(category: str | None) -> str:
-    """longmem 底線 category -> hindsight 連字號 category(single_session_user -> single-session-user)。"""
+    """longmem's underscored category -> hindsight's hyphenated one
+    (single_session_user -> single-session-user)."""
     if not category:
         return ""
     return str(category).strip().lower().replace("_", "-")
 
 
-# ── Abstention(_abs)題偵測與專用 rubric ────────────────────────────────
-# LongMemEval 植入「干擾項」的棄答題:gold 表示該資訊從未被提及。通用 rubric
-# 只問「回應是否含 correct answer」,會把乾淨棄答(「沒有紀錄/資訊不足」)誤判為
-# false(缺豁免條款),因此這類題需要一組專門的判分邏輯。
-# 判定分界(經 4o-mini 三票 + 人工定奪校準):
-#   - 只說「沒紀錄/資訊不足/該項未提及」→ correct=true(棄答成功)
-#   - 「count is 0 / none」但那是對「事件從未發生」的正確推論 → correct=true
-#   - 棄答前先給出任何具體數字/日期/時長/順序(被干擾項帶跑)→ correct=false
+# ── Detecting abstention (_abs) questions, and their dedicated rubric ────────
+# LongMemEval's abstention questions plant distractors, and the gold says the
+# information was never mentioned. The general rubric asks only "does the response
+# contain the correct answer", which misjudges a clean abstention ("no record /
+# insufficient information") as false because it has no exemption clause. These
+# questions therefore need their own scoring logic.
+# The decision boundary, calibrated with three 4o-mini votes plus a human tiebreak:
+#   - saying only "no record / insufficient information / never mentioned"
+#     -> correct=true (a successful abstention)
+#   - "count is 0 / none" where that is the correct inference from the event never
+#     having happened -> correct=true
+#   - giving any concrete number, date, duration or ordering before abstaining
+#     (led astray by a distractor) -> correct=false
 _ABS_GOLD_MARKERS = (
     "the information provided is not enough",
     "you did not mention this information",
@@ -48,7 +56,8 @@ _ABS_GOLD_MARKERS = (
 
 
 def _is_abstention_gold(gold: str | None) -> bool:
-    """gold 是否為棄答型(該問的資訊從未被提及)。"""
+    """Whether the gold is an abstention (the information asked for was never
+    mentioned)."""
     if not gold:
         return False
     g = str(gold).strip().lower()
@@ -87,12 +96,17 @@ def build_messages(
     *, question: str, gold: str, generated: str, category: str | None = None,
     is_abstention: bool | None = None,
 ) -> list[dict[str, str]]:
-    """逐字複製 hindsight benchmarks/common/benchmark_runner.py 的 judge prompt 構造。
+    """A word-for-word copy of the judge prompt construction in hindsight's
+    benchmarks/common/benchmark_runner.py.
 
-    例外:棄答(_abs)題改走 ABS_JUDGE_PROMPT——因為通用 rubric 缺棄答豁免會系統性
-    誤殺乾淨棄答。是否為棄答題**優先**由呼叫端顯式傳入 `is_abstention`(來源是資料集的
-    `_abs` 檔名 tag,權威事實);未傳時才 fallback 用 gold 文字偵測。此分支只在棄答題
-    觸發,非棄答題的 prompt 一字不動。
+    One exception: abstention (_abs) questions go through ABS_JUDGE_PROMPT instead,
+    because the general rubric's missing abstention exemption kills clean
+    abstentions systematically. Whether a question is an abstention is taken
+    **first** from the `is_abstention` the caller passes explicitly (sourced from
+    the dataset's `_abs` filename tag, which is authoritative); only when that is
+    absent does it fall back to detecting it from the gold text. This branch fires
+    on abstention questions alone -- the prompt for every other question is
+    untouched.
     """
     abstention = is_abstention if is_abstention is not None else _is_abstention_gold(gold)
     if abstention:
@@ -180,5 +194,6 @@ If it's correct, set correct=true.
     return [{"role": "user", "content": user_content}]
 
 
-# 舊版相容:保留 SYSTEM_PROMPT 名稱(指向 default rubric 的內容)
+# Backwards compatibility: the SYSTEM_PROMPT name is kept, pointing at the default
+# rubric's content
 SYSTEM_PROMPT = "LongMemEval / hindsight category-aware judge"

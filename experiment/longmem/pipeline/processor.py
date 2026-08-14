@@ -930,7 +930,7 @@ class MultiDatasetProcessor:
                 "resume_skipped": False,
             }
         except KeyboardInterrupt:
-            # 按 Ctrl+C：印個訊息，直接往外拋，不做 teardown
+            # On Ctrl+C: print a message and re-raise immediately, skipping teardown
             print(f"\n[INTERRUPT] Dataset {config.name} interrupted by user. Skipping teardown.")
             raise
 

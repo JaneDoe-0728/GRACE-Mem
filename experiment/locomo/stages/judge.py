@@ -135,7 +135,8 @@ def judge_single(
     mode: str = "standard",
 ) -> float:
     """
-    單題評分：回傳 CORRECT/WRONG JSON；我們映射為 1/0。
+    Score a single question: the judge returns CORRECT/WRONG as JSON, which we map
+    to 1/0.
     """
     if mode == "open-domain" and dataset == "locomo-plus":
         messages = build_open_domain_plus_messages(
@@ -350,13 +351,13 @@ def llm_as_judge_singlemode(
     else:
         df = pd.read_csv(input_csv)
 
-    # 標準化欄位
+    # Normalize the column names
     q_col = next((c for c in df.columns if c.lower() == "question"), None)
     g_col = next((c for c in df.columns if c.lower() in ["answer", "gold_answer"]), None)
     gen_col = next((c for c in df.columns if c.lower() in ["generated_answer", "model_answer", "gpt_answer"]), None)
 
     if not all([q_col, g_col, gen_col]):
-        raise ValueError("找不到必要欄位 (question, answer/gold_answer, generated_answer/model_answer)")
+        raise ValueError("required columns not found (question, answer/gold_answer, generated_answer/model_answer)")
 
     if "correctness" not in df.columns:
         df["correctness"] = ""

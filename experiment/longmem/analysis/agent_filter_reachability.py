@@ -1,16 +1,21 @@
-"""Grep 可達率分析(Step 0 of grep-agent plan)。
+"""Grep reachability analysis (step 0 of the grep-agent plan).
 
-問題:vector+rerank 漏掉的 gold,grep agent 補得回來嗎?
-本腳本不跑任何模型,直接量「gold turn 的 raw text 與 question 的字面重疊」,
-給出 grep agent(V2 filter+fetch)的理論天花板。
+The question: can the grep agent recover the gold that vector+rerank missed?
+This script runs no model at all. It measures the literal overlap between a gold
+turn's raw text and the question, giving the theoretical ceiling for the grep
+agent (V2 filter+fetch).
 
-每個 gold turn 量四種可達性(由弱到強):
-  R_any     gold turn 含 >=1 個 question 內容詞(word-boundary, case-insensitive)
-  R_useful  存在一個 question 內容詞 k:k 命中 gold turn,且 k 在整個 haystack
-            的命中 turn 數 <= --max-df(grep 結果放得進 capped output,agent 看得完)
-  R_pair    question 的某兩個內容詞同時出現在該 gold turn(AND 過濾 = rg|rg,高精準)
-  R_ans     gold turn 含 >=1 個 answer 內容詞(oracle 上限:agent 不知道答案,
-            但答案本身是字面 span 時,好 query 常能收斂到它)
+Four kinds of reachability are measured per gold turn, weakest to strongest:
+  R_any     the gold turn contains >=1 question content word (word-boundary,
+            case-insensitive)
+  R_useful  some question content word k both hits the gold turn and hits at most
+            --max-df turns across the whole haystack (so the grep result fits in
+            the capped output and the agent can read it all)
+  R_pair    two of the question's content words appear together in that gold turn
+            (AND filtering = rg|rg, high precision)
+  R_ans     the gold turn contains >=1 answer content word (an oracle upper bound:
+            the agent does not know the answer, but when the answer is itself a
+            literal span a good query often converges on it)
 
 Usage:
     python -m experiment.longmem.analysis.agent_filter_reachability
@@ -41,7 +46,8 @@ CATEGORIES = [
     "knowledge_update",
 ]
 
-# 精簡英文 stopword + 問句功能詞。目的不是語言學完備,而是把「不能當 grep anchor 的詞」剔掉。
+# A compact list of English stopwords plus interrogative function words. The goal
+# is not linguistic completeness but removing words that cannot serve as a grep anchor.
 _STOPWORDS = frozenset("""
 a an the and or but if then else so of in on at to from by with without for as is are was were be
 been being am do does did done have has had having will would shall should can could may might must
@@ -56,7 +62,8 @@ _WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9'-]*")
 
 
 def content_words(text: str) -> list[str]:
-    """依序回傳去重後的內容詞(小寫);數字保留,單字母丟掉。"""
+    """Return the deduplicated content words in order, lowercased. Numbers are
+    kept; single letters are dropped."""
     seen: set[str] = set()
     out: list[str] = []
     for w in _WORD_RE.findall(str(text).lower()):
@@ -75,7 +82,7 @@ def _kw_re(word: str) -> re.Pattern:
 
 def analyze_question(src_csv: Path, *, max_df: int) -> dict | None:
     df = pd.read_csv(src_csv)
-    df.columns = [c.lstrip("﻿") for c in df.columns]
+    df.columns = [c.lstrip("\ufeff") for c in df.columns]
     if "has_answer" not in df.columns or "content" not in df.columns:
         return None
     gold_mask = df["has_answer"] == True  # noqa: E712
@@ -90,7 +97,7 @@ def analyze_question(src_csv: Path, *, max_df: int) -> dict | None:
     q_words = content_words(question)
     a_words = [w for w in content_words(answer) if w not in set(q_words)]
 
-    # 每個 question keyword 在 haystack 的命中 turn 集(document frequency)
+    # The set of turns each question keyword hits across the haystack (document frequency)
     q_hits: dict[str, set[int]] = {}
     for w in q_words:
         pat = _kw_re(w)
@@ -125,8 +132,8 @@ def analyze_question(src_csv: Path, *, max_df: int) -> dict | None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-df", type=int, default=40,
-                    help="keyword 命中 turn 數上限,超過視為 grep 結果太吵(default 40)")
-    ap.add_argument("--per-question-csv", default=None, help="輸出每題明細 CSV 路徑")
+                    help="cap on how many turns a keyword may hit; above it the grep result counts as too noisy (default 40)")
+    ap.add_argument("--per-question-csv", default=None, help="path to write the per-question detail CSV")
     args = ap.parse_args()
 
     agg: dict[str, dict] = defaultdict(lambda: dict(
@@ -154,10 +161,10 @@ def main() -> None:
     def pct(a, b):
         return f"{100*a/b:5.1f}%" if b else "  n/a"
 
-    print(f"\n=== grep 可達率(max_df={args.max_df})===")
+    print(f"\n=== grep reachability (max_df={args.max_df}) ===")
     header = (f"{'category':<28} {'#q':>4} {'#gold':>6} | "
               f"{'R_any':>7} {'R_useful':>8} {'R_pair':>7} {'R_ans':>7} | "
-              f"{'全any':>7} {'全useful':>8} {'全use|ans':>9}")
+              f"{'all any':>7} {'all useful':>10} {'all use|ans':>11}")
     print(header)
     print("-" * len(header))
     tot = dict(n_q=0, n_gold=0, any=0, useful=0, pair=0, ans=0, all_any=0, all_useful=0, all_useful_or_ans=0)
@@ -181,7 +188,7 @@ def main() -> None:
 
     if args.per_question_csv:
         pd.DataFrame(rows).to_csv(args.per_question_csv, index=False)
-        print(f"\nper-question 明細 → {args.per_question_csv}")
+        print(f"\nper-question detail -> {args.per_question_csv}")
 
 
 if __name__ == "__main__":

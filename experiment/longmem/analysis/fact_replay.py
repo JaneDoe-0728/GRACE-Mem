@@ -156,7 +156,7 @@ def _build_session_raw_texts(source_csv: Path, *, source_roles: str = "all") -> 
         return {}
     df = pd.read_csv(source_csv)
     # strip BOM from column names
-    df.columns = [c.lstrip("﻿") for c in df.columns]
+    df.columns = [c.lstrip("\ufeff") for c in df.columns]
 
     sid_col = _find_col(df, ["session_id"])
     role_col = _find_col(df, ["role"])
@@ -235,7 +235,7 @@ def _extract_facts(
             max_tokens=4096 if source_roles == "user" else 2048,
         )
         content = resp.choices[0].message.content or ""
-        # 從回應中抽取第一個 {...} JSON 區塊
+        # Extract the first {...} JSON block from the response
         start = content.find("{")
         end = content.rfind("}") + 1
         if start == -1 or end == 0:

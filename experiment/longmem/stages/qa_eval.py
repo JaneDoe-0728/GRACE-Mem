@@ -25,11 +25,11 @@ class QAEvalStage:
     def load_question_from_csv(self, path: str | Path) -> tuple[str, str | None]:
         df = read_csv_frame(Path(path))
         if "question" not in df.columns:
-            raise ValueError("CSV 缺少 question 欄位")
+            raise ValueError("the CSV has no question column")
 
         question = next((str(x) for x in df["question"].dropna().tolist() if str(x).strip()), None)
         if not question:
-            raise ValueError("question 欄位全為空")
+            raise ValueError("the question column is entirely empty")
 
         question_date = None
         if "question_date" in df.columns:
@@ -42,7 +42,8 @@ class QAEvalStage:
         return question.strip(), question_date
 
     def rewrite_temporal_question(self, question: str, query_time: str | None = None) -> str:
-        # Ablation G: query 端時間改寫全關(ingest 端已烙進 artifacts,不在範圍)
+        # Ablation G: disable query-side time rewriting entirely (the ingest side is
+        # already baked into the artifacts and is out of scope here)
         if time_rewrite_ablation_enabled():
             print("⏰ [ablation] time rewrite skipped (KG_ABLATION_NO_TIME_REWRITE=1)")
             return question

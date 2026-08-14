@@ -678,8 +678,9 @@ def _run_rerun_mode(
         return 0
 
     # Skip already-completed datasets for the default full rerun flow,
-    # and for qa_eval-only runs(--stage qa_eval [--no-judge])——讓當機後
-    # 續跑不必整包重答(2026-07-16)。judge-only 流程不跳過。
+    # and for qa_eval-only runs (--stage qa_eval [--no-judge]) -- so resuming after
+    # a crash does not have to answer the whole batch again (2026-07-16).
+    # judge-only flows are not skipped.
     if tuple(selected_stages) == tuple(DEFAULT_STAGES) or tuple(selected_stages) == ("qa_eval",):
         to_run = [name for name in all_datasets if not _rerun_dataset_complete(output_root, name)]
         already_done = total - len(to_run)

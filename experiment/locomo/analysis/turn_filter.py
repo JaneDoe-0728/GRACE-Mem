@@ -1,12 +1,15 @@
-"""Turn-granularity filter 離線分析(零 LLM):chunk 級 narrowing 的精度天花板
-卡在 ~0.06(gold turn 佔 context 比例);此腳本量測「chunk 展開成 turn 後做
-lexical top-K 保留」能到什麼 precision / gold coverage / context 縮減。
+"""Offline analysis of a turn-granularity filter, with no LLM involved.
+Chunk-level narrowing ceilings out at a precision of about 0.06 (the share of the
+context that is gold turns); this script measures what precision, gold coverage
+and context reduction are reachable by expanding chunks into turns and keeping a
+lexical top-K.
 
-對每題:
-  retrieved chunks(selected_evidence_ids)→ 展開成 turns(復刻 ingest 過濾)
-  → question 關鍵詞 overlap 打分 → 留 top-K turn(可 ±1 鄰居)
-  → 對 gold dia_ids 算 turn 級 coverage(僅計 reachable gold,即 gold 在
-    retrieved chunks 內的)與 precision、context 字元縮減。
+Per question:
+  retrieved chunks (selected_evidence_ids) -> expand into turns (reproducing
+  ingest's filtering) -> score by keyword overlap with the question -> keep the
+  top-K turns (optionally with +/-1 neighbours) -> against the gold dia_ids,
+  compute turn-level coverage (counting reachable gold only, i.e. gold that lies
+  inside the retrieved chunks), precision, and the reduction in context characters.
 
 Usage:
     python -m experiment.locomo.analysis.turn_filter --run locomo-n8-full --chunk-turns 8
@@ -43,8 +46,9 @@ _STOP = {
 
 
 def kept_turns_by_session(sample: dict) -> dict[int, list[dict]]:
-    """復刻 ingest 的空 turn 過濾,回傳 session -> kept turn 列表
-    (每項含 pos / text(含 caption)/ dia_turn(原始 dia_id turn 編號))。"""
+    """Reproduce ingest's empty-turn filtering and return session -> kept turns.
+    Each entry holds pos, text (caption included), and dia_turn (the turn number
+    from the original dia_id)."""
     conv = sample.get("conversation", {}) or {}
     out: dict[int, list[dict]] = {}
     for key, sess_turns in conv.items():
@@ -75,9 +79,10 @@ def tokens(s: str) -> set[str]:
 
 
 def load_selected_pools(run: str, si: int) -> dict[str, list[tuple[int, int]]]:
-    """request_id -> pre-narrowing 選中的 (session, chunk) 列表(rank 序)。
-    來源:logs/kg_retrieval_evidence.jsonl 的 evidence_split_selected.sample —
-    narrowing(WIP,預設開)會把 context 砍到 ~1.6 條,eval CSV 已非完整 pool。"""
+    """request_id -> the (session, chunk) list selected pre-narrowing, in rank order.
+    Source: evidence_split_selected.sample in logs/kg_retrieval_evidence.jsonl --
+    narrowing (a WIP, on by default) cuts the context down to roughly 1.6 entries,
+    so the eval CSV no longer holds the complete pool."""
     f = OUT_ROOT / run / f"sample_{si}" / "logs" / "kg_retrieval_evidence.jsonl"
     pools: dict[str, list[tuple[int, int]]] = {}
     if not f.exists():
@@ -101,8 +106,8 @@ def load_selected_pools(run: str, si: int) -> dict[str, list[tuple[int, int]]]:
 
 def retrieved_chunk_sids(row: dict, sample_idx: int,
                          pools: dict[str, list[tuple[int, int]]]) -> list[tuple[int, int]]:
-    """(session, chunk) 列表:evidence log 的 pre-narrowing pool 優先,
-    退回 selected_evidence_ids / context regex。"""
+    """The (session, chunk) list: the evidence log's pre-narrowing pool takes
+    precedence, falling back to selected_evidence_ids or a context regex."""
     rid = str(row.get("retrieval_request_id") or "")
     if rid in pools:
         return pools[rid]
@@ -127,13 +132,13 @@ def main():
     ap.add_argument("--run", default="locomo-n8-full")
     ap.add_argument("--chunk-turns", type=int, default=8)
     ap.add_argument("--topk", default="8,12,16,24,32")
-    ap.add_argument("--neighbor", action="store_true", help="保留命中 turn 的 ±1 鄰居")
+    ap.add_argument("--neighbor", action="store_true", help="also keep the +/-1 neighbours of a matched turn")
     args = ap.parse_args()
     n = args.chunk_turns
     ks = [int(x) for x in args.topk.split(",")]
 
     data = json.loads(DATA_JSON.read_text())
-    # 每個 K 一組累計器 + chunk 級 baseline 累計器
+    # One accumulator per K, plus a chunk-level baseline accumulator
     acc = {k: {"gold_hit": 0, "gold_tot": 0, "allhit_q": 0, "q": 0,
                "kept_turns": 0, "gold_kept": 0, "chars": 0} for k in ks}
     base = {"chars": 0, "turns": 0, "gold_in": 0, "gold_tot": 0, "q": 0}
@@ -144,7 +149,7 @@ def main():
             continue
         sample = data[si]
         sess_turns = kept_turns_by_session(sample)
-        # dia_turn -> kept pos 映射(gold dia_id 用原始 turn 編號)
+        # dia_turn -> kept pos mapping (gold dia_ids use the original turn numbers)
         dia2pos = {s: {t["dia_turn"]: t["pos"] for t in ts if t["dia_turn"] is not None}
                    for s, ts in sess_turns.items()}
         q2gold = {}
@@ -166,14 +171,14 @@ def main():
             chunks = retrieved_chunk_sids(row, si, pools)
             if not chunks:
                 continue
-            # 展開 turns
+            # Expand into turns
             pool = []  # (sess, pos, text)
             for sess, ci in chunks:
                 for t in sess_turns.get(sess, []):
                     if t["pos"] // n == ci:
                         pool.append((sess, t["pos"], t["text"]))
             pool_keys = {(s, p) for s, p, _ in pool}
-            # gold → (sess, kept pos);reachable = 在 retrieved chunks 內
+            # gold -> (sess, kept pos); reachable = lies inside the retrieved chunks
             gold_pos = [(s, dia2pos.get(s, {}).get(t)) for s, t in gold]
             gold_pos = [(s, p) for s, p in gold_pos if p is not None]
             reachable = [(s, p) for s, p in gold_pos if (s, p) in pool_keys]
@@ -204,7 +209,7 @@ def main():
                 a["chars"] += sum(len(t) for *_, t in kept_txt)
 
     print(f"run={args.run} N={n} neighbor={args.neighbor}")
-    print(f"baseline(16 chunks 全保留): {base['q']} q, avg {base['turns']/max(base['q'],1):.0f} turns "
+    print(f"baseline (all 16 chunks kept): {base['q']} q, avg {base['turns']/max(base['q'],1):.0f} turns "
           f"/ {base['chars']/max(base['q'],1):.0f} chars, reachable gold = "
           f"{base['gold_in']}/{base['gold_tot']} ({base['gold_in']/max(base['gold_tot'],1)*100:.1f}%), "
           f"turn-level precision = {base['gold_in']/max(base['turns'],1):.4f}")

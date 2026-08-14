@@ -133,11 +133,13 @@ RERANKER_PARAMS = dict(
     summary_rerank_topk=16,
     summary_rerank_cosine_only=False,
     # rerank16: one entry per summary_id (no :u/:a), feed raw turn text.
-    # 此共用值供 LoCoMo 使用(True,LoCoMo 永遠是單筆 entry)。
-    # LongMem 在 processor.py / rerun.py 依 INGEST_PARAMS["use_split_summary"]
-    # 覆寫為 (not use_split_summary):預設 True → 覆寫成 False,走 :u/:a split,
-    # 對應的 artifacts 由同一個旗標驅動的 rebuild 步驟自動產生。
-    # 不要在這裡單獨改成 False —— 那會讓檢索去找沒人保證存在的 :u/:a entry。
+    # This shared value is what LoCoMo uses (True; LoCoMo is always a single entry).
+    # LongMem overrides it in processor.py / rerun.py to (not use_split_summary),
+    # following INGEST_PARAMS["use_split_summary"]: the default True is overridden
+    # to False, taking the :u/:a split path, and the matching artifacts are produced
+    # automatically by the rebuild step driven off that same flag.
+    # Do not just set this to False here -- that would send retrieval looking for
+    # :u/:a entries nobody has guaranteed exist.
     split_single_entry_raw=True,
 )
 
@@ -155,53 +157,70 @@ GREP_AGENT_PARAMS = dict(
     grep_agent_max_calls=10,
     grep_agent_max_sids=16,
     grep_agent_grep_max_lines=30,
-    # provenance gate 已於 2026-07-22 移除(harness.py):VECTOR 命中現與 GREP/READ
-    # 同視為 verified,此參數已成 no-op,保留僅為相容舊 trace/腳本引用。
+    # The provenance gate was removed on 2026-07-22 (harness.py): a VECTOR hit now
+    # counts as verified just like GREP/READ, so this parameter is a no-op and is
+    # kept only so older traces and scripts that reference it still work.
     grep_agent_require_verified_additions=True,
     # Entity/Relationship graph facts are independently switchable on the
     # filter prompt and on the final answer context for ablation experiments.
     grep_agent_filter_include_graph_context=False,
     grep_agent_answer_include_graph_context=True,
     grep_agent_graph_context_max_chars=12000,
-    # evidence_floor 盲補按 rerank 原序硬塞、繞過 agent 決定,全域關閉:0=不盲補。
+    # The evidence_floor blind pad force-fed entries in rerank order, bypassing the
+    # agent's decision. Disabled globally: 0 = no blind padding.
     grep_agent_evidence_floor=0,
-    # 選中 sid 的 pair 夥伴(同一 exchange 的另一側)一併放入最終 context,
-    # 修復「agent 選到正確 pair 的錯誤一側」的失誤。
+    # A selected sid brings its pair partner (the other side of the same exchange)
+    # into the final context, fixing the case where the agent picks the wrong side
+    # of the right pair.
     grep_agent_include_pair=True,
-    # ── Answer-blind 逐條裁決(自問自答對策,2026-07-16)──────────────────
-    # FINAL 後用獨立裁決 call(fresh conversation,看不到 agent 已推出的答案=
-    # answer-blind)對每條被丟掉的 seed 逐一 KEEP/DROP,判準=與問題主題相關。
-    # KEEP 補回(只加不刪)。1=開,0=關。
+    # ── Answer-blind per-item adjudication (the counter to the agent asking and
+    # answering itself, 2026-07-16) ──────────────────────────────────────────
+    # After FINAL, an independent adjudication call (a fresh conversation that
+    # cannot see the answer the agent reached -- hence answer-blind) rules KEEP or
+    # DROP on each discarded seed, judging topical relevance to the question.
+    # KEEPs are added back, additive only. 1 = on, 0 = off.
     grep_agent_adjudicate=1,
-    # 單針類 agent 天性已最優 → 預設僅多證據類。None=全類(ablation 用)。
+    # The agent is already optimal by nature on single-needle categories, so this
+    # defaults to the multi-evidence ones only. None = every category (for ablations).
     grep_agent_adjudicate_categories=(
         "single_session_preference", "multi_session",
         "temporal_reasoning", "knowledge_update",
     ),
-    # KEEP-all 類別:裁決改成 recall-recovery-only(被丟 seed 全補回)。() = 關。
+    # KEEP-all categories: adjudication becomes recall-recovery-only, adding back
+    # every discarded seed. () = off.
     grep_agent_adjudicate_keep_all_categories=(),
-    # 強制 verified→FINAL:no_final 時把 verified sids 當 FINAL 走 finalize。0=關。
+    # Forced verified->FINAL: on no_final, treat the verified sids as the FINAL and
+    # run finalize. 0 = off.
     grep_agent_force_verified_final=0,
-    # 窄化 gate 門檻:verified 數 >= 此值(且非 _abs)才走 finalize 窄化。
+    # The narrowing gate threshold: only narrow via finalize when the verified count
+    # is at least this value and the question is not _abs.
     grep_agent_force_verified_min=12,
-    # ── Sufficiency 迴圈 ──────────────────────────────────────────────────
-    # FINAL 後由獨立 verifier 判斷證據是否足以完整回答;不足則帶著「缺什麼」
-    # 的 hint 讓 agent 補搜(只加不刪,單調遞增)。0 = 關閉。
+    # ── Sufficiency loop ──────────────────────────────────────────────────
+    # After FINAL, an independent verifier judges whether the evidence suffices for
+    # a complete answer. If not, the agent searches again carrying a hint about what
+    # is missing (additive only, monotonic). 0 = disabled.
     grep_agent_verify_rounds=0,  # Disabled by default; see experiment/agent_filter/README.md.
     grep_agent_verify_max_calls=4,
     grep_agent_verify_categories=("multi_session", "knowledge_update"),
-    # 缺口向量補搜:verifier 判不足時,把「question+missing」embed 查 summaries VDB,
-    # 撈 grep 搆不到的語意近鄰給 agent 確認(修 paraphrase gap)。0 = 關閉。
+    # Gap vector top-up: when the verifier rules the evidence insufficient, embed
+    # "question + missing" and search the summaries VDB, pulling back the semantic
+    # neighbours grep cannot reach for the agent to confirm. Fixes the paraphrase
+    # gap. 0 = disabled.
     grep_agent_gap_vector_topn=6,
     grep_agent_gap_vector_min_score=0.30,
-    # Min-keep(問題驅動):彙整/最新值型問題 FINAL 少於 N 條時依 rerank 原序從 seed 補滿。
-    grep_agent_min_keep_aggregation=0,  # v9 配對驗證:修復率=噪音,中性 → 預設關
-    # Skill 庫:question-shape 驅動的搜尋戰術(skills.py),命中時取代 category hint。
-    # 2026-07-22 預設關:hint 與 filter_fetch 解耦,base 不注入 skill hint。
+    # Min-keep (question-driven): when an aggregation or latest-value question ends
+    # with fewer than N entries in FINAL, refill from the seeds in rerank order.
+    grep_agent_min_keep_aggregation=0,  # v9 paired verification: repair rate was indistinguishable from noise, so neutral -> off by default
+    # The skill library: question-shape driven search tactics (skills.py) that
+    # replace the category hint when one fires.
+    # Off by default since 2026-07-22: hints are decoupled from filter_fetch, and
+    # base injects no skill hint.
     grep_agent_use_skills=False,
-    # ── VECTOR 工具(agent 主動語意搜尋)──────────────────────────────────
-    # 給 agent 一個 VECTOR <query> 指令直接查該題 summaries VDB(artifact_dir
-    # 有 summaries_chroma 才啟用)。命中僅為 discovery lead,需 GREP/READ 驗證。
+    # ── VECTOR tool: semantic search the agent drives itself ─────────────────
+    # Gives the agent a VECTOR <query> command that searches this question's
+    # summaries VDB directly (enabled only when artifact_dir holds a
+    # summaries_chroma). Hits are discovery leads only and still need GREP/READ
+    # verification.
     grep_agent_vector_search=True,
     grep_agent_vector_topn=8,
     grep_agent_vector_min_score=0.30,

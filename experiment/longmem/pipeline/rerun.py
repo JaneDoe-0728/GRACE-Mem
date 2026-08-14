@@ -135,8 +135,9 @@ class LongMemRerun:
             # Mirror the processor.py coupling: INGEST_PARAMS["use_split_summary"]
             # decides whether these artifacts have :u/:a entries, so retrieval must
             # follow the same flag (shared config keeps True for LoCoMo).
-            # Ablation I:KG_ABLATION_NO_SPLIT=1 → 強制保持 single-entry pair 模式
-            # (搭配 pair 條目 summaries_chroma;split path 其餘機制不變)。
+            # Ablation I: KG_ABLATION_NO_SPLIT=1 -> force single-entry pair mode
+            # (paired with a pair-entry summaries_chroma; every other mechanism on
+            # the split path is unchanged).
             import os as _os
             _no_split = _os.getenv("KG_ABLATION_NO_SPLIT", "0").lower() not in ("0", "", "false")
             _longmem_reranker_params = {

@@ -20,10 +20,10 @@ For each question (one main output CSV under output/<run>/<category>/<name>.csv)
   actually retrieved via an untimestamped relationship).
 
 Metrics:
-  整體正確率             = #correct / #questions
-  Gold session 返回率    = Σ retrieved-gold-session / Σ gold-session   (micro)
-  整題 gold 全中率       = #all-gold-session-hit / #questions-with-gold
-  gold 全中的正確率      = #correct among all-gold-hit / #all-gold-hit
+  overall accuracy            = #correct / #questions
+  gold session recall         = Σ retrieved-gold-session / Σ gold-session (micro)
+  all-gold-hit rate           = #all-gold-session-hit / #questions-with-gold
+  accuracy when all gold hit  = #correct among all-gold-hit / #all-gold-hit
 
 Usage:
     python -m experiment.longmem.analysis.gold_recall --run rerank16-rr2-120b
@@ -93,7 +93,7 @@ def _retrieved_sessions(context: str, dt2sess: dict[str, str]) -> set[str]:
 def _source_maps(source_csv: Path) -> tuple[set[str], dict[str, str]]:
     """Return (gold sessions, dialogue_datetime -> session_id) for a question."""
     df = pd.read_csv(source_csv)
-    df.columns = [c.lstrip("﻿").lstrip("�") for c in df.columns]
+    df.columns = [c.lstrip("\ufeff").lstrip("�") for c in df.columns]
     if "has_answer" not in df.columns or "session_id" not in df.columns:
         return set(), {}
     dt2sess: dict[str, str] = {}
@@ -150,19 +150,19 @@ def main() -> None:
     print(f"\n=== run: {args.run} ===")
     if missing_src:
         print(f"(note: {missing_src} questions had no source CSV — counted in accuracy only)")
-    print(f"整體正確率           {format_ratio(total.correct, total.questions)}")
-    print(f"Gold session 返回率   {format_ratio(total.gold_hit, total.gold_total)}")
-    print(f"整題 gold 全中率      {format_ratio(total.all_gold_hit, total.questions_with_gold)}")
-    print(f"gold 全中的正確率     {format_ratio(total.all_gold_hit_correct, total.all_gold_hit)}")
+    print(f"overall accuracy            {format_ratio(total.correct, total.questions)}")
+    print(f"gold session recall         {format_ratio(total.gold_hit, total.gold_total)}")
+    print(f"all-gold-hit rate           {format_ratio(total.all_gold_hit, total.questions_with_gold)}")
+    print(f"accuracy when all gold hit  {format_ratio(total.all_gold_hit_correct, total.all_gold_hit)}")
 
     if args.per_category:
         print("\n--- per category ---")
         for cat, d in per_cat.items():
             print(f"\n[{cat}]")
-            print(f"  整體正確率        {format_ratio(d.correct, d.questions)}")
-            print(f"  Gold 返回率       {format_ratio(d.gold_hit, d.gold_total)}")
-            print(f"  整題 gold 全中率   {format_ratio(d.all_gold_hit, d.questions_with_gold)}")
-            print(f"  全中的正確率       {format_ratio(d.all_gold_hit_correct, d.all_gold_hit)}")
+            print(f"  overall accuracy            {format_ratio(d.correct, d.questions)}")
+            print(f"  gold recall                 {format_ratio(d.gold_hit, d.gold_total)}")
+            print(f"  all-gold-hit rate           {format_ratio(d.all_gold_hit, d.questions_with_gold)}")
+            print(f"  accuracy when all gold hit  {format_ratio(d.all_gold_hit_correct, d.all_gold_hit)}")
 
 
 

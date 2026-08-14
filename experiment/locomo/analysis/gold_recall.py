@@ -26,10 +26,10 @@ For each question (one row in ``<run>/_judge_merged.csv``):
                    session-level only)
 
 Metrics (aligned with the LongMem gold-recall report):
-  整體正確率            = #correct / #questions
-  Gold summary 返回率   = Σ retrieved-gold / Σ gold        (micro recall)
-  整題 gold 全中率      = #all-gold-hit / #questions-with-gold
-  gold 全中的正確率     = #correct among all-gold-hit / #all-gold-hit
+  overall accuracy            = #correct / #questions
+  gold summary recall         = Σ retrieved-gold / Σ gold (micro recall)
+  all-gold-hit rate           = #all-gold-hit / #questions-with-gold
+  accuracy when all gold hit  = #correct among all-gold-hit / #all-gold-hit
 
 Usage:
     python -m experiment.locomo.analysis.gold_recall --run locomo-n8
@@ -286,20 +286,20 @@ def main() -> None:
         pc.add_retrieval(gold=gold, retrieved=retrieved, correct=corr)
 
     print(f"\n=== run: {run_dir.name}  (granularity: {'chunk N=' + str(n) if n > 0 else 'session'}) ===")
-    print(f"整體正確率           {format_ratio(total.correct, total.questions)}")
-    print(f"Gold summary 返回率   {format_ratio(total.gold_hit, total.gold_total)}")
-    print(f"整題 gold 全中率      {format_ratio(total.all_gold_hit, total.questions_with_gold)}")
-    print(f"gold 全中的正確率     {format_ratio(total.all_gold_hit_correct, total.all_gold_hit)}")
+    print(f"overall accuracy            {format_ratio(total.correct, total.questions)}")
+    print(f"gold summary recall         {format_ratio(total.gold_hit, total.gold_total)}")
+    print(f"all-gold-hit rate           {format_ratio(total.all_gold_hit, total.questions_with_gold)}")
+    print(f"accuracy when all gold hit  {format_ratio(total.all_gold_hit_correct, total.all_gold_hit)}")
 
     if args.per_category:
         print("\n--- per category ---")
         for cat in sorted(per_cat):
             d = per_cat[cat]
             print(f"\n[{cat}]")
-            print(f"  整體正確率        {format_ratio(d.correct, d.questions)}")
-            print(f"  Gold 返回率       {format_ratio(d.gold_hit, d.gold_total)}")
-            print(f"  整題 gold 全中率   {format_ratio(d.all_gold_hit, d.questions_with_gold)}")
-            print(f"  全中的正確率       {format_ratio(d.all_gold_hit_correct, d.all_gold_hit)}")
+            print(f"  overall accuracy            {format_ratio(d.correct, d.questions)}")
+            print(f"  gold recall                 {format_ratio(d.gold_hit, d.gold_total)}")
+            print(f"  all-gold-hit rate           {format_ratio(d.all_gold_hit, d.questions_with_gold)}")
+            print(f"  accuracy when all gold hit  {format_ratio(d.all_gold_hit_correct, d.all_gold_hit)}")
 
 
 if __name__ == "__main__":

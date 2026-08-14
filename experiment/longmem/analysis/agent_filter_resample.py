@@ -1,8 +1,12 @@
-"""重採樣控制組:對 source run 的題目用「原封不動的 stored Retrieved_Context」重答一次。
+"""The resampling control arm: answer the source run's questions once more, using
+the stored Retrieved_Context completely untouched.
 
-用途:任何 clean answer-only 介入(strict prompt / 編表 / 換模型)的翻轉數,都混有
-答題重採樣噪音(sids 相同仍 14.5% 翻轉的既有量測)。本腳本提供 no-op 對照臂:
-同題同 context 零改動重答,量出「純重採樣壞率/修率」,介入的真實效應 = 介入臂 − 本臂。
+Why: the flip count of any clean answer-only intervention (a strict prompt, table
+compilation, a different model) is contaminated by answer-resampling noise -- the
+existing measurement shows 14.5% of answers flip even with identical sids. This
+script is the no-op control arm: same question, same context, zero changes,
+answered again, which measures the pure resampling break/fix rate. An
+intervention's real effect is its arm minus this one.
 
 Usage:
     LLM_API=http://localhost:1234/v1 MODEL_NAME=gpt-oss-20b \
@@ -69,7 +73,7 @@ def main() -> None:
     ap.add_argument("--source-run", default="adjudicate-v1")
     ap.add_argument("--run-tag", required=True)
     ap.add_argument("--workers", type=int, default=2)
-    ap.add_argument("--names-file", required=True, help="category,stem 清單")
+    ap.add_argument("--names-file", required=True, help="list of category,stem pairs")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
 

@@ -671,7 +671,7 @@ def _render_session_raw_text(session_id: str) -> tuple[str | None, str | None]:
     date_time = _gold_session_raw_texts.get(f"{key}_date_time")
     date_time_str = str(date_time or "").strip() or None
     lines = []
-    # Ablation G: query 端時間改寫全關
+    # Ablation G: disable query-side time rewriting entirely
     rewrite_enabled = not time_rewrite_ablation_enabled()
     for t in turns:
         text = t.get("text", "")

@@ -1,14 +1,19 @@
-"""撈出 judge 翻轉題並輸出人工稽核檔(CSV + Markdown)。
+"""Collect the questions where the judge flipped and write them out for manual
+audit, as CSV and Markdown.
 
-預設撈「單票欄判錯 → 合成欄判對」(correctness_4omini=0 → correctness_final=1)的題,
-即 3 票重判 / 強化 _abs rubric 把單票誤殺救回來的題,供人工檢查是否過寬。
-可用 --from-val / --to-val 反向撈(例如 1→0 看重判是否砍過頭)。
+By default it collects questions the single-vote column marked wrong and the
+combined column marked right (correctness_4omini=0 -> correctness_final=1) --
+that is, the ones the 3-vote rejudge or the strengthened _abs rubric rescued from
+a single-vote misfire -- so a human can check whether that was too lenient.
+Use --from-val / --to-val to collect the reverse (1 -> 0, say, to see whether the
+rejudge cut too deep).
 
-non-abs 與 abs 分組輸出(abs = 檔名以 _abs 結尾)。不呼叫任何 LLM。
+Output is grouped into non-abs and abs (abs = the filename ends in _abs). No LLM
+is called.
 
 Usage:
     python -m experiment.longmem.analysis.judge_flips --dirs rerank16-rr2-120b-uasplit
-    # 反向(判對→判錯):
+    # The reverse direction (right -> wrong):
     python -m experiment.longmem.analysis.judge_flips --dirs <run> --from-val 1 --to-val 0
 """
 from __future__ import annotations
@@ -33,7 +38,7 @@ _SKIP_FILES = {"progress.csv", "all_answers.csv"}
 
 
 def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    lower = {c.lower().lstrip("﻿"): c for c in df.columns}
+    lower = {c.lower().lstrip("\ufeff"): c for c in df.columns}
     for name in candidates:
         if name.lower() in lower:
             return lower[name.lower()]
@@ -89,11 +94,11 @@ def write_outputs(run_dir: str, rows: list[dict], *, from_col: str, to_col: str,
 
     n_non = sum(1 for r in rows if r["type"] == "non-abs")
     n_abs = sum(1 for r in rows if r["type"] == "abs")
-    md = [f"# 翻轉題稽核:{from_col}={from_val} → {to_col}={to_val}", "",
-          f"Run: `{run_dir}`  |  總數 {len(rows)}(non-abs {n_non} / abs {n_abs})", "",
-          "> non-abs = 3 票 general rubric;abs = 單票強化棄答 rubric。",
-          "> `human_verdict` 自行填:OK / 過寬 / 邊緣。", ""]
-    for grp, label in [("non-abs", "非 abs(3 票重判)"), ("abs", "abs(單票強化 rubric)")]:
+    md = [f"# Flip audit: {from_col}={from_val} -> {to_col}={to_val}", "",
+          f"Run: `{run_dir}`  |  total {len(rows)} (non-abs {n_non} / abs {n_abs})", "",
+          "> non-abs = 3-vote general rubric; abs = single-vote strengthened abstention rubric.",
+          "> Fill in `human_verdict` yourself: OK / too lenient / borderline.", ""]
+    for grp, label in [("non-abs", "non-abs (3-vote rejudge)"), ("abs", "abs (single-vote strengthened rubric)")]:
         md.append(f"\n---\n\n## {label}\n")
         idx = 0
         for r in rows:
@@ -114,11 +119,11 @@ def write_outputs(run_dir: str, rows: list[dict], *, from_col: str, to_col: str,
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dirs", nargs="+", required=True, help="run dir 名(OUTPUT_DIR 下)")
-    ap.add_argument("--from-col", default="correctness_4omini", help="來源判分欄")
-    ap.add_argument("--to-col", default="correctness_final", help="目標判分欄")
-    ap.add_argument("--from-val", type=int, default=0, help="來源欄的值(預設 0=錯)")
-    ap.add_argument("--to-val", type=int, default=1, help="目標欄的值(預設 1=對)")
+    ap.add_argument("--dirs", nargs="+", required=True, help="run directory names, under OUTPUT_DIR")
+    ap.add_argument("--from-col", default="correctness_4omini", help="the source scoring column")
+    ap.add_argument("--to-col", default="correctness_final", help="the target scoring column")
+    ap.add_argument("--from-val", type=int, default=0, help="value in the source column (default 0 = wrong)")
+    ap.add_argument("--to-val", type=int, default=1, help="value in the target column (default 1 = right)")
     args = ap.parse_args()
 
     for run_dir in args.dirs:
@@ -133,7 +138,7 @@ def main() -> None:
                                           to_col=args.to_col, from_val=args.from_val,
                                           to_val=args.to_val)
         print(f"\n=== {run_dir} ===")
-        print(f"翻轉題 {args.from_col}={args.from_val}→{args.to_col}={args.to_val}: "
+        print(f"flips {args.from_col}={args.from_val} -> {args.to_col}={args.to_val}: "
               f"{len(rows)}  (non-abs={n_non}, abs={n_abs})")
         print(f"CSV -> {csv_path}")
         print(f"MD  -> {md_path}")

@@ -1,10 +1,14 @@
-"""Self-consistency vote merge (LoCoMo): 三票(fo2 / fo2r / vote3)等價分群取
-多數,輸出投票後的逐題判分。
+"""Self-consistency vote merge (LoCoMo): cluster the three votes (fo2 / fo2r /
+vote3) by equivalence, take the majority, and emit the post-vote per-question
+scores.
 
-- 等價分群:gpt-4o-mini 一題一 call,判三個答案哪些給出同一實質答案。
-- 多數代表:優先取多數群中最低票序(fo2 > fo2r > vote3);三方分裂保留 fo2。
-- 判分重用:代表是 fo2/fo2r 時直接用其既有 correctness_4omini;只有代表是
-  vote3 新答案時才需新判(--judge 開啟)。
+- Equivalence clustering: one gpt-4o-mini call per question, deciding which of
+  the three answers say substantially the same thing.
+- Majority representative: prefer the lowest vote order within the majority
+  cluster (fo2 > fo2r > vote3); a three-way split keeps fo2.
+- Score reuse: when the representative is fo2 or fo2r, its existing
+  correctness_4omini is used as is. A fresh judgement is only needed when the
+  representative is a new vote3 answer (enabled with --judge).
 
 Usage:
     python -m experiment.locomo.analysis.vote_merge --out /tmp/vote_result.csv
@@ -109,7 +113,7 @@ def main():
         maj = max(groups, key=len)
         rep = min(maj)  # 1-based
         if len(maj) == 1:
-            rep = 1  # 三方分裂 → 保留 fo2
+            rep = 1  # a three-way split keeps fo2
         if rep == 1:
             corr = a.loc[k, "c4o"]
         elif rep == 2:

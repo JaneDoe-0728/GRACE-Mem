@@ -8,19 +8,19 @@ from experiment.longmem.utils.io import ensure_dir, glob_sorted, read_json_file,
 
 def diagnose(row: dict) -> str:
     if row["step2_ingest"] == "fail":
-        return "Ingest失敗"
+        return "ingest failed"
 
     if row["step3_has_answer_count"] == 0:
-        return "無has_answer標記"
+        return "no has_answer marker"
 
     if row["step4_summary_count"] == 0:
-        return "Summary未建立"
+        return "summary not created"
 
     if row["step5_entity_count"] == 0 and row["step6_rel_count"] == 0:
-        return "Entity和Rel皆未抽出"
+        return "neither entities nor relationships extracted"
 
     if not row["step7_target_in_vector_sample"] and not row["step7_target_in_bm25_sample"]:
-        return "未進候選池（向量和BM25皆未命中）"
+        return "never entered the candidate pool (missed by both vector and BM25)"
 
     threshold_cut = row["step8_target_entity_filtered_out"] or row["step8_target_rel_filtered_out"]
     topk_cut = row["step8_target_entity_topk_cut"] or row["step8_target_rel_topk_cut"]
@@ -28,27 +28,27 @@ def diagnose(row: dict) -> str:
     if threshold_cut or topk_cut:
         recovered = (row["step8_reranker_entity_recovered"] or 0) + (row["step8_reranker_rel_recovered"] or 0)
         if threshold_cut and topk_cut:
-            cause = "threshold+topk皆有截掉"
+            cause = "cut by both threshold and topk"
         elif threshold_cut:
-            cause = "被threshold截掉"
+            cause = "cut by threshold"
         else:
-            cause = "通過threshold但被topk截掉"
+            cause = "passed threshold but cut by topk"
         cut_judgment = row.get("step8_cut_contains_answer", "skipped")
         if cut_judgment == "yes":
-            cause += "（含答案資訊）"
+            cause += " (the cut text held answer information)"
         elif cut_judgment == "no":
-            cause += "（不含答案資訊）"
+            cause += " (the cut text held no answer information)"
         if recovered > 0:
-            return f"{cause}，Reranker部分救回"
-        return f"{cause}，Reranker未救回"
+            return f"{cause}; reranker recovered part of it"
+        return f"{cause}; reranker recovered none of it"
 
     if not row["step9_target_entity_in_evidence"] and not row["step9_target_rel_in_evidence"]:
-        return "目標ID未進入Evidence"
+        return "target id never reached the evidence"
 
     if row["step9_evidence_final_count"] == 0:
-        return "Evidence為空"
+        return "evidence was empty"
 
-    return "資料齊全但生成答案錯誤"
+    return "data complete but the generated answer was wrong"
 
 
 def flatten_case(data: dict) -> dict:
@@ -142,13 +142,13 @@ def summarize_cases(cases_dir: Path, output_path: Path) -> int:
     for label, count in counts.most_common():
         pct = count / total * 100 if total > 0 else 0
         stat_rows.append({
-            "dataset_id": "【統計】",
+            "dataset_id": "[stats]",
             "question": label,
             "gold_answer": count,
             "generated_answer": f"{pct:.1f}%",
         })
     stat_rows.append({
-        "dataset_id": "【合計】",
+        "dataset_id": "[total]",
         "gold_answer": total,
         "generated_answer": "100%",
     })

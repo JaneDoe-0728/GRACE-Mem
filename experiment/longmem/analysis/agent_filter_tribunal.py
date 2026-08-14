@@ -1,13 +1,19 @@
-"""Answer Tribunal(答案仲裁庭)v1 — verification-native memory 的第一個實驗。
+"""Answer Tribunal v1 -- the first experiment in verification-native memory.
 
-範式翻轉:檢索不為餵生成,為審判候選答案。
-  候選 = 多個既有 run 對同一題的相異答案(系統多樣性 = 免費的候選池)
-  審判 = 以候選答案+問題的內容詞做詞法檢索,把支持證據餵給 verifier,
-         判 SUPPORTED / PARTIAL / UNSUPPORTED
-  裁決 = 支持度最高者勝;平手 → 多數決 → 預設 run 兜底
+The paradigm is inverted: retrieval does not feed generation, it puts candidate
+answers on trial.
+  candidates = the differing answers several existing runs gave the same question
+               (system diversity is a free candidate pool)
+  trial      = lexical retrieval using the content words of the candidate answer
+               plus the question, feeding the supporting evidence to a verifier
+               that rules SUPPORTED / PARTIAL / UNSUPPORTED
+  verdict    = most-supported wins; on a tie, majority vote, then the default run
+               as the backstop
 
-與 self-consistency 的差異:不靠投票頻率,靠**證據綁定**(有 span 支持的活、
-沒有的死)——把「答案對錯」從生成問題變成檢索/驗證問題。
+How this differs from self-consistency: it does not rely on how often an answer
+was voted for but on **evidence binding** -- answers with a supporting span live,
+answers without one die -- which turns "is this answer right" from a generation
+problem into a retrieval and verification one.
 
 Usage:
     python -m experiment.longmem.analysis.agent_filter_tribunal \
@@ -58,7 +64,8 @@ is SUPPORTED only if the evidence indeed lacks the asked-for fact."""
 
 VERDICT_SCORE = {"SUPPORTED": 2, "PARTIAL": 1, "UNSUPPORTED": 0}
 
-# v2:相對裁決 — 共同證據、全候選並排、只有高信心才推翻現任者
+# v2: relative adjudication -- shared evidence, all candidates side by side, and
+# the incumbent is only overturned on high confidence
 COMPARATIVE_SYSTEM = """You are an evidence judge. Given a QUESTION and several CANDIDATE answers
 (labeled A, B, C, ...), plus EVIDENCE excerpts from the user's conversation history,
 decide which candidate the evidence best supports.
@@ -144,11 +151,12 @@ def verify(question: str, qdate: str, candidate: str, evidence: str) -> int:
 
 
 def arbitrate_comparative(key, cands, default_answer):
-    """v2:共同證據 + 並排比較 + 現任者偏置。cands=[(ans,n_runs,ok,q,qd),...]"""
+    """v2: shared evidence, side-by-side comparison, and an incumbent bias.
+    cands=[(ans, n_runs, ok, q, qd), ...]"""
     cat, name = key
     corpus = load_corpus(DATA / cat / f"{name}.csv")
     question, qdate = cands[0][3], cands[0][4]
-    # 共同證據:全候選詞聯集(去確認偏誤)
+    # Shared evidence: the union of every candidate's words, to remove confirmation bias
     union_query = question + " " + " ".join(a for a, *_ in cands)
     ev = evidence_for(corpus, union_query, "", k=8)
     letters = "ABCDEFG"
@@ -175,7 +183,7 @@ def arbitrate_comparative(key, cands, default_answer):
 
 
 def arbitrate_one(key, cands, default_answer):
-    """cands: list of (answer, n_runs, ok_flag). 回傳 (picked_ok, detail)."""
+    """cands: list of (answer, n_runs, ok_flag). Returns (picked_ok, detail)."""
     cat, name = key
     src = DATA / cat / f"{name}.csv"
     corpus = load_corpus(src)
@@ -188,7 +196,7 @@ def arbitrate_one(key, cands, default_answer):
         scored.append((sc, n_runs, ans, ok))
     scored.sort(key=lambda x: (-x[0], -x[1]))
     top = scored[0]
-    # 全滅 → 退回 default run 的答案
+    # Nothing survived -> fall back to the default run's answer
     if top[0] == 0:
         picked_ok = next((ok for _, _, a, ok in scored if norm_answer(a) == norm_answer(default_answer)),
                          scored[0][3])
@@ -215,7 +223,8 @@ def main():
         if len(verdicts) == 1:
             agree.append((k, data[args.default_run][k]["ok"]))
         else:
-            # 候選 = 相異答案(帶支持 run 數與其 judge 結果)
+            # Candidates = the differing answers, carrying how many runs backed each
+            # and what the judge said
             by_ans = {}
             for r in args.runs:
                 d = data[r][k]
@@ -251,10 +260,10 @@ def main():
     total_ok = agree_ok + disp_ok
     n = len(agree) + len(disputes)
     base_disp_ok = sum(default[k]["ok"] for k, _ in disputes)
-    print(f"\n仲裁後總正確率: {total_ok}/{n} = {100*total_ok/n:.1f}%")
-    print(f"  一致部分: {agree_ok}/{len(agree)}")
-    print(f"  分歧部分: 仲裁 {disp_ok}/{len(disputes)} vs {args.default_run} {base_disp_ok}/{len(disputes)}")
-    print(f"  對照: {args.default_run} 全體 = {100*(agree_ok+base_disp_ok)/n:.1f}%  天花板 = 任一答對")
+    print(f"\nOverall accuracy after arbitration: {total_ok}/{n} = {100*total_ok/n:.1f}%")
+    print(f"  where runs agreed: {agree_ok}/{len(agree)}")
+    print(f"  where runs disagreed: arbitrated {disp_ok}/{len(disputes)} vs {args.default_run} {base_disp_ok}/{len(disputes)}")
+    print(f"  reference: {args.default_run} overall = {100*(agree_ok+base_disp_ok)/n:.1f}%  ceiling = any candidate correct")
 
 
 if __name__ == "__main__":

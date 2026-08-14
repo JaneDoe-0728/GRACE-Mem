@@ -40,7 +40,7 @@ def _is_main(p: Path) -> bool:
 
 def _gold_sids(src: Path) -> set[str]:
     df = pd.read_csv(src)
-    df.columns = [c.lstrip("﻿") for c in df.columns]
+    df.columns = [c.lstrip("\ufeff") for c in df.columns]
     if "has_answer" not in df.columns:
         return set()
     out = set()

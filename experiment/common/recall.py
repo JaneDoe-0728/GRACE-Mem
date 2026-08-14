@@ -39,8 +39,8 @@ def format_ratio(numerator: int, denominator: int) -> str:
 
 def metric_lines(stats: RecallStats, *, gold_label: str, indent: str = "") -> list[str]:
     return [
-        f"{indent}整體正確率        {format_ratio(stats.correct, stats.questions)}",
+        f"{indent}overall accuracy            {format_ratio(stats.correct, stats.questions)}",
         f"{indent}{gold_label}       {format_ratio(stats.gold_hit, stats.gold_total)}",
-        f"{indent}整題 gold 全中率   {format_ratio(stats.all_gold_hit, stats.questions_with_gold)}",
-        f"{indent}全中的正確率       {format_ratio(stats.all_gold_hit_correct, stats.all_gold_hit)}",
+        f"{indent}all-gold-hit rate           {format_ratio(stats.all_gold_hit, stats.questions_with_gold)}",
+        f"{indent}accuracy when all gold hit  {format_ratio(stats.all_gold_hit_correct, stats.all_gold_hit)}",
     ]

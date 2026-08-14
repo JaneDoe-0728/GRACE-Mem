@@ -102,12 +102,13 @@ def sessions_to_one_turn_df(
     chunk_turns: Optional[int] = None,
 ) -> pd.DataFrame:
     """
-    每個 session -> 一個或多個 chunk，每個 chunk 一個 turn：
-      - session_id: 唯一（建議 sample_index__session_id）
-      - message_id: chunk 索引（chunk_turns<=0 時固定 0，即整個 session 一塊）
+    Each session becomes one or more chunks, and each chunk one turn:
+      - session_id: unique (sample_index__session_id is the suggested form)
+      - message_id: the chunk index (fixed at 0 when chunk_turns <= 0, i.e. the
+        whole session is a single chunk)
       - dialogue_datetime: date_time
-      - user_text: 該 chunk 的 dialogue (A/B 兩人對話原樣串起來)
-      - assistant_text: 空字串
+      - user_text: that chunk's dialogue, with the A/B exchange concatenated as is
+      - assistant_text: an empty string
     """
     rows: List[Dict[str, Any]] = []
     for s in sessions:
@@ -179,7 +180,7 @@ def ingest_by_session_one_turn(
     need_cols = {"session_id", "message_id", "user_text", "assistant_text", "dialogue_datetime"}
     miss = need_cols - set(df.columns)
     if miss:
-        raise ValueError(f"缺少欄位: {sorted(miss)}")
+        raise ValueError(f"missing columns: {sorted(miss)}")
 
     report = defaultdict(list)
 
