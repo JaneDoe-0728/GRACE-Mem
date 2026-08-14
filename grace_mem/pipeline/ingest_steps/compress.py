@@ -1,4 +1,3 @@
-# grace_mem/pipeline/ingest_steps/compress.py
 """Compressor: llmlingua-based turn summarization."""
 import time
 from typing import Any, Optional, Tuple

@@ -1,4 +1,3 @@
-# pipeline/retrieval_steps/summary_scoring.py
 """
 Graph-linked summary scoring for ablation-friendly summary selection.
 

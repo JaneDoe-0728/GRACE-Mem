@@ -1,4 +1,3 @@
-# pipeline/retrieval_steps/evidence.py
 """
 Evidence building from provenance and summaries.
 """
@@ -277,7 +276,6 @@ class EvidenceBuilder:
         # Maps object-id(ev) → source entity/relationship id for per-entity quota.
         ev_source: dict[int, str] = {}
 
-        # From entities
         for ent in (context_entities or []):
             entity_id = ent.get("id")
             meta = entity_id2meta.get(entity_id, {}) or {}
@@ -311,7 +309,6 @@ class EvidenceBuilder:
                 seen_keys.add(k)
                 stage_stats["score_pass"] += 1
 
-        # From relationships
         for rel in (context_relationships or []):
             relationship_id = rel.get("rel_id")
             meta = relationship_id2meta.get(relationship_id, {}) or {}

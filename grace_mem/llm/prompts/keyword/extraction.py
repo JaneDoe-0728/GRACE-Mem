@@ -1,62 +1,14 @@
-# llm/prompts/keyword/extraction.py
-# """
-# Keyword extraction prompt for hybrid retrieval.
-# Extracts high-level (concepts) and low-level (specific entities) keywords.
-# """
+"""Keyword extraction prompt for the hybrid retrieval path.
 
-# keyword_extraction_PROMPT = (
-#     "---Role---\n\n"
-#     "You are a helpful assistant tasked with identifying both high-level and low-level keywords in the user's query and conversation history.\n\n"
-#     "---Goal---\n\n"
-#     "Given the query and conversation history, list both high-level and low-level keywords. "
-#     "High-level keywords focus on overarching concepts or themes, while low-level keywords focus on specific entities, details, or concrete terms.\n\n"
-#     "---Instructions---\n\n"
-#     "- Consider both the current query and relevant conversation history when extracting keywords\n"
-#     "- Output the keywords in JSON format, it will be parsed by a JSON parser, do not add any extra content in output\n"
-#     "- The JSON should have two keys:\n"
-#     "  - \"high_level_keywords\" for overarching concepts or themes\n"
-#     "  - \"low_level_keywords\" for specific entities or details\n\n"
-#     "######################\n---Examples---\n######################\n"
-#     "Example 1:\n\n"
-#     "Query: \"How does international trade influence global economic stability?\"\n"
-#     "################\n"
-#     "Output:\n"
-#     "{{\n"
-#     "  \"high_level_keywords\": [\"International trade\", \"Global economic stability\", \"Economic impact\"],\n"
-#     "  \"low_level_keywords\": [\"Trade agreements\", \"Tariffs\", \"Currency exchange\", \"Imports\", \"Exports\"]\n"
-#     "}}\n"
-#     "#############################\n"
-#     "Example 2:\n\n"
-#     "Query: \"What are the environmental consequences of deforestation on biodiversity?\"\n"
-#     "################\n"
-#     "Output:\n"
-#     "{{\n"
-#     "  \"high_level_keywords\": [\"Environmental consequences\", \"Deforestation\", \"Biodiversity loss\"],\n"
-#     "  \"low_level_keywords\": [\"Species extinction\", \"Habitat destruction\", \"Carbon emissions\", \"Rainforest\", \"Ecosystem\"]\n"
-#     "}}\n"
-#     "#############################\n"
-#     "Example 3:\n\n"
-#     "Query: \"What is the role of education in reducing poverty?\"\n"
-#     "################\n"
-#     "Output:\n"
-#     "{{\n"
-#     "  \"high_level_keywords\": [\"Education\", \"Poverty reduction\", \"Socioeconomic development\"],\n"
-#     "  \"low_level_keywords\": [\"School access\", \"Literacy rates\", \"Job training\", \"Income inequality\"]\n"
-#     "}}\n"
-#     "#############################\n\n"
-#     "---Real Data---\n"
-#     "######################\n"
-#     "Query: {query}\n"
-#     "######################\n"
-#     "Output:"
-# )
-
-"""
-Keyword extraction prompt for hybrid retrieval.
-Extracts high-level (concepts) and low-level (specific entities) keywords.
+The retriever runs two independent lookups per question and needs different
+anchors for each: dense search wants abstract intent ("high_level"), while BM25
+and entity/relation matching want literal surface forms ("low_level"). Asking
+one LLM call for both keeps the two keyword sets consistent with each other,
+which matters because they are later fused by RRF -- if they disagreed about
+what the question is asking, fusion would rank the disagreement rather than
+the answer.
 """
 
-# 
 keyword_extraction_PROMPT = """
 You extract retrieval keywords for memory QA.
 Return JSON only with exactly two keys:

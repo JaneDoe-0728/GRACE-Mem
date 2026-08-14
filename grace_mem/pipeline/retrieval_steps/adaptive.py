@@ -1,4 +1,3 @@
-# pipeline/retrieval_steps/adaptive.py
 """
 Adaptive re-search: confidence scoring, retrieval diagnosis, and LLM-driven query rewriting.
 

@@ -1,4 +1,3 @@
-# pipeline/retrieval_steps/search.py
 """
 Entity and relationship search functionality using hybrid vector + BM25 approach.
 """
@@ -161,7 +160,6 @@ class EntityRelationshipSearcher:
         for keyword in keywords:
 
             timer_kw = _StepTimer()
-            # Tokenize keyword
             q_tokens = tokenize_en(str(keyword))
             if not q_tokens:
                 _jlog("bm25_keyword_empty_tokens", request_id, step="2.1", keyword=str(keyword))

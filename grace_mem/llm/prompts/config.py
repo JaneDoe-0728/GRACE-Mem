@@ -1,4 +1,3 @@
-# llm/prompts/config.py
 """
 Common configuration for LLM prompts.
 """

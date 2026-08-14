@@ -1,4 +1,3 @@
-# pipeline/retrieval/spreading_activation.py
 """
 Spreading Activation guided retrieval — faithful to Algorithm 1 in the paper.
 

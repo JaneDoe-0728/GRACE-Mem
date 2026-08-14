@@ -1,4 +1,3 @@
-# grace_mem/pipeline/ingest_steps/__init__.py
 """Ingest-step subpackage: focused modules used by the top-level ingestor."""
 
 from grace_mem.pipeline.ingest_steps.compress import Compressor

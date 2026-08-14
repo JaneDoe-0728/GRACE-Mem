@@ -1,3 +1,16 @@
+"""The single text embedding model shared by every vector store in the system.
+
+One model, loaded once, is a deliberate constraint rather than an oversight:
+summaries, entities and relationships all land in the same Chroma instance and
+are compared against one another during fusion, so they must live in the same
+vector space. A per-collection choice of encoder would make those cross-store
+similarity scores meaningless.
+
+The module-level `embedder` singleton at the bottom is imported directly across
+the codebase; instantiating it here means the weights are paid for once per
+process instead of once per caller.
+"""
+
 from typing import List, Sequence
 import numpy as np
 from pathlib import Path
@@ -10,18 +23,32 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(_REPO_ROOT / ".env")
 
 class HFTextEmbedding:
-    """
-    Single multilingual embedding model: BGE-M3
-    - vector dimension: 1024
-    - usage:
-        embedder = HFTextEmbedding(device="cuda")
-        vecs = embedder.embed(["Bonjour", "Hello"])
+    """Encode text to L2-normalized vectors with Qwen3-Embedding-0.6B.
+
+    Vectors are 1024-dimensional and normalized at encode time, which lets
+    every downstream consumer treat a dot product as cosine similarity and skip
+    its own normalization step.
+
+    Example:
+        >>> embedder = HFTextEmbedding(device="cuda")
+        >>> vecs = embedder.embed(["Bonjour", "Hello"])
+        >>> vecs.shape
+        (2, 1024)
     """
 
     MODEL_PATH = _REPO_ROOT / "models" / "embedding_models" / "qwen3-0.6b"
-    # MODEL_PATH = Path(__file__).parent.parent.parent / "models" / "embedding_models" / "bge-m3"
 
     def __init__(self, device: str | None = None, batch_size: int = 16, max_length: int = 512):
+        """Load the encoder, resolving the device explicit > env > best-available.
+
+        Args:
+            device: Torch device string. None defers to EMBEDDING_DEVICE, then
+                to the best accelerator present.
+            batch_size: Sequences per forward pass. Lower it before lowering
+                max_length if the GPU is tight -- truncation loses information,
+                smaller batches only cost time.
+            max_length: Token cap per input.
+        """
         env_device = os.getenv("EMBEDDING_DEVICE")
         if device is None and env_device:
             device = env_device
@@ -47,6 +74,13 @@ class HFTextEmbedding:
         self.max_length = max_length
 
     def _load_model(self, path: str, device: str) -> SentenceTransformer:
+        """Load the encoder, degrading to CPU rather than dying on GPU OOM.
+
+        Two exception types are caught because the OOM surfaces differently
+        depending on where allocation fails: torch raises OutOfMemoryError from
+        the allocator, but a failure inside a kernel arrives as a generic
+        RuntimeError whose message is the only way to tell it apart.
+        """
         try:
             return SentenceTransformer(path, device=device)
         except torch.OutOfMemoryError:

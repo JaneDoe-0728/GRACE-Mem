@@ -1,4 +1,3 @@
-# utils/reranker.py
 """
 LLM-based pointwise reranker using Qwen3-Reranker-0.6B in generative mode.
 

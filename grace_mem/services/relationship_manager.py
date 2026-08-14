@@ -1,4 +1,20 @@
-# services/relationship_manager.py
+"""Relationship persistence: turning extracted edges into graph edges.
+
+Runs strictly after entity adjudication, and that ordering is the module's
+central constraint. Extraction names relationship endpoints by surface string
+("Mel said this to her sister"), but adjudication may have merged, renamed, or
+dropped those entities. So every endpoint has to be resolved through
+`input2resolved` before an edge can be written, and an edge whose endpoint did
+not survive is dropped rather than written dangling -- a graph edge pointing at
+a node that does not exist breaks traversal for every query that reaches it.
+
+Merging is looser here than for entities. Two edges between the same ordered
+pair are treated as the same relationship and their descriptions concatenated,
+with no LLM adjudication. The asymmetry is deliberate: entity identity is
+ambiguous and expensive to get wrong, whereas an edge is already pinned by two
+resolved endpoints, which leaves far less room for a wrong merge.
+"""
+
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 import numpy as np
 from grace_mem.utils.common import canonical_rel_id
@@ -8,25 +24,38 @@ _jlog = make_module_jlog(name="grace_mem.RelationshipManager", filename="kg_inge
 
 Meta = Dict[str, object]
 KeyNameType = Tuple[str, str]  # (input_name, input_type)
+# The two relationship keyings are not redundant. RelKeyST identifies the edge
+# and is what merging collapses onto; RelKeySTD additionally carries the
+# description, which preserves each distinct statement about that edge for
+# retrieval even after the edge itself has been merged.
 RelKeyST = Tuple[str, str]     # (source_id, target_id)
 RelKeySTD = Tuple[str, str, str]  # (source_id, target_id, description)
 
 class RelationshipManager:
+    """Resolve, merge, and persist extracted relationships.
+
+    Holds no state of its own: the caches and the vector-store manager are
+    injected and shared with the entity side, so that one turn's writes are
+    visible to the next without a round trip through storage.
     """
-    Map extracted relationships onto already-resolved entities, merge their
-    descriptions and keywords, then persist to the vector store and the cache.
-    """
+
     def __init__(
         self,
         *,
-        embedder: Any,                          # object: must provide .embed(List[str]) -> np.ndarray
-        mgr: Any,                               # object: must provide .get_relationships_vdb(dim), .persist_async()
-        provenance: Any,                        # object: must provide .merge_prov(old, new)
-        GLOBAL_CACHE: Dict[str, Any],           # object/state
+        embedder: Any,                          # must provide .embed(List[str]) -> np.ndarray
+        mgr: Any,                               # must provide .get_relationships_vdb(dim), .persist_async()
+        provenance: Any,                        # must provide .merge_prov(old, new)
+        GLOBAL_CACHE: Dict[str, Any],
         processed_rel_map: Dict[RelKeyST, Meta],
         processed_rel_full_map: Dict[RelKeySTD, Meta]
     ) -> None:
-        """Store relationship persistence dependencies and processed caches."""
+        """Store the injected collaborators and the two processed-edge caches.
+
+        Collaborators are typed `Any` and specified by the comments above
+        because the experiment harness substitutes fakes for all three;
+        requiring a concrete class here would force those fakes to inherit from
+        implementations they do not otherwise use.
+        """
         self._embedder = embedder
         self._mgr = mgr
         self._prov = provenance
@@ -40,11 +69,21 @@ class RelationshipManager:
         name: Optional[str],
         input2resolved: Dict[KeyNameType, Meta] | None
     ) -> Optional[Meta]:
-        """Resolve an extracted endpoint name to its canonical entity metadata."""
+        """Look up the resolved entity behind an extracted endpoint name.
+
+        Matches on name only, ignoring the type half of the key. Extraction
+        labels the same entity with different types across turns ("Mel" as
+        Person in one, Topic in another), so requiring both to agree would drop
+        edges whose endpoint was resolved perfectly well.
+
+        The consequence is that the first match wins when one name was
+        extracted under two types. A linear scan rather than a dict lookup for
+        the same reason -- the key is a pair and only half of it is being
+        compared. Endpoint counts per turn are small enough that this does not
+        matter.
+        """
         if not name or not input2resolved:
             return None
-        # If input2resolved is ever keyed by name alone, switch this to
-        # for (in_name, _type) in input2resolved ...
         for (in_name, _), meta in input2resolved.items():
             if in_name == name:
                 return meta
@@ -52,11 +91,17 @@ class RelationshipManager:
     
     @staticmethod
     def _check_mappings(relationships: Iterable[Any], input2resolved: Dict[KeyNameType, Meta] | None) -> set[str]:
-        """
-        Ensure every relationship's source/target name has a mapping in
-        input2resolved.
-        input2resolved keys: (input_name, input_type) -> meta
-        Only input_name is compared here, and only exactly.
+        """Report endpoint names that no resolved entity accounts for.
+
+        Diagnostic only -- the caller logs the result and carries on, because
+        the per-edge resolution below drops these anyway. It is reported
+        separately because an edge silently vanishing is the expected symptom
+        of an extraction problem upstream, and a name that never resolves is
+        the evidence for it.
+
+        Compares names exactly and ignores the type half of the key, matching
+        `_resolve_via_input2resolved`; the two must agree or this reports
+        misses that do not occur.
         """
         missing: set[str] = set()
         if not relationships:
@@ -80,11 +125,30 @@ class RelationshipManager:
         sync_to_graph: bool = False,
         sync_fn: Optional[Callable[[List[Meta]], int]] = None           # callable: List[Meta] -> int
     ) -> List[Meta]:
-        """
-        First confirm both endpoints resolve to internal IDs.
-        Already present -> merge the description/keywords and update.
-        Not present -> add the relationship and embed it into the vector store.
-        Returns the meta list for the relationships processed successfully.
+        """Resolve, merge, and persist every relationship in an extraction result.
+
+        Per edge: both endpoints must resolve, or the edge is skipped and
+        logged. An edge already present under the same (source, target) has its
+        description and keywords merged into the existing record; a new one is
+        embedded and written.
+
+        Args:
+            result: An ExtractionResult; only `.relationships` is read.
+            provenance: Origin blob merged into each edge's existing
+                provenance, so a re-stated relationship accumulates every turn
+                that mentioned it.
+            input2resolved: (name, type) -> resolved entity meta, produced by
+                entity adjudication. Without it every edge is skipped.
+            sync_to_graph: Whether to push to the graph backend as well as the
+                vector store. Off by default so a caller can batch the graph
+                write across turns, which is markedly cheaper than one write
+                per edge.
+            sync_fn: The graph writer, injected for the same substitutability
+                reason as the constructor's collaborators.
+
+        Returns:
+            Metadata for the edges that were persisted. Skipped edges are
+            absent, so a short return is normal and not an error.
         """
         rels = getattr(result, "relationships", None)
         if not rels:
@@ -124,8 +188,7 @@ class RelationshipManager:
 
                 merged_desc = existing.get("description") or ""
                 if r.relationship_description and r.relationship_description not in merged_desc:
-                    merged_desc = f"{merged_desc}; {r.relationship_description}" if merged_desc else r.relationship_description #add ; between descriptions
-
+                    merged_desc = f"{merged_desc}; {r.relationship_description}" if merged_desc else r.relationship_description
                 merged_kw = existing.get("keywords") or ""
                 if r.relationship_keywords and r.relationship_keywords not in merged_kw:
                     merged_kw = f"{merged_kw}, {r.relationship_keywords}" if merged_kw else r.relationship_keywords

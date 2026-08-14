@@ -1,4 +1,3 @@
-# pipeline/retriever_v2.py
 """
 Refactored Retriever that uses modular components from retrieval/ folder.
 """
@@ -2246,30 +2245,12 @@ class Retriever:
                 request_id,
             )
 
-            # 0c) Dynamic retrieval planning (disabled for determinism test)
+            # 0c) Dynamic retrieval planning is deliberately off: the extra LLM call
+            # made runs non-reproducible, and every downstream consumer already
+            # treats guidance as optional. Keeping the variable (rather than
+            # deleting the step) preserves the None-guidance code path that the
+            # keyword and evidence stages branch on.
             retrieval_guidance = None
-            # try:
-            #     _plan_user = DYNAMIC_PLANNING_USER.format(
-            #         question=rewritten_question,
-            #         question_date=query_time or "unknown",
-            #     )
-            #     retrieval_guidance, _plan_sec = self.llm.generate_llm_dynamic_plan(
-            #         DYNAMIC_PLANNING_SYSTEM, _plan_user,
-            #     )
-            #     _jlog(
-            #         "dynamic_planning_done",
-            #         request_id,
-            #         step="0c",
-            #         latency_sec=_plan_sec,
-            #         guidance_length=len(retrieval_guidance),
-            #     )
-            # except Exception as exc:
-            #     _jlog(
-            #         "dynamic_planning_error",
-            #         request_id,
-            #         step="0c",
-            #         error=str(exc),
-            #     )
 
             # 1) Extract keywords
             # Ablation L: KG_ABLATION_NO_KEYWORDS=1 -> skip LLM keyword extraction.

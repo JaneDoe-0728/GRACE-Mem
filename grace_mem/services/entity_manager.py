@@ -1,4 +1,27 @@
-# services/entity_manager.py
+"""Entity identity resolution: deciding when two mentions are one entity.
+
+This is the hard problem in building a KG from conversation. The same person is
+"Mel", "Melanie", and "my sister" across a corpus; two different people share a
+first name. Get it wrong in one direction and the graph fragments into
+duplicates that each hold part of the answer; wrong in the other and unrelated
+facts merge onto one node and the model answers with someone else's history.
+
+The decision is made in two stages, cheap filter then expensive judge. Vector
+search over existing entities proposes a handful of candidates
+(`similar_entity_top_k`, above `entity_sim_threshold`), and an LLM call decides
+whether the new mention is one of them (UPDATE) or genuinely new (ADD). The
+filter exists because the judge cannot be run against every entity in the
+graph; the judge exists because cosine similarity alone merges "John Smith" with
+"Jane Smith".
+
+Everything else here is about making that LLM call survivable in bulk. Entities
+are adjudicated concurrently through a thread pool, rate-limited to stay inside
+the backend's budget, retried on failure, and -- when retries are exhausted --
+resolved to a fallback ADD. The bias is deliberate and asymmetric: a wrongly
+split entity leaves both halves retrievable, while a wrong merge destroys
+information irreversibly.
+"""
+
 import time
 import logging
 import threading
@@ -21,6 +44,21 @@ import numpy as np
 
 @dataclass
 class EntityOpsConfig:
+    """Concurrency and retry budget for entity adjudication.
+
+    Attributes:
+        max_workers: Concurrent adjudication calls. Must stay under
+            rate_limit_per_minute in practice, or workers spend their time
+            blocked in the limiter instead of in flight.
+        max_tokens: Ceiling on one adjudication reply. Small because the reply
+            is a verdict plus a merged description, not prose.
+        max_retries: Attempts before falling back to ADD.
+        timeout: Seconds to wait on one entity's result before treating it as
+            failed. Generous relative to a single call, since a queued request
+            may sit behind the rate limiter first.
+        rate_limit_per_minute: Calls per minute across all workers.
+    """
+
     max_workers: int = 10
     max_tokens: int = 800
     max_retries: int = 3
@@ -29,6 +67,13 @@ class EntityOpsConfig:
 
 
 class RateLimiter:
+    """Thread-safe sliding-window limiter over a shared call budget.
+
+    Sliding rather than fixed-window: a fixed window lets a burst at the end of
+    one minute and another at the start of the next exceed the nominal rate
+    over any 60-second span, which is what the backend actually measures.
+    """
+
     def __init__(self, max_calls: int, period: float = 60.0) -> None:
         """Initialize the call budget and tracking state for rate limiting."""
         self.max_calls = max_calls
@@ -37,7 +82,13 @@ class RateLimiter:
         self.lock = threading.Lock()
 
     def wait_if_needed(self) -> None:
-        """Pause until another call is allowed within the configured window."""
+        """Block until this caller is within budget, then claim a slot.
+
+        Sleeps while holding the lock, which serializes all workers behind one
+        sleeper. That is intentional: once the budget is spent, every other
+        worker would have to wait anyway, and releasing the lock would let them
+        wake and re-check in a spin.
+        """
         with self.lock:
             now = time.time()
             self.calls = [c for c in self.calls if now - c < self.period]
@@ -61,7 +112,20 @@ def _classify_entity_action(action: Any) -> Optional[str]:
 
 
 def _normalize_entity_action(action: Optional[str], target_id: Any, valid_ids: set[Any]) -> Tuple[str, Any]:
-    """Resolve a parsed action into a safe final action/target pair."""
+    """Force an adjudication verdict into a safe (action, target) pair.
+
+    The model can return an UPDATE naming an id that was never a candidate --
+    hallucinated, or copied from an earlier example. Trusting it would merge
+    the new entity onto an arbitrary existing node.
+
+    So an unusable target is repaired: with exactly one candidate available the
+    intent is unambiguous and that candidate is used; with several there is no
+    way to pick, and the action degrades to ADD. Degrading to ADD is always
+    safe -- it can leave a duplicate node, but it never fuses two real entities.
+
+    Returns:
+        (action, target_id), where target_id is always None for ADD.
+    """
     if not action:
         return "ADD", None
     if action == "UPDATE":
@@ -74,6 +138,13 @@ def _normalize_entity_action(action: Optional[str], target_id: Any, valid_ids: s
 
 
 class EntityOpsProcessor:
+    """Adjudicates a batch of extracted entities against existing graph nodes.
+
+    Takes `generate_fn` rather than an LLM client so the ablation that skips
+    adjudication can substitute a deterministic function without touching the
+    concurrency and retry machinery around it.
+    """
+
     def __init__(self, generate_fn: Callable[..., Any], config: EntityOpsConfig = None) -> None:
         """Configure the batch entity-op generator and its rate limiter."""
         self.generate_fn = generate_fn
@@ -81,12 +152,33 @@ class EntityOpsProcessor:
         self.rate_limiter = RateLimiter(self.config.rate_limit_per_minute)
 
     def process_batch(self, entities: List["EntityInput"], similar_map: "SimilarMap") -> "EntityOpsBatchResult":
-        """Generate entity operations for a batch and preserve input ordering."""
+        """Adjudicate every entity in the batch concurrently.
+
+        Results are written back by input index, not appended as futures
+        complete: the caller pairs `results[i]` with `entities[i]`, so
+        completion order must not leak into the output.
+
+        An entity whose adjudication fails outright still gets a result -- a
+        fallback ADD -- rather than a hole in the list. One unresolved entity
+        must not abort a turn's ingestion.
+
+        Args:
+            entities: Newly extracted entities awaiting a verdict.
+            similar_map: Candidate existing entities per (name, type), from the
+                upstream vector search.
+
+        Returns:
+            `{"results": [...]}` positionally aligned with `entities`.
+        """
         if not entities:
             return {"results": []}
 
         print(f"\n🚀 Processing {len(entities)} entities (parallel={self.config.max_workers})...")
 
+        # Captured here and re-applied inside each worker: the token tracker
+        # keys its context to the current thread, so pool threads would
+        # otherwise attribute their usage to "unknown" and drop this stage out
+        # of the per-stage cost report.
         ctx_dataset, ctx_stage = token_tracker._get_context()
 
         with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
@@ -429,8 +521,8 @@ class EntityManager:
 
                     # Assemble (meta, score, from=bm25)
                     for eid, (score, best_idx) in bm25_best.items():
-                        meta_obj = dict(metas[best_idx])  # copy
-                        meta_obj["_source"] = "bm25"      # NEW: tag the origin
+                        meta_obj = dict(metas[best_idx])
+                        meta_obj["_source"] = "bm25"
                         bm25_list.append((meta_obj, score))
                         bm25_ids.add(eid)
 
@@ -463,7 +555,7 @@ class EntityManager:
                     continue
 
                 meta_obj = dict(meta)
-                meta_obj["_source"] = "vector"          # NEW: tag the origin
+                meta_obj["_source"] = "vector"
                 vec_ids.add(eid)
                 vec_list.append((meta_obj, float(sim)))
 
@@ -502,8 +594,8 @@ class EntityManager:
                 """Stage a new canonical entity for cache and vector-store insertion."""
                 nonlocal added
                 final_type = canonicalize_entity_type_label(final_type)
-                eid = canonical_entity_id(final_name, final_type) # format entity id
-                key_nt = _entity_key(final_name, final_type) # key = name + type
+                eid = canonical_entity_id(final_name, final_type)
+                key_nt = _entity_key(final_name, final_type)
                 meta = {"id": eid, "name": final_name, "type": final_type,
                         "description": final_desc, "prov": self._prov.merge_prov(None, provenance)} # provenance: entity related conversation
                 temporal_meta = r.get("entity_metadata")

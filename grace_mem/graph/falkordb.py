@@ -1,19 +1,26 @@
-# graph/neo4j.py
-# Drop-in replacement for your Neo4j wrapper, backed by FalkorDB (OpenCypher over RESP/Redis protocol).
-#
-# Requires:
-#   pip install FalkorDB
-#
-# Env (kept for backward compatibility with your existing project):
-#   NEO4J_URI        -> treated as Redis URI for FalkorDB, e.g. redis://:pass@localhost:6379/0
-#   NEO4J_USERNAME   -> Redis ACL username (optional; can be omitted if your Redis uses default user)
-#   NEO4J_PASSWORD   -> Redis password (optional if no auth)
-# Optional:
-#   GRAPH_NAME       -> graph key/name in FalkorDB (default: "memory")
-#
-# Notes:
-# - FalkorDB supports parameterized queries via graph.query(cypher, params_dict)
-# - Unique constraints in FalkorDB are created via GRAPH.CONSTRAINT CREATE ... (requires index first)
+"""FalkorDB-backed knowledge graph store, API-compatible with the Neo4j wrapper.
+
+FalkorDB speaks OpenCypher over the Redis RESP protocol, so it answers the same
+queries as Neo4j while running as a single Redis process. That is why this
+module exists: the experiment harness spins graphs up and tears them down once
+per sample, and a Neo4j server's startup cost dominated the run. Keeping the
+surface identical to `neo4j.py` means the pipeline can swap between them by
+configuration alone -- see `graph_from_env` at the bottom.
+
+The environment variables keep their NEO4J_* names on purpose, so an existing
+deployment can switch backends without rewriting its config:
+
+    NEO4J_URI       Redis URI, e.g. redis://:pass@localhost:6379/0
+    NEO4J_USERNAME  Redis ACL username (optional)
+    NEO4J_PASSWORD  Redis password (optional)
+    GRAPH_NAME      Graph key within FalkorDB (default: "memory")
+
+Two FalkorDB specifics shape the code below: queries are parameterized through
+`graph.query(cypher, params)`, and a unique constraint requires an index to
+exist first -- `init_schema` therefore creates indexes before constraints.
+
+Requires the `FalkorDB` python client.
+"""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -52,29 +59,44 @@ except Exception as e:  # pragma: no cover
 
 @dataclass
 class GraphConfig:
-    # For compatibility with your original code, we keep these names.
-    # uri can be a redis/rediss URI: redis://[:password]@host:port/db
+    """Connection and schema settings for a single FalkorDB graph.
+
+    Field names mirror the Neo4j wrapper's config so call sites port over
+    unchanged, even though `uri` here is a redis/rediss URI of the form
+    redis://[:password]@host:port/db.
+
+    Attributes:
+        graph_name: Graph key inside FalkorDB. One key per logical KG, which
+            is how the experiment harness isolates concurrent samples.
+        entity_label: Node label every KG entity carries.
+        rel_type: Relationship type every KG edge carries.
+        socket_timeout: Per-command ceiling. Generous relative to
+            socket_connect_timeout because bulk UNWIND writes are slow by
+            design, whereas a slow connect means the server is simply absent.
+    """
+
     uri: str
     user: str
     password: str
 
-    # FalkorDB graph key/name
     graph_name: str = "memory"
 
-    # Your KG schema knobs (same defaults as before)
     entity_label: str = "Entity"
     rel_type: str = "KG_REL"
 
-    # Redis client settings
     decode_responses: bool = True
     socket_connect_timeout: float = 5.0
     socket_timeout: float = 30.0
 
 
 class Graph:
-    """
-    Encapsulates FalkorDB operations using OpenCypher.
-    Designed to be a drop-in replacement for the original Neo4j wrapper.
+    """OpenCypher operations against one FalkorDB graph.
+
+    Connections are opened lazily and can be re-established mid-run: the
+    ingestion path holds a graph handle across thousands of writes, and a
+    dropped Redis socket there would otherwise lose the whole sample. Write
+    helpers therefore retry through `reconnect` rather than propagating the
+    first connection error.
     """
 
     def __init__(self, cfg: GraphConfig) -> None:
@@ -565,9 +587,6 @@ RETURN 1 AS ct"""
         raise RuntimeError("Failed to clear_all after reconnect") from last_exc
 
     # ---------- low-level helpers ----------
-    # def _run_read(self, cypher: str, params: dict) -> List[Dict[str, Any]]:
-    #     raw = self._exec_graph_query(cypher, params or {}, readonly=True)
-    #     return self._rows_as_dicts(raw)
     def _run_read(self, cypher: str, params: dict) -> List[Dict[str, Any]]:
         """Execute a read query and normalize FalkorDB's raw response rows."""
         self._ensure_open()

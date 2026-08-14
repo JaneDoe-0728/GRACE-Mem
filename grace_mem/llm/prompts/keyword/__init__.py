@@ -1,4 +1,3 @@
-# llm/prompts/keyword/__init__.py
 """
 Keyword extraction prompts for hybrid retrieval.
 """

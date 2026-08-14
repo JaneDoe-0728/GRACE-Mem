@@ -1,4 +1,3 @@
-# pipeline/retrieval_steps/__init__.py
 """Retrieval-step submodules for Knowledge Graph context building."""
 from .search import EntityRelationshipSearcher
 from .temporal import TemporalRelevanceCalculator

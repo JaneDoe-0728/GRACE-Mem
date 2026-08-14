@@ -1,31 +1,58 @@
-# storage/cache.py
+"""On-disk cache of extracted entities and relationships.
+
+Extraction is the expensive half of ingestion: every turn costs an LLM call,
+and re-running a sample to tweak a retrieval parameter would pay for all of
+them again. This cache makes ingestion resumable, so retrieval experiments can
+iterate against a corpus that was extracted once.
+
+Entities and relationships are pickled to separate files, which lets a partial
+write fail without corrupting both halves. Each is stored twice -- a compact
+`*` map for lookup and a `*_full` map retaining the complete record -- because
+retrieval only needs the former and loading the latter on the hot path was
+measurably slower.
+
+`cache_dir` should always be passed. The module-level CACHE_DIR default is a
+single shared directory, so two datasets run without it silently overwrite each
+other's extractions.
+"""
+
 from pathlib import Path
 from typing import Any, Dict, Tuple, Optional
 import pickle, logging,os
 logger = logging.getLogger(__name__)
 
-# Backward compatibility: global cache directory (deprecated)
+# Deprecated process-wide fallback. Created at import time so the legacy
+# no-argument path keeps working; pass an explicit cache_dir instead.
 CACHE_DIR = Path("vdb_cache")
 CACHE_DIR.mkdir(exist_ok=True)
 ENT_FILE = CACHE_DIR / "entities_cache.pkl"
 REL_FILE = CACHE_DIR / "relationships_cache.pkl"
 
 class CacheStore:
-    """
-    Cache management for entities and relationships:
-    - load()  : read the cache contents (entities / relationships) from disk
-    - save()  : write the current cache to disk, pickle format
-    - clear() : drop the in-memory cache
+    """Load, save, and clear the entity/relationship extraction cache.
 
-    Updated to support custom cache directories (per-dataset).
+    Stateless: the cache dict is owned by the caller and passed in. That keeps
+    a per-sample cache genuinely isolated, which matters because the experiment
+    harness runs samples concurrently in one process.
     """
+
     @staticmethod
     def load(cache_dir: Optional[Path] = None) -> Dict[str, Dict]:
-        """
-        Load cache from disk.
+        """Read the cache from disk, returning empty maps if absent.
+
+        A missing or unreadable cache is not an error -- it is a cold start, so
+        the caller gets the four expected keys either way and ingestion simply
+        re-extracts. A corrupt shard is logged and treated the same, on the
+        grounds that re-extraction is always correct and a half-decoded pickle
+        is not.
 
         Args:
-            cache_dir: Custom cache directory. If None, uses global vdb_cache/ (deprecated).
+            cache_dir: Per-dataset cache directory, created if absent. None
+                falls back to the shared vdb_cache/ (deprecated).
+
+        Returns:
+            A dict with keys entities, entities_full, relationships,
+            relationships_full -- always all four, even on a cold start.
         """
         if cache_dir is None:
             # Backward compatibility: use global cache
@@ -57,12 +84,20 @@ class CacheStore:
 
     @staticmethod
     def save(cache: Dict[str, Dict], cache_dir: Optional[Path] = None) -> None:
-        """
-        Save cache to disk.
+        """Pickle the cache to disk as two shards.
+
+        Unlike `load`, a write failure re-raises after logging: a cache that
+        silently failed to persist would look like a cold start on the next
+        run, and the whole extraction would be paid for twice with no
+        indication why.
 
         Args:
-            cache: Cache dictionary to save
-            cache_dir: Custom cache directory. If None, uses global vdb_cache/ (deprecated).
+            cache: The four-key cache dict. Missing keys are written as empty.
+            cache_dir: Per-dataset cache directory, created if absent. None
+                falls back to the shared vdb_cache/ (deprecated).
+
+        Raises:
+            Exception: Whatever pickling or the filesystem raised.
         """
         if cache_dir is None:
             # Backward compatibility: use global cache
@@ -88,7 +123,13 @@ class CacheStore:
 
     @staticmethod
     def clear(cache: Dict[str, Dict]) -> None:
-        """Clear cache in memory (does not delete files)"""
+        """Empty the cache in memory, leaving the files on disk.
+
+        Clears each map in place rather than rebinding, because callers hold
+        references to the same dict -- reassigning would leave them looking at
+        the old contents. The next `load` restores from disk; use `reset` to
+        discard the files too.
+        """
         cache.get("entities", {}).clear()
         cache.get("entities_full", {}).clear()
         cache.get("relationships", {}).clear()
@@ -96,19 +137,20 @@ class CacheStore:
 
     @staticmethod
     def reset(cache: Dict[str, Dict], cache_dir: Optional[Path] = None) -> None:
-        """
-        Clear cache in memory and delete cache files from disk.
+        """Clear memory and delete the cache files, forcing a full re-extraction.
+
+        Both halves are cleared before either file is removed, so an
+        interrupted reset leaves the caller with an empty cache and at worst a
+        stale file -- never a populated cache pointing at deleted state.
 
         Args:
-            cache: Cache dictionary to clear
-            cache_dir: Custom cache directory. If None, uses global vdb_cache/ (deprecated).
+            cache: The cache dict to empty in place.
+            cache_dir: Per-dataset cache directory. None targets the shared
+                vdb_cache/ (deprecated).
         """
-        # Clear memory
         CacheStore.clear(cache)
 
-        # Delete files
         if cache_dir is None:
-            # Backward compatibility: use global cache
             files_to_delete = (ENT_FILE, REL_FILE)
         else:
             cache_dir = Path(cache_dir)
@@ -121,10 +163,24 @@ class CacheStore:
             try:
                 os.remove(p)
             except FileNotFoundError:
-                pass
+                pass  # already absent is the desired end state
 
 def build_id_to_meta_maps(cache: Dict[str, Dict]) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
-    """Build entity and relationship ID lookup tables from the shared cache."""
+    """Invert the cache into id -> metadata lookups.
+
+    The cache is keyed by normalized name, but retrieval works in ids: graph
+    traversal and vector search both return ids, and the evidence stage needs
+    the metadata behind each. Building both maps once per query beats a linear
+    scan per lookup.
+
+    Records without an `id` are skipped rather than raising -- an entity that
+    failed to sync to the graph has no id yet, and it should drop out of
+    id-based lookup rather than abort the query.
+
+    Returns:
+        (entity_id -> meta, relationship_id -> meta). Values alias the cached
+        dicts; mutating one mutates the cache.
+    """
     ent_id2meta, rel_id2meta = {}, {}
     for m in cache.get("entities", {}).values():
         if isinstance(m, dict) and m.get("id"): ent_id2meta[m["id"]] = m

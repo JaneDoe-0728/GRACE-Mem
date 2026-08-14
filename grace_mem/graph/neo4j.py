@@ -1,4 +1,15 @@
-# graph/neo4j.py
+"""Neo4j-backed knowledge graph store.
+
+The original backend, kept alongside `falkordb.py` because the two expose the
+same `Graph` surface and the pipeline picks between them by configuration.
+FalkorDB is the default for experiment runs (cheaper to create and destroy per
+sample); this one remains the reference implementation and the option to reach
+for when a run needs Neo4j's tooling or a server that already exists.
+
+Any change to the method signatures here has to be mirrored in `falkordb.py`,
+or the two backends stop being interchangeable.
+"""
+
 from typing import Any, Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -8,6 +19,15 @@ from neo4j.exceptions import ServiceUnavailable
 
 @dataclass
 class GraphConfig:
+    """Connection and schema settings for a Neo4j-backed graph.
+
+    Attributes:
+        entity_label: Node label every KG entity carries.
+        rel_type: Relationship type every KG edge carries. Both are
+            configurable so a single database can host graphs that do not see
+            each other's nodes.
+    """
+
     uri: str
     user: str
     password: str
@@ -15,8 +35,11 @@ class GraphConfig:
     rel_type: str = "KG_REL"
 
 class Graph:
-    """
-    Wrapper around the Neo4j operations.
+    """Cypher operations against a Neo4j database.
+
+    The driver is opened lazily and reopened on ServiceUnavailable: ingestion
+    holds one handle across a long write sequence, where a dropped connection
+    would otherwise discard the whole sample's work.
     """
     def __init__(self, cfg: GraphConfig) -> None:
         """Store the Neo4j connection settings and lazy driver handle."""

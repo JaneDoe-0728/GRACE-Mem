@@ -1,4 +1,3 @@
-# pipeline/factory.py
 """
 Factory for building the KG pipeline (retriever + ingestor).
 

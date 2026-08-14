@@ -1,4 +1,3 @@
-# grace_mem/pipeline/ingest_steps/sync.py
 """ExtractionSyncer: VDB writes + FalkorDB sync."""
 from typing import Any, Optional
 

@@ -1,4 +1,26 @@
-# utils.py
+"""Shared data models, id conventions, and the extraction-output parser.
+
+Three things live here because everything else depends on them and a home
+further down the tree would create import cycles.
+
+The data models (`Entity`, `Relationship`, `ExtractionResult`) are the contract
+between extraction, storage, and retrieval. They are Pydantic models so the
+same declaration serves two purposes: runtime validation of LLM output, and the
+JSON Schema handed to the model via `response_format` -- the schema and the
+parser cannot drift apart because they are generated from one source.
+
+The id helpers define entity identity. `canonical_entity_id` is what makes the
+graph converge: two extractions of "Dr. Smith" and "dr smith" must produce the
+same id or the KG grows a duplicate node per mention. Identity is
+(type, normalized name), so the same string under two types stays two entities
+-- a "Paris" Location and a "Paris" Person are genuinely different.
+
+`parse_delimited_extraction` recovers structure from the model's delimited text
+output. It is long and forgiving on purpose: extraction runs once per turn over
+a whole corpus, so a parser that raised on the first malformed record would
+lose the run. Every tolerated deformation there is one observed in practice.
+"""
+
 from pathlib import Path
 import pickle, logging
 from typing import Any
@@ -73,38 +95,70 @@ def load_vdb_if_exists(vdb_obj: Any, index_path: str | Path, meta_path: str | Pa
         vdb_obj.load()
         logger.info("Loaded VDB from %s / %s", index_path, meta_path)
 
-## id helpers
+# --- Identity: ids and cache keys ---------------------------------------
 
 def _slugify(text: str) -> str:
-    """Convert an identifier fragment into a simple lowercase storage key."""
+    """Reduce an id fragment to a lowercase, separator-free key.
+
+    `/` and `::` are replaced rather than kept because ids end up in graph node
+    keys and filesystem paths, where both are structural characters.
+    """
     return (text.strip().lower().replace(" ", "_").replace("/", "_").replace("::", "_"))
 
 def canonical_entity_id(name: str, etype: str) -> str:
-    """Build the canonical entity ID from its type and name."""
+    """Derive an entity's stable id from its type and name.
+
+    Deterministic rather than generated, which is what lets ingestion recognise
+    a re-mention across turns and sessions without a lookup: the same person
+    named the same way yields the same id in any process, in any run.
+    """
     return _slugify(f"{etype}::{name}")
 
 def canonical_rel_id(src_id: str, tgt_id: str) -> str:
-    """Build the canonical relationship ID from source and target entity IDs."""
+    """Derive a relationship's stable id from its endpoints.
+
+    Direction-sensitive: (a, b) and (b, a) are different edges, because
+    "manages" does not mean the same thing reversed. Note the corollary --
+    only one edge can exist per ordered pair, so a second relationship between
+    the same two entities merges into the first rather than coexisting.
+    """
     return _slugify(f"{src_id}::{tgt_id}")
 
 def _norm_name(s: str) -> str:
-    """Normalize an entity name for case-insensitive cache-key comparisons."""
+    """Normalize an entity name for identity comparison.
+
+    NFKC folds the compatibility variants that arrive from copied text --
+    fullwidth forms, ligatures -- onto their ASCII equivalents, so a name that
+    looks identical on screen compares identical here. Whitespace runs collapse
+    for the same reason.
+    """
     s = unicodedata.normalize("NFKC", s).strip().lower()
     return re.sub(r"\s+", " ", s)
 
 def _entity_key(name: str, etype: str) -> str:
-    """Create the normalized cache key used for entity lookup and deduplication."""
+    """Build the in-memory cache key for an entity.
+
+    Distinct from `canonical_entity_id`: this one keeps the "::" separator and
+    skips slugification, so it stays reversible for debugging. Do not persist
+    it -- ids are the durable form.
+    """
     return f"{_norm_name(name)}::{etype.lower()}"
 
-## schema
-
-# === data models ===
-# class EntityType(str, Enum):
-#     person="person"; organization="organization"; location="location"; geo="geo"
-#     event="event"; animal="animal"; food="food"; product="product"
-#     category="category"; unknown="unknown"
+# --- Data models ---------------------------------------------------------
 
 class EntityType(str, Enum):
+    """The closed set of entity types extraction may emit.
+
+    Closed on purpose. A free-text type field let the model invent near
+    synonyms ("person", "individual", "human") that split one real entity
+    across several graph nodes. Inheriting from `str` keeps members usable
+    directly as dict keys and in serialized metadata.
+
+    Date/Time/Timespan are separate members rather than one "temporal" type
+    because retrieval filters on granularity -- a query bounded to a day must
+    not match a node spanning a year.
+    """
+
     Person      = "Person"
     Event       = "Event"
     Date        = "Date"
@@ -119,56 +173,116 @@ class EntityType(str, Enum):
     Concept     = "Concept"
 
 class Entity(BaseModel):
+    """One node in the knowledge graph.
+
+    Attributes:
+        entity_description: Free text, and the field that is embedded for dense
+            retrieval -- the name alone is too short to encode usefully. An
+            entity with an empty description is effectively unsearchable.
+        entity_metadata: Type-specific extras. Temporal entities carry their
+            resolved value here; see `pipeline/ingestor.py`.
+    """
+
     entity_name: str
     entity_type: EntityType
     entity_description: str
     entity_metadata: dict[str, Any] | None = None
 
 class Relationship(BaseModel):
+    """One directed edge between two entities.
+
+    Endpoints are entity *names*, not ids, because extraction produces this
+    model before ids are assigned. Resolving names to ids is the syncer's job,
+    and it is where an edge naming an entity that was never extracted gets
+    dropped.
+
+    Attributes:
+        relationship_keywords: Lexical anchors for BM25 edge search, stored as
+            one delimited string rather than a list -- the graph backends
+            accept only scalar property values.
+    """
+
     source_entity: str
     target_entity: str
     relationship_description: str
     relationship_keywords: str
 
 class ExtractionResult(BaseModel):
+    """Everything extracted from a single conversation turn.
+
+    Both fields default to empty so a turn that yields nothing is an ordinary
+    empty result rather than an error -- plenty of turns are pure
+    back-channel ("sure", "ok") and contain no facts at all.
+    """
+
     entities: List[Entity] = []
     relationships: List[Relationship] = []
 
 class KeywordExtractionResult(BaseModel):
+    """Query keywords, split by how they will be used in retrieval.
+
+    See `llm/prompts/keyword/extraction.py` for what distinguishes the two
+    lists and why one call produces both.
+    """
+
     high_level_keywords: List[str] = []
     low_level_keywords: List[str] = []
 
-# === JSON Schema (consumed by response_format) ===
+# --- JSON Schemas passed to the LLM via response_format ------------------
+#
+# Generated from the models above so the schema the LLM is constrained by and
+# the parser that validates its reply can never disagree.
+
 SCHEMA = ExtractionResult.model_json_schema()
 _raw_kw_schema = KeywordExtractionResult.model_json_schema()
-# Force LLM to produce at least one keyword per list (prevents empty {} shortcut)
+# Both keyword lists are tightened to minItems=1 and marked required. Pydantic
+# defaults them to empty, which the schema advertises as permission: given a
+# hard query the model would return `{}` rather than attempt keywords, and an
+# empty low_level list silently disables BM25 for that question. Constrained
+# decoding enforces this, so the model must produce something.
 for _field in ("high_level_keywords", "low_level_keywords"):
     _raw_kw_schema["properties"][_field]["minItems"] = 1
 _raw_kw_schema["required"] = ["high_level_keywords", "low_level_keywords"]
 SCHEMA_keyword = _raw_kw_schema
 
 def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, completion_token: str) -> ExtractionResult:
-    """
-    Parse LLM extraction output with improved error handling and logging.
+    """Parse the extractor's delimited text output into validated models.
 
-    Returns ExtractionResult which may have empty entities/relationships if:
-    - LLM output is empty or malformed
-    - Entity types don't match EntityType enum
-    - Required fields are missing
-    - Relationships reference non-existent entities
+    Never raises. Extraction runs once per turn across an entire corpus, so a
+    parser that aborted on the first malformed record would discard a whole
+    run's work over one bad line. Anything unparseable is dropped, counted, and
+    logged; the caller gets whatever was valid.
+
+    That tolerance is the reason to watch the logs: a systematically broken
+    prompt shows up as a high skip count, not as a failure. An empty result is
+    indistinguishable here from a turn that genuinely contained no facts.
+
+    Records are dropped when the entity type is outside `EntityType`, a
+    required field is missing, or -- for relationships -- an endpoint names an
+    entity that was not extracted, which would otherwise create a dangling edge.
+
+    Args:
+        raw: The model's reply. Text after `completion_token` is discarded,
+            since models routinely continue past it with commentary.
+        tuple_delim: Field separator within one record.
+        record_delim: Separator between records.
+        completion_token: End-of-output marker.
+
+    Returns:
+        The valid entities and relationships. Empty on empty or wholly
+        unparseable input.
     """
     if not raw:
         logger.warning("parse_delimited_extraction: Empty raw input")
         return ExtractionResult(entities=[], relationships=[])
 
-    # Keep only what precedes the completion token
     raw = raw.split(completion_token)[0]
 
-    # Split into individual records on record_delim
     parts = [p.strip() for p in raw.split(record_delim)]
     ent_list, rel_list = [], []
 
-    # Track parsing errors for debugging
+    # Accumulated rather than raised, then logged as a summary at the end: one
+    # log line per malformed record would swamp the run.
     parsing_errors = {"entity_errors": [], "relationship_errors": [], "skipped_lines": []}
 
     def _clean(s: str) -> str:

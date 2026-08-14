@@ -1,4 +1,3 @@
-# grace_mem/pipeline/ingest_steps/extract.py
 """EntityExtractor and RelationshipExtractor: LLM-driven two-step extraction."""
 import threading
 from typing import Any, List, Optional, Tuple

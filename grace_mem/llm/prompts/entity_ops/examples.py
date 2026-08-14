@@ -1,4 +1,3 @@
-# llm/prompts/entity_ops/examples.py
 """
 Few-shot examples for entity operation decisions.
 Demonstrates correct ADD vs UPDATE behavior with proper merging.

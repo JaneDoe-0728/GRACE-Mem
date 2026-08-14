@@ -1,4 +1,3 @@
-# llm/prompts/extraction/__init__.py
 """
 Entity and relationship extraction prompts organized by purpose.
 """

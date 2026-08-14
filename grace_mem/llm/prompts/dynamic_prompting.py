@@ -1,4 +1,3 @@
-# llm/prompts/dynamic_prompting.py
 """
 Meta-prompt for Chronos-style dynamic retrieval guidance generation.
 """

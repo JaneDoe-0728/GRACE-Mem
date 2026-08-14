@@ -1,4 +1,3 @@
-# llm/prompts/entity_ops/rules.py
 """
 Entity operation decision rules for ADD vs UPDATE.
 """

@@ -1,3 +1,12 @@
+"""Storage layer: vector stores, the extraction cache, and artifact paths.
+
+The split between the two import styles below is deliberate. `cache` is
+imported eagerly because it is pure stdlib and pickle. The chroma_manager
+exports go through the lazy `__getattr__` because importing that module
+constructs the MGR singleton, which opens a Chroma client -- a cost no caller
+should pay just for touching `grace_mem.storage`.
+"""
+
 from typing import TYPE_CHECKING, Any
 
 from grace_mem.storage.cache import CacheStore, build_id_to_meta_maps

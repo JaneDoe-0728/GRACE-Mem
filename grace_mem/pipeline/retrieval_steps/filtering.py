@@ -1,4 +1,3 @@
-# pipeline/retrieval_steps/filtering.py
 """
 Context filtering, intersection, and reranking logic.
 """

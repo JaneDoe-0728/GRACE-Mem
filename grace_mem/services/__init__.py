@@ -1,3 +1,13 @@
+"""Service layer: entity, relationship, and provenance management.
+
+Exports are resolved lazily through the module-level `__getattr__` below.
+Importing them eagerly would pull in the embedding model and the graph client
+as a side effect of `import grace_mem.services`, which is why a CLI that only
+wanted to print `--help` used to wait on CUDA initialization. The TYPE_CHECKING
+block keeps type checkers and IDEs seeing the real names despite the
+indirection.
+"""
+
 from typing import TYPE_CHECKING, Any
 
 __all__ = ["EntityManager", "RelationshipManager", "Provenance"]

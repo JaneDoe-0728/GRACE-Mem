@@ -1,4 +1,3 @@
-# pipeline/retrieval_steps/pagerank.py
 """
 Personalized PageRank re-ranking on the induced subgraph of RRF candidates.
 """

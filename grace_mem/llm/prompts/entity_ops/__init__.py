@@ -1,4 +1,3 @@
-# llm/prompts/entity_ops/__init__.py
 """
 Entity operation decision rules and examples for ADD vs UPDATE.
 """

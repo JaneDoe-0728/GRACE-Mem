@@ -1,3 +1,25 @@
+"""Post-hoc failure analysis: why a question got the answer it got.
+
+An accuracy number says a run went wrong; it does not say where. Retrieval
+passes a candidate set through many narrowing stages -- search, filtering,
+reranking, evidence selection -- and a wrong answer usually means the right
+evidence was dropped at exactly one of them. This module records enough per
+stage to identify which.
+
+The core idea is differential: `derive_drop_reasons` diffs the candidate set
+between consecutive stages, so what disappeared, and where, is recovered
+without every stage having to report its own losses.
+`build_top_miss_snapshot` complements it with the near-misses -- the candidates
+that scored well and still lost, which is where a threshold set slightly wrong
+shows up.
+
+Everything is appended as JSONL, one file per artifact type (see
+`_JSONL_FILES`), because the analysis scripts load these into dataframes and
+join them on request_id. Records are appended and never rewritten: writes come
+from concurrent workers, and append is the only operation that stays coherent
+without coordination.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -39,12 +61,22 @@ def _append_text(path: Path, text: str) -> None:
         fh.write(text)
 
 
+# utf-8-sig, not utf-8: these CSVs are routinely opened and re-saved in Excel,
+# which prepends a BOM. Read as plain utf-8 that BOM becomes part of the first
+# column's name, and every lookup against that column silently misses.
 def _load_csv_rows(path: Path, *, encoding: str = "utf-8-sig") -> list[dict[str, Any]]:
     with path.open("r", encoding=encoding, newline="") as fh:
         return list(csv.DictReader(fh))
 
 
 def _load_jsonl_records(path: Path) -> list[dict[str, Any]]:
+    """Read a JSONL file, skipping lines that do not parse.
+
+    Tolerant by necessity, not by preference. These files are appended to by
+    concurrent workers and read while a run is still going, so the last line is
+    routinely a partial write. Failing the whole load for it would make live
+    inspection impossible.
+    """
     records: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as fh:
         for line in fh:
@@ -64,6 +96,19 @@ def timestamp_now() -> str:
 
 
 def append_analysis_record(log_dir: str | Path, artifact: str, record: dict[str, Any]) -> Path:
+    """Append one record to the JSONL file for `artifact`.
+
+    Args:
+        artifact: Key into `_JSONL_FILES`. Deliberately a closed set rather
+            than a free filename -- the analysis scripts read these by name, so
+            a typo would create an orphan file that silently never gets read.
+
+    Returns:
+        The file written to.
+
+    Raises:
+        KeyError: If `artifact` is not a known artifact type.
+    """
     target_dir = _ensure_dir(Path(log_dir))
     filename = _JSONL_FILES[artifact]
     payload = {"logged_at": timestamp_now(), **record}
@@ -73,6 +118,12 @@ def append_analysis_record(log_dir: str | Path, artifact: str, record: dict[str,
 
 
 def append_pretty_block(log_dir: str | Path, filename: str, text: str) -> Path:
+    """Append a human-readable block, blank-line separated from the previous one.
+
+    The separator is only written when the file is non-empty, so the file never
+    opens with a stray blank line -- these are read by eye, and consistent
+    block boundaries are what make them scannable.
+    """
     target_dir = _ensure_dir(Path(log_dir))
     path = target_dir / filename
     if path.exists() and path.stat().st_size > 0:
@@ -82,6 +133,15 @@ def append_pretty_block(log_dir: str | Path, filename: str, text: str) -> Path:
 
 
 def read_reranker_rows(log_dir: str | Path, *, request_id: str) -> list[dict[str, Any]]:
+    """Return this request's rows from the shared reranker score dump.
+
+    The CSV holds every request in the run, so it is filtered rather than
+    indexed. Both sides of the comparison are stringified and stripped because
+    the column arrives as text while callers hold whatever type they were given.
+
+    Returns [] when the file is absent -- reranking is optional, and its
+    absence is a configuration, not a failure.
+    """
     path = Path(log_dir) / "reranker_scores.csv"
     if not path.exists():
         return []
@@ -95,6 +155,25 @@ def build_top_miss_snapshot(
     request_id: str | None,
     limit_per_type: int = 3,
 ) -> list[dict[str, Any]]:
+    """Collect the highest-scoring candidates the reranker did *not* select.
+
+    These are the informative failures. A missed item that scored near the top
+    means the ranking was nearly right and a cutoff was wrong; one that scored
+    far down means retrieval never surfaced it and the problem is upstream.
+    `rejected_stage` records which of the two applies:
+
+    - reranker_cutoff: passed the score threshold, lost on top-k.
+    - reranker_threshold: never reached the threshold at all.
+
+    Grouped and capped per item type so a category with many candidates cannot
+    crowd out the near-misses of a sparser one.
+
+    Args:
+        limit_per_type: Misses kept per item type, best first.
+
+    Returns:
+        Snapshot records, or [] if there is no request_id or no score dump.
+    """
     if not request_id:
         return []
     rows = read_reranker_rows(log_dir, request_id=request_id)
@@ -106,7 +185,7 @@ def build_top_miss_snapshot(
             score = float(row.get("score", "nan"))
             rank = int(row.get("rank", 0))
         except ValueError:
-            continue
+            continue  # malformed row; a partial CSV write must not abort analysis
         if selected:
             continue
         item_type = str(row.get("item_type", "")).strip() or "unknown"
@@ -129,12 +208,29 @@ def build_top_miss_snapshot(
 
 
 def extract_context_session_ids(text: str) -> list[str]:
+    """Pull the session ids out of a rendered retrieval context.
+
+    The context handed to the generator is formatted text, so recovering which
+    sessions it drew on means parsing it back out. That is what makes evidence
+    coverage measurable: compare these against the gold sessions.
+
+    Sorted numerically rather than lexically, so 10 follows 9 instead of 1 --
+    these ids end up in reports read side by side across runs.
+    """
     if not isinstance(text, str):
         return []
     return sorted(set(re.findall(r"\[session=(\d+),", text)), key=lambda value: int(value))
 
 
 def is_temporal_question(question: str) -> bool:
+    """Guess whether a question is about time, by keyword.
+
+    A coarse substring test used only to bucket questions when reporting
+    accuracy -- temporal questions fail for different reasons than factual
+    ones, and mixing them hides both. It over-triggers freely ("last" matches
+    "the last thing you said"), which is acceptable for a reporting split and
+    would not be for anything that changed retrieval behaviour.
+    """
     lowered = str(question).lower()
     tokens = (
         "when", "date", "day", "month", "year", "time",
@@ -144,6 +240,12 @@ def is_temporal_question(question: str) -> bool:
 
 
 def coerce_float(value: Any) -> float | None:
+    """Parse a CSV field as a float, returning None when it is not one.
+
+    None rather than 0.0: these values feed averages, and a missing score
+    counted as zero would drag a mean down as though the item had scored badly
+    rather than not been scored at all.
+    """
     try:
         if value in ("", None):
             return None
@@ -161,6 +263,32 @@ def compact_json(value: Any) -> str:
 
 
 def derive_drop_reasons(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    """Recover what each retrieval stage dropped, by diffing consecutive stages.
+
+    The central analysis routine. Retrieval narrows a candidate set across many
+    stages, and a wrong answer is nearly always the right evidence being
+    discarded at one of them. Rather than requiring every stage to report its
+    own losses -- which each would do differently, and new stages would forget
+    -- this diffs each stage's surviving names against the previous stage's.
+    Whatever vanished was dropped there.
+
+    Because it is a diff, it is bounded by what the trace records: a stage that
+    logs no names is invisible here, and its drops are attributed to the next
+    stage that does.
+
+    A stage is reported when it removed something, was skipped, or gave an
+    explicit reason. Stages that changed nothing are omitted, which keeps the
+    output to the points where the candidate set actually moved. Each branch is
+    walked independently, since branches narrow separately before merging.
+
+    Args:
+        summary: A retrieval trace, expected to carry `branches` (stage lists
+            per branch) and optionally `stop_reason`.
+
+    Returns:
+        One record per lossy stage, plus a final "merged" record if the run
+        stopped for a stated reason.
+    """
     traces = summary.get("branches") or {}
     records: list[dict[str, Any]] = []
     for branch_name, stages in traces.items():
@@ -205,6 +333,31 @@ def derive_drop_reasons(summary: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def derive_anomaly_flags(*, summary: dict[str, Any], correctness: float | None) -> list[str]:
+    """Flag internally inconsistent runs, whether or not the answer was right.
+
+    Distinct from `derive_failure_type`, which classifies a known-bad answer.
+    These flags catch states that should not occur at all, and each names a
+    specific broken invariant:
+
+    - zero_seed_entities: retrieval started from nothing.
+    - many_entities_no_relationships: entities were found but the graph
+      returned no edges between them, which usually means the sync step failed
+      rather than that the entities are genuinely unconnected.
+    - ingest_succeeded_but_retrieval_empty: data went in and nothing came back
+      -- an indexing problem, not a retrieval one.
+    - temporal_question_without_date_hits: a time question that retrieved no
+      temporal evidence, so it cannot have been answered on evidence.
+    - retrieval_low_confidence: below the run's own tau threshold.
+    - wrong_answer_with_no_selected_evidence: wrong, and nothing was even
+      offered to the generator.
+
+    Flags are not exclusive; a badly broken run trips several. An empty list
+    means nothing anomalous was detected, not that the answer was correct.
+
+    Args:
+        correctness: Judge score, or None when unjudged. The last flag is
+            skipped when it is None, since it needs a known-wrong answer.
+    """
     flags: list[str] = []
     if not summary.get("pass1_entity_ids"):
         flags.append("zero_seed_entities")
@@ -225,6 +378,23 @@ def derive_anomaly_flags(*, summary: dict[str, Any], correctness: float | None) 
 
 
 def derive_failure_type(*, summary: dict[str, Any], correctness: float | None) -> str:
+    """Assign one failure category, testing causes from earliest to latest.
+
+    Order is the whole design. The checks run in pipeline order -- exception,
+    then empty seed, then empty evidence, then low confidence, then off-topic
+    -- so the earliest thing that went wrong wins. A run whose seed was empty
+    will also have no evidence, and reporting it as an evidence failure would
+    point at the wrong stage.
+
+    The final `judge_wrong_answer_despite_good_retrieval` is reached only when
+    every retrieval check passed, which localises the failure to answer
+    generation or to the judge itself.
+
+    Returns:
+        A single category string. Always returns one, so a correct run
+        classifies as the fallback category -- read it alongside `correctness`,
+        not on its own.
+    """
     stop_reason = str(summary.get("stop_reason") or "").strip()
     if summary.get("exception"):
         return "retrieval_exception"
@@ -243,6 +413,18 @@ def derive_failure_type(*, summary: dict[str, Any], correctness: float | None) -
 
 
 def build_bridge_label(*, summary: dict[str, Any], correctness: float | None) -> str:
+    """Attribute a wrong answer to retrieval or to answer construction.
+
+    The coarsest and most useful split, since the two call for entirely
+    different fixes. Non-zero coverage means the right evidence was in fact
+    retrieved and the generator still got it wrong -- an answer-construction
+    failure. Zero coverage, or no evidence at all, means retrieval never
+    supplied what was needed.
+
+    Returns:
+        "retrieval_failure", "answer_construction_failure", or
+        "not_applicable" for correct or unjudged runs.
+    """
     if correctness is None or correctness >= 1:
         return "not_applicable"
     if summary.get("selected_evidence_count", 0) == 0:
@@ -259,6 +441,22 @@ def render_failure_digest(
     ingest_records: Iterable[dict[str, Any]],
     failures: Iterable[dict[str, Any]],
 ) -> str:
+    """Render one sample's ingestion and retrieval failures as a readable report.
+
+    The end of the analysis chain: the JSONL artifacts are for querying, this
+    is for reading. Ingestion is reported before retrieval because a retrieval
+    failure over a corpus that never ingested properly is a symptom, and
+    presenting it first sends the reader after the wrong cause.
+
+    Args:
+        ingest_records: Per-turn ingest diagnostics for this sample.
+        failures: Classified retrieval failures.
+
+    Returns:
+        The digest text. Sections that have no records say so explicitly rather
+        than being omitted -- absent output should not be ambiguous between
+        "nothing failed" and "nothing was recorded".
+    """
     lines = [
         "=" * 80,
         f"sample_{sample_index} failure digest",

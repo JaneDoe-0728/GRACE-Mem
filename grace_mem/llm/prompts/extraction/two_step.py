@@ -1,4 +1,3 @@
-# llm/prompts/extraction/two_step.py
 """
 Two-step extraction: entities first, then relationships.
 Used by the Ingestor for improved extraction quality.

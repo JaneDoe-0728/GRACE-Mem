@@ -1,4 +1,3 @@
-# pipeline/retrieval_steps/temporal.py
 """
 Temporal relevance calculation using LiCoMemory-style Weibull decay.
 """

@@ -1,4 +1,21 @@
-# llm/client.py
+"""The one HTTP client every LLM call in the pipeline goes through.
+
+Two things are centralised here rather than left to callers.
+
+Seeding: reproducibility requires the same seed on every completion, but the
+backends this runs against are not consistent about supporting it -- some
+reject an unknown `seed` field with 400/422, some raise inside the SDK. Rather
+than making each caller decide, requests are sent seeded and retried unseeded
+on exactly those failures, and the outcome is logged once per state so a run
+that silently lost determinism is visible in the log instead of only in the
+diverging results.
+
+Accounting: every method records prompt/completion tokens against
+`token_tracker` under its own label, which is what makes per-stage cost
+attribution possible after the fact. A new call path that skips the tracker
+disappears from those reports.
+"""
+
 import logging
 import os, time, json, requests
 from pathlib import Path
@@ -31,6 +48,19 @@ def _DictResponse(data: dict[str, Any]) -> "_Namespace":
     return _Namespace(data)
 
 class LLMClient:
+    """Chat-completion client with seed negotiation and token accounting.
+
+    Holds two transports on purpose: an OpenAI SDK client for streaming (it
+    handles SSE framing and usage chunks) and plain `requests` for the
+    non-streaming calls, where the SDK's response objects would have to be
+    unwrapped back into dicts anyway. `_DictResponse` bridges the difference so
+    callers see the same `resp.choices[0].message.content` shape either way.
+
+    Not thread-safe: the seed-state log set is mutated without a lock. Give
+    each worker its own client -- which is also what keeps the token tracker's
+    per-stage totals attributable.
+    """
+
     def __init__(
         self,
         base_url: str | None = None,
@@ -78,6 +108,12 @@ class LLMClient:
         self.close()
 
     def _log_seed_state(self, state: str, detail: str) -> None:
+        """Log a seed-support transition once per state, per client.
+
+        Deduplicated because the alternative is one warning per completion:
+        against a backend that ignores seeds, an unfiltered log buries every
+        other message in the run.
+        """
         if state in self._seed_log_states:
             return
         self._seed_log_states.add(state)
@@ -90,12 +126,26 @@ class LLMClient:
         )
 
     def _seeded_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of the payload carrying this client's seed.
+
+        Copies rather than mutating so the caller keeps an unseeded payload to
+        retry with -- `_post` depends on that original still being intact.
+        """
         seeded = dict(payload)
         seeded["seed"] = self.seed
         return seeded
 
     @staticmethod
     def _seed_unsupported_response(resp: requests.Response) -> bool:
+        """Report whether a rejection was caused by the `seed` field.
+
+        There is no standard signal for "I do not support this parameter", so
+        this matches on the two status codes backends use for schema rejection
+        plus the phrasings seen in practice. The test is deliberately narrow:
+        treating any 400 as a seed problem would retry unseeded on genuinely
+        malformed requests and turn a hard error into a silent loss of
+        determinism.
+        """
         if resp.status_code not in {400, 422}:
             return False
         text = ""
@@ -106,7 +156,21 @@ class LLMClient:
         return "seed" in text or "extra fields not permitted" in text or "unknown field" in text
     
     def stream_chat(self, messages: list[dict[str, Any]], temperature: float = 0.6, max_tokens: int = 2048) -> Iterator[Any]:
-        """Streaming chat — usage is captured from the final chunk."""
+        """Yield streamed completion chunks, recording usage from the final one.
+
+        `stream_options={"include_usage": True}` is what makes the token counts
+        arrive at all -- without it a streamed response carries no usage block
+        and the call vanishes from cost accounting.
+
+        Args:
+            messages: Chat messages in OpenAI wire format.
+            temperature: Defaults higher than the other methods because this
+                path serves generation rather than extraction, where varied
+                phrasing is wanted and exact reproducibility is not.
+
+        Yields:
+            Raw SDK chunks. Only the last carries `usage`.
+        """
         t0 = time.perf_counter()
         payload = dict(
             model=self.model_name,
@@ -137,7 +201,15 @@ class LLMClient:
             yield chunk
 
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Send a single non-streaming request and return the parsed JSON body."""
+        """Send one non-streaming request, retrying unseeded if the seed is rejected.
+
+        The retry sends the caller's original `payload`, not the seeded copy,
+        which is why `_seeded_payload` must not mutate in place.
+
+        Raises:
+            requests.HTTPError: For any failure that is not a seed rejection,
+                and for a retry that fails on its own terms.
+        """
         request_payload = self._seeded_payload(payload)
         resp = requests.post(
             f"{self._base_url}/chat/completions",
@@ -158,9 +230,17 @@ class LLMClient:
         resp.raise_for_status()
         return resp.json()
 
-    # <<< non-streaming (for llm_judge.py) >>>
     def chat(self, messages: list[dict[str, Any]], temperature: float = 0.0, max_tokens: int = 512) -> _Namespace:
-        """Send one non-streaming chat completion and return a namespace-shaped response."""
+        """Send one non-streaming chat completion.
+
+        The general-purpose entry point, used by the judge among others.
+        temperature defaults to 0 because its callers are scoring and
+        classifying, where run-to-run variation is measurement noise.
+
+        Returns:
+            The response wrapped so attribute access matches the OpenAI SDK:
+            `resp.choices[0].message.content`.
+        """
         t0 = time.perf_counter()
         data = self._post({
             "model": self.model_name,
@@ -172,7 +252,6 @@ class LLMClient:
         usage = data.get("usage", {})
         if usage:
             token_tracker.record("chat", usage["prompt_tokens"], usage["completion_tokens"], time.perf_counter() - t0)
-        # return a lightweight namespace so callers can do resp.choices[0].message.content
         return _DictResponse(data)
 
     def generate_llm_extract(self, prompt: str, max_tokens: int = 3000, temperature: float = 0) -> tuple[str, float]:
@@ -254,79 +333,3 @@ class LLMClient:
     def generate_entity_ops(self, new_entities: list[dict], similar_map: dict) -> dict:
         """Generate entity operations, delegating to EntityOpsProcessor."""
         return self.entity_ops.process_batch(new_entities, similar_map)
-    
-    # def generate_entity_ops(self, new_entities: list[dict], similar_map: dict) -> dict:
-    #     blocks = []
-    #     for e in new_entities:
-    #         name = e["entity_name"]
-    #         type_val = e["entity_type"].value if hasattr(e["entity_type"], "value") else e["entity_type"]
-    #         desc = e.get("entity_description", "")
-    #         key = (name, type_val)
-    #         cands = similar_map.get(key) or []
-
-    #         lines = [f"[INPUT] name={name} | type={type_val} | desc={desc}"]
-    #         if cands:
-    #             lines.append("Candidates:")
-    #             ids = []
-    #             for meta, score in cands:
-    #                 cid = meta.get("id", "?")
-    #                 ids.append(cid)
-    #                 source = meta.get("_source", "?")   # NEW
-    #                 lines.append(
-    #                     f"- id={cid} | name={meta.get('name')} | type={meta.get('type')} | "
-    #                     f"score={score:.3f} | from={source} | desc={meta.get('description','')}"   # NEW
-    #                 )
-    #                 # lines.append(
-    #                 #     f"- id={cid} | name={meta.get('name')} | type={meta.get('type')} | "
-    #                 #     f"score={score:.3f} | desc={meta.get('description','')}"
-    #                 # )
-    #             quoted = ",".join([f'"{x}"' for x in ids])
-    #             lines.append(f"Valid target_existing_id choices: [{quoted}]")
-    #         else:
-    #             lines.append("Candidates: (none)")
-    #             lines.append("Valid target_existing_id choices: []  # No candidates -> only valid action is ADD")
-    #         blocks.append("\n".join(lines))
-
-    #     full_prompt = f"{ENTITY_OPS_RULES_V2}\n\n{ENTITY_OPS_FEW_SHOT}\n=== BATCH ===\n" + "\n\n---\n\n".join(blocks)
-    #     print("Entity Ops real data:\n", blocks)
-
-    #     raw_output, _ = self.generate_llm_extract(full_prompt, max_tokens=1600)
-    #     parsed = _parse_entity_ops_block(raw_output or "")
-    #     return self._validate_entity_ops_output(parsed, new_entities, similar_map)
-
-    # def _validate_entity_ops_output(self, parsed: dict, new_entities: list[dict], similar_map: dict) -> dict:
-    #     results = []
-    #     for e, r in zip(new_entities, parsed.get("results", [])):
-    #         name = e["entity_name"]
-    #         type_val = e["entity_type"].value if hasattr(e["entity_type"], "value") else e["entity_type"]
-    #         desc = (e.get("entity_description") or "").strip()
-    #         action = r.get("action", "").strip().upper()
-    #         teid = r.get("target_existing_id")
-    #         cname = r.get("canonical_name") or name
-    #         ctype = r.get("canonical_type") or type_val
-    #         mdesc = (r.get("merged_description") or "").strip()
-
-    #         valid_ids = {meta.get("id") for meta, _ in (similar_map.get((name, type_val)) or [])}
-    #         if action not in {"ADD", "UPDATE"}:
-    #             action = "ADD"; teid = None
-    #         elif action == "UPDATE" and (not teid or teid not in valid_ids):
-    #             if len(valid_ids) == 1:
-    #                 teid = next(iter(valid_ids))
-    #             else:
-    #                 action = "ADD"; teid = None
-    #         if action == "ADD":
-    #             teid = None
-    #         if not mdesc:
-    #             mdesc = desc or f"{name} ({type_val})"
-
-    #         results.append({
-    #             "input_name": name,
-    #             "input_type": type_val,
-    #             "action": action,
-    #             "target_existing_id": teid,
-    #             "canonical_name": cname,
-    #             "canonical_type": ctype,
-    #             "merged_description": mdesc,
-    #         })
-    #     print("Validated Entity Ops Results:", results)
-    #     return {"results": results}

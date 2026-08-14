@@ -1,4 +1,3 @@
-# llm/prompts/hyde_prompting.py
 """
 HyDE-style prompt: generate hypothetical memory summary sentences for a question.
 
