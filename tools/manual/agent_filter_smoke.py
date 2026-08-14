@@ -30,6 +30,17 @@ DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
 
 
 def fake_retrieved_context(src_csv: Path, *, drop_gold: int, n_distractors: int) -> tuple[str, list[str], list[str]]:
+    """Construct a deliberately imperfect retrieval result to test the agent on.
+
+    Real retrieval is too good to exercise the interesting paths: it usually
+    returns the gold, so an agent that did nothing would look fine. Dropping
+    `drop_gold` gold entries forces the grep-back path, and padding with
+    distractors forces the drop path. Both failure modes then show up as a
+    difference between the returned sids and the gold.
+
+    Returns:
+        (rendered context, seed sids, gold sids).
+    """
     corpus = load_corpus(src_csv)
     frame = pd.read_csv(src_csv, encoding="utf-8-sig")
     gold = corpus.normalize_sids(longmem_gold_sids(frame))
@@ -46,6 +57,12 @@ def fake_retrieved_context(src_csv: Path, *, drop_gold: int, n_distractors: int)
 
 
 def main() -> None:
+    """Run the harness once on a synthetic context and print what it kept.
+
+    Manual rather than a pytest case: it needs a live LLM endpoint, and its
+    output is a judgement about agent behaviour rather than a pass/fail
+    assertion.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--category", default="single_session_assistant")
     ap.add_argument("--name", default="")

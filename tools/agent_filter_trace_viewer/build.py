@@ -54,6 +54,12 @@ def _session_of(sid: str) -> str:
 
 
 def _corpus(data_root: Path, cat: str, stem: str):
+    """Load and memoize one corpus, caching None when it is unavailable.
+
+    A missing or unparseable corpus is cached as None rather than retried:
+    the viewer resolves sids for many rows over the same corpus, and without
+    the negative cache each one would re-attempt the same failing read.
+    """
     key = (cat, stem)
     if key not in _corpus_cache:
         from experiment.agent_filter.corpus import load_corpus
@@ -84,6 +90,20 @@ def sid_texts(data_root: Path, cat: str, stem: str, sids: set[str]) -> dict[str,
 
 
 def gold_sids(data_root: Path, cat: str, stem: str) -> set[str]:
+    """Read the gold-evidence sids for one question, as the viewer's ground truth.
+
+    The CSV marks gold at turn granularity, but sids address speaker-turn
+    pairs, so a user turn is mapped to the following index and an assistant
+    turn to its own. Getting that off by one silently marks the wrong turns
+    gold and makes every trace look worse than it is.
+
+    A BOM is stripped from the column names: these CSVs are frequently opened
+    in Excel, which prepends one and would break the column check below.
+
+    Returns:
+        Sids as "session:pair:role", or an empty set if the file is absent or
+        lacks the required columns.
+    """
     key = (cat, stem)
     if key in _gold_cache:
         return _gold_cache[key]
@@ -120,6 +140,15 @@ _JUDGE_COLS = {
 
 
 def _coerce_corr(c):
+    """Parse a judge correctness cell into 1.0, 0.0, or None.
+
+    The column has been written by several judges over time in whatever
+    spelling each used -- "1", "yes", "true", "correct" -- so the accepted
+    forms are enumerated rather than guessed at.
+
+    Returns None for blank or unrecognised values, which keeps an unjudged row
+    out of the averages instead of counting it as incorrect.
+    """
     if c is None or (isinstance(c, float) and pd.isna(c)) or str(c).strip() == "":
         return None
     s = str(c).strip().lower()
@@ -181,6 +210,18 @@ def judge_scores(out_root: Path, run_tag: str, cat: str, stem: str) -> dict[str,
 
 
 def enrich(rec: dict, out_root: Path, data_root: Path, run_tag: str) -> dict:
+    """Attach recall metrics, judge scores, and sid text to one trace record.
+
+    Three recalls are computed because they answer different questions and
+    routinely disagree. Seed recall says what retrieval handed the agent;
+    final recall says what survived it -- the difference is the agent's actual
+    contribution. Session recall widens the denominator to whole sessions,
+    which matters because strict turn recall can look poor while the answer is
+    right: the gold turn was missed but a neighbouring turn in the same session
+    carried the fact.
+
+    Mutates and returns `rec`.
+    """
     cat = rec.get("category") or ""
     stem = rec.get("sample") or ""
     g = gold_sids(data_root, cat, stem)
@@ -208,6 +249,13 @@ def enrich(rec: dict, out_root: Path, data_root: Path, run_tag: str) -> dict:
 
 
 def collect(out_root: Path, data_root: Path, run_tag: str) -> list[dict]:
+    """Load and enrich every agent trace across all categories of one run.
+
+    Unparseable lines are skipped: traces are appended live during a run, so
+    the last line is frequently a partial write and failing on it would make
+    the viewer unusable mid-run. Categories with no trace file are simply
+    absent.
+    """
     run_dir = out_root / run_tag
     rows: list[dict] = []
     for cat in CATEGORIES:
@@ -228,6 +276,11 @@ def collect(out_root: Path, data_root: Path, run_tag: str) -> list[dict]:
 
 
 def build_html(rows: list[dict], run_name: str) -> str:
+    """Inline the traces into the HTML template as NDJSON.
+
+    Self-contained output by design -- the result is a single file that opens
+    from disk with no server and no sidecar data file to keep alongside it.
+    """
     # </ becomes <\/ so that a </script> inside result/reply cannot end the script
     # tag early. The JSON stays valid either way.
     ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in rows).replace("</", "<\\/")
@@ -236,6 +289,7 @@ def build_html(rows: list[dict], run_name: str) -> str:
 
 
 def main() -> None:
+    """Build the standalone trace-viewer HTML for one run."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run-tag", required=True, help="name of the agent run's output directory, the one holding _grep_agent_traces.jsonl")
     ap.add_argument("--output-root", default=str(OUTPUT_ROOT), help="root holding the run directories (default experiment/longmem/output)")

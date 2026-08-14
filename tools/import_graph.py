@@ -1,4 +1,14 @@
-"""Inspect project-local Python imports and report dependency cycles."""
+"""Inspect project-local Python imports and report dependency cycles.
+
+Static analysis only -- modules are parsed with `ast`, never imported. That is
+the point: importing this project's modules constructs Chroma clients and loads
+model weights, and a cycle check must not need a working environment to run.
+
+Only project-local imports are graphed. Third-party edges are dropped by
+`_known_module`, which keeps the output about this codebase's own layering.
+
+Run with --check in CI to fail on a newly introduced cycle.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +24,13 @@ DEFAULT_ROOTS = ("grace_mem", "experiment")
 
 
 def module_name(path: Path, project_root: Path = PROJECT_ROOT) -> str:
+    """Convert a file path to its dotted module name.
+
+    An `__init__.py` yields its package name rather than "pkg.__init__", so
+    that a package and its `__init__` are one node in the graph -- otherwise
+    every relative import inside a package would look like an edge to a
+    separate module.
+    """
     relative = path.relative_to(project_root).with_suffix("")
     parts = list(relative.parts)
     if parts[-1] == "__init__":
@@ -25,6 +42,12 @@ def discover_modules(
     roots: Iterable[str] = DEFAULT_ROOTS,
     project_root: Path = PROJECT_ROOT,
 ) -> dict[str, Path]:
+    """Map every module under `roots` to its file path.
+
+    Returns:
+        module name -> path. Sorted traversal, so the graph and its reported
+        cycles come out in a stable order run to run.
+    """
     modules: dict[str, Path] = {}
     for root in roots:
         root_path = project_root / root
@@ -39,6 +62,16 @@ def _resolve_from_import(
     *,
     is_package: bool,
 ) -> str | None:
+    """Resolve a `from . import x` to an absolute module name.
+
+    `node.level` is the number of leading dots. The base differs by file kind:
+    inside a package's `__init__.py` one dot means the package itself, while in
+    an ordinary module it means the package containing it -- hence the
+    `is_package` branch. Getting this wrong shifts every relative import by one
+    level and invents edges that do not exist.
+
+    Returns None when the dots climb above the project root.
+    """
     if node.level == 0:
         return node.module
 
@@ -53,6 +86,13 @@ def _resolve_from_import(
 
 
 def _known_module(name: str, modules: set[str]) -> str | None:
+    """Find the longest known module that is a prefix of `name`.
+
+    `from grace_mem.storage.cache import CacheStore` parses as a target of
+    "grace_mem.storage.cache.CacheStore", which is a class, not a module.
+    Trimming the tail until something known appears resolves it to the module.
+    The same walk drops third-party imports, which never match at any depth.
+    """
     candidate = name
     while candidate:
         if candidate in modules:
@@ -62,6 +102,16 @@ def _known_module(name: str, modules: set[str]) -> str | None:
 
 
 def build_graph(modules: dict[str, Path]) -> dict[str, set[str]]:
+    """Build the module dependency graph by parsing every file's imports.
+
+    `ast.walk` visits the whole tree, so imports nested inside functions count
+    as edges too. That is deliberate -- this codebase defers heavy imports into
+    functions precisely to break cycles, and a graph that ignored them would
+    report the layering as cleaner than it is.
+
+    Self-edges are dropped; a module importing from its own package is not a
+    dependency worth reporting.
+    """
     known = set(modules)
     graph = {name: set() for name in modules}
     for current, path in modules.items():
@@ -91,6 +141,21 @@ def build_graph(modules: dict[str, Path]) -> dict[str, set[str]]:
 
 
 def strongly_connected_components(graph: dict[str, set[str]]) -> list[list[str]]:
+    """Find import cycles via Tarjan's strongly-connected-components algorithm.
+
+    A cycle in an import graph is exactly a strongly connected component of
+    more than one node: every module in it can reach every other, so no import
+    order satisfies them all. Tarjan finds all of them in one depth-first pass.
+
+    Single-node components are filtered out -- every module is trivially
+    connected to itself and that is not a cycle.
+
+    Recursive, so a pathologically deep import chain could exhaust the stack.
+    At this codebase's depth that is not close.
+
+    Returns:
+        Cycles, each sorted, the list sorted -- stable enough to diff in CI.
+    """
     index = 0
     stack: list[str] = []
     on_stack: set[str] = set()
@@ -99,6 +164,12 @@ def strongly_connected_components(graph: dict[str, set[str]]) -> list[list[str]]
     components: list[list[str]] = []
 
     def visit(node: str) -> None:
+        """Depth-first visit assigning Tarjan's index and lowlink to `node`.
+
+        `lowlink` is the smallest index reachable from this node's subtree. A
+        node whose lowlink equals its own index is the root of a component, and
+        everything above it on the stack belongs to that component.
+        """
         nonlocal index
         indices[node] = index
         lowlinks[node] = index
@@ -131,6 +202,13 @@ def strongly_connected_components(graph: dict[str, set[str]]) -> list[list[str]]
 
 
 def layer_edges(graph: dict[str, set[str]]) -> dict[tuple[str, str], int]:
+    """Count imports crossing top-level package boundaries.
+
+    Collapses the module graph to its first path component, which answers the
+    architectural question: how much does `experiment` reach into `grace_mem`,
+    and does anything go back the other way. Within-package edges are excluded
+    as internal detail.
+    """
     counts: dict[tuple[str, str], int] = defaultdict(int)
     for source, targets in graph.items():
         source_layer = source.split(".")[0]
@@ -142,6 +220,12 @@ def layer_edges(graph: dict[str, set[str]]) -> dict[tuple[str, str], int]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Report module counts, cross-package edges, and cycles.
+
+    Returns:
+        1 if --check was passed and cycles exist, else 0. Without --check the
+        exit code stays 0 so the report can be read without failing a shell.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("roots", nargs="*", default=list(DEFAULT_ROOTS))
     parser.add_argument("--check", action="store_true", help="Exit non-zero when cycles exist")

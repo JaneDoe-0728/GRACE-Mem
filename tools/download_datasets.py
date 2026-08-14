@@ -1,4 +1,16 @@
-"""Download pinned LoCoMo and LongMemEval datasets and verify their checksums."""
+"""Download pinned LoCoMo and LongMemEval datasets and verify their checksums.
+
+Both datasets are pinned to a commit and a SHA-256. Neither upstream promises
+stability -- LoCoMo is a git repo and the LongMemEval mirror is a HF dataset,
+and either can be amended in place. A benchmark whose contents shifted between
+runs would move accuracy numbers for reasons unrelated to any code change, and
+nothing would report it. The checksum turns that into a hard failure at
+download time.
+
+Downloads land on a .part file and are verified before being moved into place,
+so an interrupted transfer never leaves a plausible-looking truncated dataset
+that later runs would silently evaluate against.
+"""
 
 from __future__ import annotations
 
@@ -24,6 +36,18 @@ LONGMEM_REVISION = "98d7416c24c778c2fee6e6f3006e7a073259d48f"
 
 @dataclass(frozen=True)
 class DatasetFile:
+    """A pinned dataset file: where to get it and how to prove it is intact.
+
+    Attributes:
+        revision: The upstream commit the URL is pinned to. Recorded separately
+            from the URL it is embedded in, so it can be reported and compared
+            without parsing.
+        sha256: Expected digest of the whole file.
+        size: Expected byte count. Redundant against the digest but checked
+            first, because it is free and catches the common failure -- a
+            truncated download -- without reading the file twice.
+    """
+
     name: str
     url: str
     revision: str
@@ -77,6 +101,11 @@ LONGMEM_FILES = {
 
 
 def sha256_file(path: Path, *, chunk_size: int = 1024 * 1024) -> str:
+    """Compute a file's SHA-256, reading it in chunks.
+
+    Chunked because the LongMemEval files run to hundreds of megabytes and
+    reading one into memory to hash it is avoidable.
+    """
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(chunk_size), b""):
@@ -85,6 +114,18 @@ def sha256_file(path: Path, *, chunk_size: int = 1024 * 1024) -> str:
 
 
 def verify_file(path: Path, spec: DatasetFile) -> None:
+    """Check a downloaded file against its pinned size and digest.
+
+    Size first, then digest: a truncated or redirected download is caught
+    immediately without hashing hundreds of megabytes to reach the same
+    conclusion.
+
+    Raises:
+        FileNotFoundError: If the file is absent.
+        ValueError: On a size or checksum mismatch. Raised rather than warned
+            -- silently proceeding on the wrong data invalidates every result
+            derived from it.
+    """
     if not path.is_file():
         raise FileNotFoundError(f"Dataset is missing: {path}")
     actual_size = path.stat().st_size
@@ -101,6 +142,19 @@ def verify_file(path: Path, spec: DatasetFile) -> None:
 
 
 def download_file(spec: DatasetFile, destination: Path, *, force: bool = False) -> None:
+    """Fetch one dataset file, verifying before it reaches its final path.
+
+    An existing file is verified rather than re-downloaded, which makes this
+    cheap to re-run and doubles as an integrity check on a working tree.
+
+    The download goes to a `.part` sibling and is only renamed after
+    `verify_file` passes, so `destination` either does not exist or is correct
+    -- there is no state in which a later run finds a corrupt dataset and
+    trusts it. The `finally` clears the temp file on any failure path.
+
+    Args:
+        force: Re-download even if a verified copy exists.
+    """
     destination = destination.resolve()
     if destination.exists() and not force:
         verify_file(destination, spec)
@@ -139,6 +193,16 @@ def download_file(spec: DatasetFile, destination: Path, *, force: bool = False) 
 
 
 def validate_locomo(path: Path) -> None:
+    """Check that the LoCoMo file has the expected shape, beyond its checksum.
+
+    The checksum proves the bytes are the pinned ones; this proves the pinned
+    ones are still what the pipeline expects. It catches the case where the
+    pin was updated to a genuinely different upstream layout -- 10
+    conversations, each carrying sample_id, conversation, and qa.
+
+    Raises:
+        ValueError: If the count or the per-record keys do not match.
+    """
     with path.open("r", encoding="utf-8") as handle:
         records = json.load(handle)
     if not isinstance(records, list) or len(records) != 10:
@@ -150,6 +214,7 @@ def validate_locomo(path: Path) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Define the CLI: which datasets to fetch, where to, and whether to force."""
     parser = argparse.ArgumentParser(
         description=(
             "Download checksum-pinned benchmark data. LongMemEval is converted "
@@ -197,6 +262,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Download the selected datasets, verify them, then convert LongMemEval.
+
+    Conversion runs only after verification passes, so the converted output is
+    never derived from bytes that failed their pin.
+    """
     args = build_parser().parse_args()
     selected = {"locomo", "longmem"} if args.dataset == "all" else {args.dataset}
 
