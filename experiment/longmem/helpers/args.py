@@ -1,3 +1,14 @@
+"""Argument groups shared across the LongMemEval entry points.
+
+The runner, the child worker, and the rerun tool accept overlapping but not
+identical flags. Defining each group once and composing them keeps the three
+from drifting -- a flag added to the parent but missing from the child is a
+setting that silently applies to only half the run.
+
+`resolve_stages` centralises stage selection so "which stages will execute" has
+one answer rather than one per entry point.
+"""
+
 from __future__ import annotations
 
 import argparse

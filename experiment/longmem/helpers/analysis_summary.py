@@ -1,3 +1,14 @@
+"""Collapse analysis cases into one CSV, with a diagnosis per row.
+
+The counterpart to `analysis_cases`: those are for reading one failure closely,
+this is for seeing the shape of all of them at once.
+
+`diagnose` assigns each row a failure label from the evidence already recorded
+-- whether retrieval found the gold, whether the answer used it -- so the CSV
+can be grouped by cause. That label is a heuristic over recorded fields, not a
+judgement: it tells you where to look, not what is wrong.
+"""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -7,6 +18,24 @@ from experiment.longmem.utils.io import ensure_dir, glob_sorted, read_json_file,
 
 
 def diagnose(row: dict) -> str:
+    """Name the first pipeline step where a question's evidence was lost.
+
+    The checks run in pipeline order and the first failure wins, because
+    failures cascade: a question whose ingest failed also has no summary, no
+    entities, and no evidence, and reporting the last symptom would send you
+    looking at retrieval for an ingestion bug.
+
+    The steps mirror the pipeline -- ingest, gold marking, summarization,
+    extraction, candidate pool, filtering, evidence -- and the filtering case is
+    split further, since "cut by threshold" and "cut by top-k" call for
+    different fixes and the reranker may have recovered either.
+
+    Falling through every check means retrieval delivered what it should have,
+    which localises the failure to answer generation.
+
+    Returns:
+        A human-readable cause, used to group rows in the summary CSV.
+    """
     if row["step2_ingest"] == "fail":
         return "ingest failed"
 
@@ -52,6 +81,12 @@ def diagnose(row: dict) -> str:
 
 
 def flatten_case(data: dict) -> dict:
+    """Flatten a nested case JSON into one CSV row.
+
+    The case files are nested per step, which suits reading one closely and not
+    at all comparing hundreds. Flattening to `stepN_field` columns is what makes
+    the set groupable and sortable.
+    """
     meta = data.get("meta", {})
     s2 = data.get("step2_ingest", {})
     s3_turns = data.get("step3_turns", [])
@@ -125,6 +160,11 @@ FIELDNAMES = [
 
 
 def summarize_cases(cases_dir: Path, output_path: Path) -> int:
+    """Diagnose every case file in a directory and write one summary CSV.
+
+    Returns:
+        Rows written.
+    """
     ensure_dir(output_path.parent)
     case_files = glob_sorted(cases_dir, "*.json")
 

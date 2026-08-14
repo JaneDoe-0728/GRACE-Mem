@@ -1,3 +1,11 @@
+"""Gather one run's scattered outputs into a single place for analysis.
+
+A run writes per-category CSVs, traces, and judge outputs into separate
+directories. Comparing runs means first collecting each into one location, and
+that is all this does -- no interpretation, so the collected copy stays a
+faithful record of what the run produced.
+"""
+
 from __future__ import annotations
 
 import argparse

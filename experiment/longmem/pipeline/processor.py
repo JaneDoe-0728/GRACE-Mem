@@ -162,6 +162,12 @@ class MultiDatasetProcessor:
             setattr(module, attribute, previous)
 
     def _ensure_runtime_components(self) -> None:
+        """Construct the retriever and its backends on first use.
+
+        Lazy because a processor may be created for a dataset that turns out to be
+        already complete, and loading models for work that is then skipped is the
+        main avoidable cost in a resumed sweep.
+        """
         if self._closed:
             raise RuntimeError("MultiDatasetProcessor is closed")
         if self.llm is None:
@@ -190,6 +196,12 @@ class MultiDatasetProcessor:
         turn_count: int,
         error: Exception,
     ) -> None:
+        """Record a session that failed to ingest, and carry on with the rest.
+
+        One bad session must not cost the dataset. The failure is recorded so the
+        resulting graph is known to be incomplete -- otherwise its lower recall
+        looks like a retrieval regression.
+        """
         append_jsonl(
             self._session_failure_log_path(config),
             {
@@ -435,6 +447,13 @@ class MultiDatasetProcessor:
         config: DatasetConfig,
         question_date: str | None,
     ) -> str:
+        """Hand the retrieved context to the grep agent, if it is enabled.
+
+        The agent re-reads the corpus and revises the evidence set -- dropping what
+        does not support the question and grepping back what retrieval missed. Off
+        by default, since it costs an extra LLM call per question and is itself
+        under evaluation.
+        """
         from experiment.agent_filter.harness import maybe_refine_context
 
         return maybe_refine_context(
@@ -707,6 +726,7 @@ class MultiDatasetProcessor:
         print(f"[INIT] Ingestor and Retriever initialized with per-dataset logs")
 
     def _build_retriever(self, config: DatasetConfig) -> Retriever:
+        """Build the retriever for this dataset from the run's retrieval parameters."""
         if self.current_mgr is None:
             raise RuntimeError("cannot build Retriever without a VDB manager")
         reranker_params = {
@@ -805,6 +825,13 @@ class MultiDatasetProcessor:
         total_sessions: Optional[int] = None,
         stage: str = "ingest_in_progress",
     ):
+        """Persist ingest progress so an interrupted dataset resumes mid-way.
+
+        Written every N sessions rather than every session -- see
+        `decision.next_resume_stage`, which will only resume from a checkpoint
+        boundary, since between boundaries the graph holds writes the checkpoint
+        does not know about.
+        """
         shared_save_checkpoint(
             self.base_output_dir,
             config,
@@ -952,6 +979,12 @@ class MultiDatasetProcessor:
         answer_data: dict,
         correctness: str,
     ) -> None:
+        """Write this dataset's diagnostics, whatever the outcome.
+
+        The LongMem counterpart to the LoCoMo worker's bundle: each artifact is
+        written independently so one missing input shortens the bundle rather than
+        losing all of it.
+        """
         log_dir = self.base_output_dir / f"logs_{config.name}"
         ensure_dir(log_dir)
 

@@ -1,3 +1,14 @@
+"""Rebuild a graph backend from a cached extraction, skipping re-ingestion.
+
+Ingestion is the expensive phase and its output is deterministic given the
+cache, so a rerun that only changes retrieval restores the graph from cached
+entities and relationships instead of paying for extraction again. This is what
+makes the ablation sweeps affordable.
+
+Entities are synced before relationships, and that order is required: an edge
+whose endpoints do not yet exist cannot be written.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

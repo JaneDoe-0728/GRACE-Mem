@@ -1,3 +1,11 @@
+"""Judge prompt for open-domain questions, where gold is a reference not an oracle.
+
+Separate from `judge.py` because the grading rule genuinely differs. These
+questions admit several correct answers, so the gold string is one acceptable
+answer rather than the only one, and a judge applying the standard prompt marks
+correct answers wrong for not matching it.
+"""
+
 SYSTEM_PROMPT = "You are an expert grader for evidence-grounded conversational QA."
 
 ACCURACY_PROMPT = """\

@@ -1,3 +1,11 @@
+"""Module-level wrappers over the LongMemEval stage objects.
+
+The stages are classes holding configuration, but most call sites want a plain
+function. These module-level singletons and their forwarding functions provide
+that, and keep the stage instances shared rather than reconstructed per call --
+which matters because constructing a stage can pull in the retriever.
+"""
+
 from __future__ import annotations
 
 from experiment.longmem.stages import IngestStage, JudgeStage, QAEvalStage

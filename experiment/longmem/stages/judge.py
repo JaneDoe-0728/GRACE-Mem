@@ -1,3 +1,14 @@
+"""LongMemEval judge stage: binary correct/incorrect scoring.
+
+Binary rather than graded, for the same reason as the LoCoMo judge -- a scale
+requires a rubric the judge applies consistently across thousands of questions,
+and in practice it does not.
+
+`parse_binary_judge` is exposed at module level as well as on the stage because
+the reanalysis tooling re-parses stored judge replies without instantiating a
+stage.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

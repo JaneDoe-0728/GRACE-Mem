@@ -1,3 +1,18 @@
+"""Resume predicates: what a previous run already finished, and what it did not.
+
+Every function here answers one question about existing state, and they are
+gathered so the answers are testable without a run and consistent between the
+runner and the rerun tool.
+
+The distinction that matters is between complete and merely present. An output
+file exists as soon as work starts on it, so `should_treat_output_as_complete`
+and `retrieval_context_needs_rerun` look at contents, not existence -- treating
+a truncated artifact as finished silently reports partial results as final.
+
+`should_reset_legacy_skipped_stage` handles checkpoints written by an older
+version whose stage names no longer mean the same thing.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -8,14 +23,39 @@ TERMINAL_STAGES = {"qa_complete"}
 
 
 def should_treat_output_as_complete(output_path: Path) -> bool:
+    """Whether an existing output means this dataset can be skipped.
+
+    Existence alone, deliberately. The per-question outputs are written whole
+    at the end of a dataset rather than streamed, so a file that exists is a
+    file that finished. Content checks live in `retrieval_context_needs_rerun`,
+    which is applied per row where partial writes are actually possible.
+    """
     return output_path.exists()
 
 
 def should_reset_legacy_skipped_stage(checkpoint: dict) -> bool:
+    """Whether a checkpoint was left behind by the watchdog and must be redone.
+
+    The watchdog marks a stalled dataset "skipped_by_watchdog" so the run can
+    move on. That is a record of abandonment, not of completion, so resuming
+    must discard it -- treating it as a finished stage would permanently skip
+    a dataset that never actually ran.
+    """
     return checkpoint.get("stage") == "skipped_by_watchdog"
 
 
 def next_resume_stage(*, processed_count: int, checkpoint_every_n_sessions: int) -> str:
+    """Decide where an interrupted ingest resumes: mid-ingest, or from scratch.
+
+    Ingest is only checkpointed every N sessions, so a crash between
+    checkpoints leaves sessions ingested but unrecorded. Resuming mid-ingest is
+    only safe when the processed count lands exactly on a checkpoint boundary;
+    otherwise the graph holds writes the checkpoint does not know about, and
+    continuing would ingest them a second time.
+
+    Returns:
+        "ingest_in_progress" to resume, "new" to restart the dataset.
+    """
     if checkpoint_every_n_sessions <= 0:
         return "ingest_in_progress"
     if processed_count % checkpoint_every_n_sessions == 0:
@@ -24,6 +64,15 @@ def next_resume_stage(*, processed_count: int, checkpoint_every_n_sessions: int)
 
 
 def retrieval_context_needs_rerun(context: str) -> bool:
+    """Whether a stored retrieval context is unusable and must be recomputed.
+
+    Three ways a context is empty in practice, and all three have to be caught:
+    a genuinely empty string, the literal "nan" that pandas writes for a
+    missing cell on round-trip, and the explicit "(no KG context)" marker the
+    retriever emits when it found nothing. Missing the "nan" case is the
+    subtle one -- it is a non-empty string, so a naive truthiness check keeps
+    a row that has no context at all.
+    """
     value = str(context or "").strip()
     return value in ("", "nan") or "(no KG context)" in value
 
@@ -33,6 +82,18 @@ def checkpoint_is_terminal(checkpoint: dict) -> bool:
 
 
 def read_child_manifest(manifest_path: str | Path) -> list[tuple[str, str]]:
+    """Parse a child manifest of "category,dataset" lines.
+
+    Strict: a malformed line raises rather than being skipped, and an empty
+    manifest is an error too. A sweep driven by this file must not quietly
+    cover fewer datasets than intended -- the missing ones would simply be
+    absent from the results, indistinguishable from datasets that scored zero.
+
+    Blank lines and "#" comments are ignored.
+
+    Raises:
+        ValueError: Manifest missing, a line malformed, or no entries found.
+    """
     path = Path(manifest_path)
     if not path.exists():
         raise ValueError(f"Child manifest not found: {manifest_path}")

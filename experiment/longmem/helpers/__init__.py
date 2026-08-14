@@ -1,3 +1,9 @@
+"""Support modules for the LongMemEval runner.
+
+Names only; import the submodules directly. Several pull in pandas or the
+pipeline, and listing them here without importing keeps `--help` fast.
+"""
+
 __all__ = [
     "ablation_support",
     "analysis_cases",

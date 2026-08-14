@@ -1095,26 +1095,13 @@ def refine_context(
             final = final + pad[: min_keep - len(final)]
 
         # ── The evidence_floor blind pad was retired on 2026-07-20 ─────────────
-        # It force-fed entries in rerank order, bypassing the agent's decision, and
-        # contributed nothing to accuracy while distorting what "kept" means
-        # qualitatively (see the notes on
-        # experiment_config.grep_agent_evidence_floor). The block is kept commented
-        # out for reference; grep_agent_evidence_floor already defaults to 0.
-        # evidence_floor = int(p.get("grep_agent_evidence_floor", 0))
-        # if adjudicated:
-        #     evidence_floor = 0  # adjudication already decided item by item, informed; a blind pad only dilutes
-        # if evidence_floor > 0 and len(final) < evidence_floor:
-        #     final, coverage = _portfolio_pad(
-        #         question=question,
-        #         corpus=corpus,
-        #         seed_sids=seed_norm,
-        #         selected_sids=final,
-        #         target_size=min(evidence_floor, max_sids),
-        #         seed_scores=seed_scores_from_context(context),
-        #     )
-        #     trace["evidence_coverage"] = coverage
-        #     if coverage["added"]:
-        #         trace["evidence_floor_padded"] = coverage["added"]
+        # It padded `final` up to a floor in rerank order, which overrode the
+        # agent's per-item decision with a ranking signal the agent had already
+        # seen and rejected. It moved no accuracy, and it made "kept" ambiguous:
+        # a padded sid looks identical to an adjudicated one in the trace.
+        # grep_agent_evidence_floor now defaults to 0; see its note in
+        # experiment_config. Recover the implementation from git if it is ever
+        # revisited -- it should not come back without a metric to justify it.
 
         trace["final_sids"] = final
         trace["kept"] = [s for s in final if s in set(seed_norm)]
@@ -1262,20 +1249,9 @@ def finalize_from_raw(
         trace["min_keep_padded"] = pad[: min_keep - len(final)]
         final = final + pad[: min_keep - len(final)]
 
-    # ── The evidence_floor blind pad was retired on 2026-07-20 (see the note above
-    # and the config) ──────────────────────────────────────────────────────────
-    # evidence_floor = int(p.get("grep_agent_evidence_floor", 0))
-    # if adjudicated:
-    #     evidence_floor = 0
-    # if evidence_floor > 0 and len(final) < evidence_floor:
-    #     final, coverage = _portfolio_pad(
-    #         question=question, corpus=corpus, seed_sids=seed_norm,
-    #         selected_sids=final, target_size=min(evidence_floor, max_sids),
-    #         seed_scores=seed_scores_from_context(context),
-    #     )
-    #     trace["evidence_coverage"] = coverage
-    #     if coverage["added"]:
-    #         trace["evidence_floor_padded"] = coverage["added"]
+    # The evidence_floor blind pad was retired here too, for the same reason as
+    # in the batch path above. min_keep padding stays: it is a floor on the
+    # agent's own selection, not a rerank-ordered override of it.
 
     trace["final_sids"] = final
     trace["kept"] = [s for s in final if s in set(seed_norm)]

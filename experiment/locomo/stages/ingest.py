@@ -1,5 +1,17 @@
-# locamal_ingest.py
 # -*- coding: utf-8 -*-
+"""Ingest stage: turn LoCoMo conversation sessions into knowledge-graph writes.
+
+Sits between the dataset loaders and `grace_mem`'s Ingestor, reshaping sessions
+into the per-turn records ingestion expects.
+
+Two knobs here change what the graph ends up containing, so they belong to the
+experiment rather than to the pipeline. `chunk_turns` splits a long session into
+several ingestion units, which bounds how much context one extraction call
+sees. And MAKE_SESSION_UID namespaces session ids by sample: without it, two
+samples that both number their sessions from 1 would write into each other's
+provenance.
+"""
+
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional

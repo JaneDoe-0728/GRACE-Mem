@@ -1,3 +1,15 @@
+"""Adapters between the runner's arguments and the stage entry points.
+
+Thin by design: each function translates the runner's flat argument namespace
+into a stage call and hands back a plain dict. Keeping the translation here
+means the stages take explicit parameters rather than reaching into `args`,
+which is what lets them be called from tests and from the LongMem runner
+without an argparse namespace.
+
+`skipped_judge_stats` returns the same keys as a real judge result with None
+values, so downstream aggregation never has to special-case a skipped stage.
+"""
+
 import dataclasses
 from pathlib import Path
 from typing import Any, Sequence

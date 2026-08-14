@@ -1,3 +1,16 @@
+"""Shared progress table, written concurrently by every worker.
+
+A LongMemEval run spans many categories evaluated in parallel, and progress.csv
+is the one place that records where each stands. Because several processes
+append to it at once, every mutation goes through `file_lock` and the
+read-modify-write in `_mutate_progress` -- an unlocked update loses whichever
+worker wrote first.
+
+The file is also what makes a run resumable: on restart the runner reads it to
+decide what still needs doing, so a row that was never written looks like work
+that was never done.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -30,6 +43,19 @@ def progress_lock_path(base_output_dir: Path, filename: str = "progress.csv") ->
 
 
 def load_progress(base_output_dir: Path, filename: str = "progress.csv") -> pd.DataFrame:
+    """Read the progress table, returning an empty frame if it is unreadable.
+
+    Read as strings throughout: dataset names and statuses are categorical, and
+    letting pandas infer types turns a numeric-looking dataset name into a
+    float and breaks every subsequent match against it.
+
+    Missing columns are backfilled so callers can index them unconditionally,
+    which is what lets an older progress file be read by newer code.
+
+    A corrupt file yields an empty frame rather than raising -- this is called
+    while other processes are mid-write, so a transiently unparseable read is
+    expected. The caller holds the lock before any read-modify-write.
+    """
     path = progress_path(base_output_dir, filename)
     if path.exists():
         try:
@@ -48,6 +74,16 @@ def _mutate_progress(
     filename: str,
     updater: Callable[[pd.DataFrame], pd.DataFrame | None],
 ) -> None:
+    """Apply `updater` to the progress table under an exclusive file lock.
+
+    Every mutation goes through here. Several worker processes update this file
+    concurrently, and an unlocked read-modify-write loses whichever writer
+    finished first -- silently, and in a way that looks afterwards like the run
+    simply never did that work.
+
+    The lock is advisory (fcntl), so it holds only because all writers use this
+    function.
+    """
     ensure_dir(base_output_dir)
     with file_lock(progress_lock_path(base_output_dir, filename)):
         df = load_progress(base_output_dir, filename)
@@ -56,6 +92,12 @@ def _mutate_progress(
 
 
 def init_progress_rows(base_output_dir: Path, dataset_names: list[str], filename: str = "progress.csv") -> None:
+    """Seed a not_started row for each dataset, leaving existing rows alone.
+
+    Skipping datasets already present is what makes this safe to call on a
+    resumed run: re-seeding would reset completed datasets to not_started and
+    the run would redo all of them.
+    """
     def updater(df: pd.DataFrame) -> pd.DataFrame:
         existing = set(df["dataset"].astype(str).tolist())
         new_rows = []
@@ -92,6 +134,12 @@ def save_progress_row(
     generated_answer: str = "",
     filename: str = "progress.csv",
 ) -> None:
+    """Upsert one dataset's progress row.
+
+    Carries the question, gold, and generated answer alongside the status so the
+    progress table doubles as a live view of results -- a run can be inspected
+    without opening the per-category outputs.
+    """
     def updater(df: pd.DataFrame) -> pd.DataFrame:
         row = {
             "dataset": dataset,
@@ -125,6 +173,12 @@ def append_stuck_history_entry(
     entry: str,
     filename: str = "progress.csv",
 ) -> None:
+    """Append a stall record to a dataset's stuck_history.
+
+    Appends rather than overwrites because repeated stalls are the signal worth
+    having: one is a transient backend hiccup, three on the same dataset is a
+    reproducible problem with that data.
+    """
     def updater(df: pd.DataFrame) -> pd.DataFrame:
         if "stuck_history" not in df.columns:
             df["stuck_history"] = ""

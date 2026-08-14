@@ -1,3 +1,10 @@
+"""IO helpers for the LongMemEval runner, re-exported from `.io`.
+
+Flat here so callers write `from experiment.longmem.utils import read_jsonl_file`
+rather than reaching through the submodule; the split exists for file size, not
+as an interface boundary.
+"""
+
 from .io import (
     append_type_subdir,
     append_jsonl,

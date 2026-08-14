@@ -1,3 +1,14 @@
+"""CLI: report the shape of a LoCoMo dataset -- sessions, turns, question mix.
+
+Answers the questions that have to be settled before a result means anything:
+how long the conversations are, how many questions of each category there are,
+and whether the samples are comparable to each other. A retrieval improvement
+concentrated in one category reads very differently once you know that category
+is 4% of the set.
+
+Read-only. Nothing here touches a run.
+"""
+
 from __future__ import annotations
 
 import argparse

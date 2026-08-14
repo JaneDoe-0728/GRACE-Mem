@@ -1,3 +1,13 @@
+"""Path and result plumbing for ablation sweeps.
+
+An ablation runs the same evaluation many times with one thing changed, so the
+question this module answers is where each variant's output goes and how the
+variants get compared afterwards. Scenario-scoped paths keep the runs from
+overwriting each other, and `upsert_result_csv` accumulates their accuracies
+into one comparison table as each finishes -- upsert rather than append so a
+re-run of one variant replaces its row instead of adding a second.
+"""
+
 from __future__ import annotations
 
 import importlib.util

@@ -43,6 +43,12 @@ def find_numeric_csvs(dir_path: Path) -> list[Path]:
 
 
 def read_csvs(csv_files: Sequence[Path]) -> tuple[list[DataFrame], list[str]]:
+    """Read several CSVs into one frame, skipping any that are missing or empty.
+
+    Tolerant because aggregation runs over whatever samples finished; a sample
+    that failed leaves no CSV, and that should shorten the aggregate rather than
+    abort it.
+    """
     pd = _require_pandas()
     frames: list[DataFrame] = []
     errors: list[str] = []
@@ -73,6 +79,12 @@ def merge_eval_csvs(
     csv_files: Sequence[Path],
     sample_lookup: dict[int, dict[str, str]],
 ) -> tuple[DataFrame, list[str]]:
+    """Concatenate per-sample eval CSVs into one run-level table.
+
+    Rows are tagged with their sample index, since they lose their origin once
+    concatenated and per-sample breakdown is how a run-wide regression gets
+    localised.
+    """
     pd = _require_pandas()
     frames: list[DataFrame] = []
     errors: list[str] = []
@@ -114,6 +126,13 @@ def aggregate_judge_csv_files(
     note: str = "overall stats only include samples with judge CSVs",
     sample_name_fn: Callable[[Path], str] | None = None,
 ) -> tuple[Dict[str, Any], DataFrame]:
+    """Combine per-sample judge CSVs into overall and per-category accuracy.
+
+    Rows with no parseable verdict are excluded from both numerator and
+    denominator rather than counted wrong -- an unjudged question is missing
+    data, and scoring it as incorrect makes an interrupted judge run look like a
+    quality regression.
+    """
     pd = _require_pandas()
     merged_frames: list[DataFrame] = []
     per_sample: Dict[str, Dict[str, object]] = {}
@@ -172,6 +191,12 @@ def _summary_entry_from_payload(data: dict[str, Any], source: Path | str) -> Dic
 
 
 def _missing_entry() -> Dict[str, object]:
+    """Placeholder summary for a sample that produced no output.
+
+    Emitted rather than omitted so a missing sample is visible in the run
+    summary. Silently skipping it would make a run of eight samples and a run of
+    ten look alike apart from the averages.
+    """
     return {
         "avg_correctness": None,
         "avg_correctness_percent": None,

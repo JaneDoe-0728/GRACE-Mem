@@ -1,3 +1,13 @@
+"""CLI: collapse LongMem per-case analysis JSON into one summary CSV.
+
+Reads the case files written during a run and emits a row per case, which is
+the form the comparison notebooks and spreadsheets consume.
+
+Paths are conventional: given --run-tag and --type it locates the analysis
+directory itself. --input and --output override that for one-off inspection of
+files sitting outside the usual layout.
+"""
+
 from __future__ import annotations
 
 import argparse

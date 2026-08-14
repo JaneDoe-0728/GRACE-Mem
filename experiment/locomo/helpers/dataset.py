@@ -1,3 +1,17 @@
+"""Load and normalize the LoCoMo datasets into the shapes the pipeline expects.
+
+The two supported variants -- "locomo" and "locomo-plus" -- ship with different
+filenames and slightly different question schemas, so paths are resolved by
+trying known candidates and question records are normalized to one form before
+anything downstream sees them. Everything past this module can then treat the
+variants identically.
+
+Adversarial questions are handled explicitly rather than filtered at the edges.
+They are unanswerable by construction, so scoring them alongside ordinary
+questions conflates "retrieved the wrong thing" with "correctly found nothing";
+`include_adversarial` keeps that decision in one place.
+"""
+
 from __future__ import annotations
 
 import re
@@ -66,6 +80,16 @@ def resolve_dataset_path(
     data_dir: str | Path | None = None,
     required: bool = True,
 ) -> Path | None:
+    """Find a dataset file by trying the known filenames for that variant.
+
+    Candidates rather than one fixed name because the released files have been
+    named differently across revisions (locomo10.json, locomo.json), and a run
+    should work against whichever copy is present.
+
+    Raises:
+        FileNotFoundError: When no candidate exists -- failing here beats
+            proceeding with an empty dataset and reporting zero accuracy.
+    """
     dataset = normalize_dataset_name(dataset)
     if explicit_path:
         path = Path(explicit_path)
@@ -107,6 +131,19 @@ def is_adversarial_category(value: Any) -> bool:
 
 
 def normalize_qa_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize one question record into the shape the pipeline expects.
+
+    The field names differ across dataset variants and across their revisions --
+    a question is "question", "trigger", or "query"; a gold answer is "answer",
+    "gold_answer", or "reference_answer" -- so each is resolved by trying the
+    known aliases. Everything downstream can then assume one schema.
+
+    Evidence is coerced to a list because a single-evidence question stores a
+    bare string, and code iterating it would otherwise walk the characters.
+
+    The original record is kept under "raw", so a field this normalization does
+    not know about is still reachable.
+    """
     question = item.get("question", item.get("trigger", item.get("query", "")))
     answer = item.get("answer", item.get("gold_answer", item.get("reference_answer", "")))
     adversarial_answer = item.get("adversarial_answer", "")
@@ -138,6 +175,14 @@ def is_adversarial_item(item: Dict[str, Any]) -> bool:
 
 
 def load_qa_items(path: str | Path, *, sample_index: int, include_adversarial: bool = True) -> List[Dict[str, Any]]:
+    """Load one sample's questions, normalized, optionally dropping adversarial ones.
+
+    Args:
+        include_adversarial: Adversarial questions are unanswerable by
+            construction. Excluding them keeps them out of an accuracy average
+            that would otherwise conflate "retrieved the wrong evidence" with
+            "correctly declined to answer".
+    """
     samples = load_raw_samples(path)
     if sample_index < 0 or sample_index >= len(samples):
         raise ValueError(f"sample_index out of range: {sample_index} (available: 0-{len(samples) - 1})")
@@ -159,6 +204,11 @@ def load_qa_items(path: str | Path, *, sample_index: int, include_adversarial: b
 
 
 def _parse_turn(line: str) -> Dict[str, Any] | None:
+    """Parse one "Speaker: text" dialogue line, or None if it is not one.
+
+    Returning None rather than raising lets the caller skip blank lines and
+    headers while parsing a transcript, without pre-filtering it.
+    """
     text = line.strip()
     if not text:
         return None
@@ -182,6 +232,16 @@ def _parse_turn(line: str) -> Dict[str, Any] | None:
 
 
 def build_conversation_from_input_prompt(prompt: str) -> Dict[str, Any]:
+    """Recover a structured conversation from a flattened prompt string.
+
+    Some dataset variants ship the conversation already rendered into the prompt
+    rather than as structured sessions. Parsing it back is what lets those
+    variants use the same ingestion path as the rest, instead of a second one
+    that would have to be kept in step with it.
+
+    Best-effort: lines that do not parse as turns are skipped, so a malformed
+    prompt yields a shorter conversation rather than an exception.
+    """
     conversation: Dict[str, Any] = {}
     speakers: List[str] = []
     segments = prompt.split("\n\nDATE: ")
@@ -250,6 +310,13 @@ def get_sample_speakers(conversation: Dict[str, Any]) -> tuple[str | None, str |
 
 
 def build_session_records_from_json(path: str | Path) -> List[Dict[str, Any]]:
+    """Turn a raw sample into per-session records ready for ingestion.
+
+    Sessions are emitted in numeric order, not the dict order of the source
+    JSON. Ingestion is sequential and provenance is positional, so ingesting
+    session 10 before session 2 puts turns in the graph in an order the
+    conversation never had.
+    """
     samples = load_raw_samples(path)
     records: List[Dict[str, Any]] = []
     for sample_index, sample in enumerate(samples):

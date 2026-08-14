@@ -1,3 +1,19 @@
+"""Orchestrator: runs each LoCoMo sample as a separate worker subprocess.
+
+Samples run in subprocesses rather than in-process threads, and that is the
+central design decision here. Each sample builds a knowledge graph and loads
+model weights; process isolation means a worker that leaks memory, corrupts its
+graph, or dies outright takes nothing with it, and the orchestrator can record
+the failure and continue. It also makes KG_ARTIFACTS_DIR a genuine per-sample
+boundary, since it is set in the child's environment.
+
+The cost is that everything crossing the boundary must be a file or a CLI
+argument -- hence the artifact protocol in `helpers/sample_hooks.py`.
+
+Run metadata is written before any sample executes, so an interrupted run is
+still self-describing.
+"""
+
 import json
 import subprocess
 import sys

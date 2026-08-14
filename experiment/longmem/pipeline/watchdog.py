@@ -167,6 +167,13 @@ TERMINAL_STAGES = {"qa_complete", "error"}
 
 
 def dataset_complete(output_dir: Path, dataset_name: str) -> bool:
+    """Whether a dataset finished, judged from its output rather than its status.
+
+    The watchdog cannot trust the progress table here: a worker that died mid
+    write may have left a status that never advanced past in-progress. Checking
+    the output directly is what distinguishes a stalled run from a finished one
+    whose bookkeeping was lost.
+    """
     output_csv = output_dir / f"{dataset_name}.csv"
     if output_csv.exists():
         return True
@@ -206,6 +213,12 @@ def count_same_progress_stuck_events(
 
 
 def ordered_session_ids(csv_path: Path) -> list[str]:
+    """Return a dataset's session ids in conversation order.
+
+    Numeric where possible, so session 10 follows 9 rather than 1. Ingestion is
+    sequential and provenance is positional, so lexical order would place turns
+    in the graph in an order the conversation never had.
+    """
     seen: list[str] = []
     with open(csv_path, encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -391,6 +404,7 @@ def all_datasets_complete(
     pattern: str,
     dataset_selector: str | None = None,
 ) -> bool:
+    """Whether every selected dataset has usable output -- the run's stop condition."""
     completed, total = count_completion_selected(data_folder, output_root, pattern, dataset_selector)
     return total > 0 and completed >= total
 
@@ -403,6 +417,20 @@ def mark_stuck_child_datasets_as_skipped(
     dataset_selector: str | None,
     logger: logging.Logger,
 ) -> list[str]:
+    """Mark datasets that stopped making progress as skipped, so the sweep continues.
+
+    A sweep spans many datasets and a single wedged one -- a hung backend, a
+    pathological conversation -- would otherwise block all of them indefinitely.
+
+    Skipping is recorded, never silent: each is appended to watchdog_stuck.jsonl
+    and written into the dataset's stuck_history. That record is what keeps a
+    skipped dataset from being mistaken for one that legitimately scored zero,
+    and `should_reset_legacy_skipped_stage` makes a later resume redo it rather
+    than trusting the marker as completion.
+
+    Returns:
+        The datasets marked skipped.
+    """
     skipped = []
     grouped = resolve_child_datasets(data_root, child_file, type_name=type_name)
     stuck_log_path = output_root / "watchdog_stuck.jsonl"

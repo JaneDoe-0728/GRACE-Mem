@@ -1,3 +1,13 @@
+"""Per-dataset checkpoints, so an interrupted category resumes mid-way.
+
+Coarser than the progress table: progress.csv tracks whether a category is
+done, while a checkpoint records how far into one category the run got. A
+category can hold hundreds of questions, and losing all of them to a crash
+near the end is the cost this avoids.
+
+Keyed by DatasetConfig so two categories never share a checkpoint file.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

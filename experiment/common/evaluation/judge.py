@@ -150,6 +150,20 @@ _NUMBER_WORDS = {
 
 
 def _parse_anchor_date(value: str) -> datetime | None:
+    """Parse a date written the way conversations write them, not ISO.
+
+    Gold answers carry human phrasing -- "15 July 2023", "July, 2023", bare
+    "2023" -- so an explicit format list is tried before falling back to
+    `dateparser`. The explicit list runs first because it is deterministic and
+    fast; dateparser is lenient enough to interpret ambiguous input in ways
+    that differ between versions.
+
+    `PREFER_DAY_OF_MONTH: first` makes a month-only value resolve to that
+    month's start, so a range built from it covers the whole month rather than
+    an arbitrary day inside it.
+
+    Returns None when nothing parses, which the caller treats as "not a date".
+    """
     value = value.strip().rstrip(".,")
     for fmt in (
         "%d %B %Y",
@@ -345,6 +359,17 @@ class JudgeEngine:
 
 
 def openai_api_key() -> str | None:
+    """Find an OpenAI key in the environment, falling back to the repo .env.
+
+    The .env is read by regex rather than loaded, so that reading a key never
+    has the side effect of exporting every other variable in that file into the
+    process -- which would silently override a deliberately set model or
+    endpoint.
+
+    Returns None when no key is found; callers treat that as "not an OpenAI
+    endpoint" rather than an error, since most runs judge against a local
+    model.
+    """
     key = os.environ.get("OPENAI_API_KEY")
     if key:
         return key
@@ -358,11 +383,30 @@ def openai_api_key() -> str | None:
 
 
 def find_column(frame: pd.DataFrame, candidates: Sequence[str]) -> str | None:
+    """Find the first candidate column present, ignoring case and any BOM.
+
+    The eval CSVs have been written by several generations of this tooling
+    under different column names, and are frequently round-tripped through
+    Excel, which prepends a BOM to the first header. Matching case-insensitively
+    with the BOM stripped is what lets current code read older outputs.
+
+    Returns the actual column name as it appears in the frame, or None.
+    """
     columns = {column.lower().lstrip("\ufeff"): column for column in frame.columns}
     return next((columns[name.lower()] for name in candidates if name.lower() in columns), None)
 
 
 def _sample_ids(value: str) -> list[int]:
+    """Expand a CLI sample spec like "0,2,5-7" into [0, 2, 5, 6, 7].
+
+    Ranges are inclusive on both ends, matching how sample ids are written in
+    the run logs.
+
+    Raises:
+        ValueError: On a malformed part. Deliberately unhandled -- a typo in a
+            sample list should stop the run, not silently judge a different set
+            than was asked for.
+    """
     result: list[int] = []
     for part in value.split(","):
         if "-" in part:
@@ -374,6 +418,17 @@ def _sample_ids(value: str) -> list[int]:
 
 
 def _client_factory(args: argparse.Namespace) -> Callable[[], LLMClient]:
+    """Return a factory giving each thread its own LLMClient.
+
+    Judging is parallelised across questions, and LLMClient is not thread-safe.
+    Thread-local storage gives each worker its own client while still
+    constructing them lazily, so a run using fewer threads than the pool
+    allows does not open connections it never uses.
+
+    The API key is only attached for a genuine OpenAI endpoint; a local
+    backend is given none, which keeps a real key out of requests that leave
+    for somewhere else.
+    """
     local = threading.local()
 
     def factory() -> LLMClient:
@@ -390,6 +445,19 @@ def _client_factory(args: argparse.Namespace) -> Callable[[], LLMClient]:
 
 
 def _locomo_paths(run_dir: Path, sample_id: int) -> tuple[Path, Path] | None:
+    """Resolve one sample's (judge input, judge output) paths.
+
+    Resolution is ordered so re-judging is idempotent: an existing
+    `_judge_4omini.csv` is returned as both source and target, meaning a second
+    run updates that file in place rather than re-judging from raw and
+    discarding what was already scored.
+
+    Failing that it prefers a raw eval CSV over a legacy `_judge.csv`, since
+    the raw file is the unjudged record and the legacy one carries a previous
+    judge's verdicts.
+
+    Returns None when the sample directory holds nothing judgeable.
+    """
     sample_dir = run_dir / f"sample_{sample_id}"
     existing = sorted(sample_dir.glob("*_judge_4omini.csv"))
     if existing:
@@ -415,6 +483,26 @@ def _judge_locomo_file(
     workers: int,
     dry_run: bool,
 ) -> tuple[int, int, int]:
+    """Judge one LoCoMo file, skipping rows that already carry a verdict.
+
+    Resumable by design: reading from `output` when it exists and skipping rows
+    whose target column is already binary means an interrupted judge run
+    continues rather than restarting, and re-running costs nothing.
+
+    Args:
+        votes: 1 writes the single-vote column; more runs a majority vote and
+            writes the majority column, keeping the single-vote column intact
+            so the two can be compared.
+        dry_run: Count the work without calling the model.
+
+    Returns:
+        (judged, skipped, failed).
+
+    Raises:
+        ValueError: If question, gold, or generated-answer columns are absent.
+            Raised rather than skipped -- a file missing them is not a file
+            with nothing to do, it is the wrong file.
+    """
     frame = pd.read_csv(output if output.exists() else source, encoding="utf-8-sig")
     question_col = find_column(frame, ["question"])
     gold_col = find_column(frame, ["gold_answer", "answer", "gold"])
@@ -477,6 +565,21 @@ def _judge_locomo_file(
 
 
 def _score_locomo(paths: Iterable[Path], column: str, include_adversarial: bool) -> dict:
+    """Aggregate accuracy over judged files, overall and per category.
+
+    Rows with no parseable verdict are excluded from both numerator and
+    denominator rather than counted wrong -- an unjudged row is missing data,
+    and scoring it as incorrect would make an interrupted judge run look like
+    a quality regression.
+
+    Args:
+        include_adversarial: Adversarial questions are unanswerable by
+            construction; folding them into one average conflates finding the
+            wrong evidence with correctly declining to answer.
+
+    Returns:
+        Overall counts plus a per-category breakdown.
+    """
     total = correct = 0
     by_category: dict[str, list[int]] = {}
     for path in paths:
@@ -511,6 +614,12 @@ def _score_locomo(paths: Iterable[Path], column: str, include_adversarial: bool)
 
 
 def run_locomo(args: argparse.Namespace) -> int:
+    """Judge every requested LoCoMo sample and print the aggregate score.
+
+    Returns:
+        A process exit code: non-zero if any file failed to judge, so a partial
+        run does not report success from a shell.
+    """
     output_root = Path(args.output_root)
     client_factory = _client_factory(args)
     sample_ids = _sample_ids(args.samples)
@@ -555,6 +664,20 @@ def _judge_longmem_file(
     column: str | None,
     dry_run: bool,
 ) -> tuple[int, int, str]:
+    """Judge one LongMemEval category file, resuming where a prior run stopped.
+
+    The LongMem counterpart to `_judge_locomo_file`. Kept separate rather than
+    unified because the two datasets carry different columns and different
+    category semantics, and a shared implementation obscured which file's
+    schema an error came from.
+
+    Args:
+        column: Explicit verdict column, or None to derive it from `votes`.
+
+    Returns:
+        (judged, skipped, error message) -- the third element is a string here
+        rather than a count, since a LongMem file fails as a whole.
+    """
     frame = pd.read_csv(path, encoding="utf-8-sig")
     question_col = find_column(frame, ["question"])
     gold_col = find_column(frame, ["answer", "gold_answer"])

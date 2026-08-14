@@ -1,3 +1,16 @@
+"""Sample-level hooks: prepare state before a worker, capture it after.
+
+The counterpart to `run_hooks`, one level down. These restore a sample's
+artifacts and graph before evaluation and export them afterwards, which is what
+makes a run resumable and lets consecutive samples on the same conversation
+skip the rebuild entirely.
+
+Order matters throughout: vector artifacts are restored before the manager is
+asked to reload them, and the graph is validated before it is exported. Getting
+either backwards yields a sample that evaluates against incomplete state
+without raising -- the failure appears only as unexplained low accuracy.
+"""
+
 import shutil
 import subprocess
 import sys

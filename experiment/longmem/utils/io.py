@@ -1,3 +1,14 @@
+"""File IO for the LongMemEval runner, including the cross-process lock.
+
+`fcntl`-based `file_lock` is the reason this module exists in its own right.
+Several worker processes append to the same progress table, and without an
+advisory lock a read-modify-write from two of them loses one worker's update
+outright -- and the run then looks like it simply never did that work.
+
+Being fcntl, the lock is POSIX-only and advisory: it holds because every writer
+here goes through this helper, not because the OS enforces it.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -85,6 +96,12 @@ def append_jsonl(path: Path, record: dict, *, ensure_parent: bool = True) -> Non
 
 
 def read_jsonl_file(path: Path, *, encoding: str = "utf-8") -> list[dict]:
+    """Read a JSONL file, skipping lines that do not parse.
+
+    These files are appended to while a run is in progress, so the final line is
+    routinely a partial write. Failing the whole read for it would make live
+    inspection impossible.
+    """
     if not path.exists():
         return []
     lines: list[dict] = []
@@ -106,6 +123,15 @@ def read_csv_frame(path: Path, **kwargs) -> pd.DataFrame:
 
 @contextmanager
 def file_lock(path: Path):
+    """Hold an exclusive advisory lock on `path` for the duration of the block.
+
+    The cross-process mutex behind every shared-file update in a LongMem run.
+    Being fcntl-based it is POSIX-only and advisory: it protects only against
+    writers that also take it, so a direct write to a locked file is not
+    blocked.
+
+    Blocks until the lock is available.
+    """
     ensure_dir(path.parent)
     with open(path, "a+", encoding="utf-8") as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
@@ -122,6 +148,12 @@ def _atomic_replace(temp_path: Path, target_path: Path) -> None:
 
 
 def write_csv_frame(df: pd.DataFrame, path: Path, **kwargs) -> None:
+    """Write a dataframe to CSV via a temp file, then move it into place.
+
+    Written atomically because readers -- the watchdog, a live progress check --
+    run concurrently with writers, and a direct write exposes a truncated file
+    for the duration of the write.
+    """
     ensure_dir(path.parent)
     options = {"index": False, "encoding": "utf-8-sig"}
     options.update(kwargs)
@@ -147,6 +179,14 @@ def upsert_csv_row(
     read_kwargs: dict[str, Any] | None = None,
     write_kwargs: dict[str, Any] | None = None,
 ) -> None:
+    """Insert or replace one row in a CSV, matched on a key column.
+
+    Upsert rather than append so re-running one dataset replaces its row instead
+    of adding a second -- two rows for one dataset would be double-counted by
+    every aggregate that reads this file.
+
+    Caller is responsible for holding the lock when other processes may write.
+    """
     row_str = {key: str(value) for key, value in row.items()}
     if path.exists():
         df = read_csv_frame(path, **(read_kwargs or {"dtype": str}))

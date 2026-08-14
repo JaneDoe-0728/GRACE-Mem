@@ -71,6 +71,15 @@ class LexicalScore:
 
 @dataclass(frozen=True)
 class RunScore:
+    """One run's full score: overall, per category, lexical, and agent stats.
+
+    Per-category numbers sit alongside the overall figure because an aggregate
+    routinely hides a regression in one question type behind a gain in another.
+    `lexical` (F1/BLEU) is carried as a cross-check on the LLM judge: a run
+    where judged accuracy moved but lexical overlap did not usually means the
+    judge changed its mind rather than the system improving.
+    """
+
     run: str
     benchmark: str
     protocol: str
@@ -83,6 +92,19 @@ class RunScore:
 
 
 def resolve_run(reference: str, benchmark: str = "auto") -> tuple[Path, str]:
+    """Resolve a run reference to (directory, benchmark), or fail loudly.
+
+    Accepts either a path or a bare run tag, since tags are what appear in
+    notes and issues. A tag is looked up under both benchmark output roots.
+
+    An ambiguous tag -- the same name used for a LoCoMo run and a LongMem one
+    -- raises rather than picking one. Silently choosing would score the wrong
+    run against the right name, which is indistinguishable from a real result.
+
+    Raises:
+        FileNotFoundError: No run matches.
+        ValueError: The tag matches under both benchmarks; pass --benchmark.
+    """
     direct = Path(reference).expanduser()
     candidates: list[tuple[Path, str]] = []
     if direct.is_dir():
@@ -125,6 +147,15 @@ def _value(row: pd.Series, names: Sequence[str]) -> str:
 
 
 def load_longmem(run_dir: Path, column: str | None) -> list[ScoredItem]:
+    """Load scored items from a LongMemEval run directory.
+
+    The verdict column is chosen per file when `column` is None: abstention
+    files carry their verdict in a different column, and reading the majority
+    column there would score every abstention as unjudged.
+
+    Rows with no parseable verdict are dropped rather than counted wrong -- an
+    unjudged question is missing data, not a failure.
+    """
     items: list[ScoredItem] = []
     for category in LONGMEM_CATEGORIES:
         for path in sorted((run_dir / category).glob("*.csv")):
@@ -151,6 +182,16 @@ def load_longmem(run_dir: Path, column: str | None) -> list[ScoredItem]:
 
 
 def _locomo_category_map() -> dict[tuple[int, str], str]:
+    """Map (sample index, question text) to its category label.
+
+    Keyed on the question text because the eval CSVs do not carry the category
+    -- it lives only in the source dataset, and this is the join back to it.
+    A question whose text was normalized differently between the two therefore
+    falls out of the per-category breakdown while still counting in the total.
+
+    Returns {} when the dataset file is absent, which drops the breakdown
+    rather than failing the whole scoring run.
+    """
     if not LOCOMO_DATA.exists():
         return {}
     data = json.loads(LOCOMO_DATA.read_text(encoding="utf-8"))
@@ -164,6 +205,12 @@ def _locomo_category_map() -> dict[tuple[int, str], str]:
 
 
 def _locomo_judge_file(sample_dir: Path) -> Path | None:
+    """Pick a sample's judge CSV, preferring the current naming over legacy.
+
+    Both may exist in a directory judged by successive versions of the tooling;
+    preferring the newer one keeps scoring consistent with the most recent
+    judge rather than whichever file sorts first.
+    """
     preferred = sorted(sample_dir.glob("*_judge_4omini.csv"))
     if preferred:
         return preferred[0]
@@ -177,6 +224,16 @@ def load_locomo(
     *,
     include_adversarial: bool,
 ) -> list[ScoredItem]:
+    """Load scored items from a LoCoMo run directory, joining in categories.
+
+    Categories come from the source dataset rather than the eval CSVs, which do
+    not carry them. A question whose text was normalized differently between the
+    two drops out of the per-category breakdown but still counts in the total,
+    so the category numbers can sum to less than the overall figure.
+
+    Args:
+        include_adversarial: Fold unanswerable questions into the score.
+    """
     category_map = _locomo_category_map()
     target = column or MAJORITY_VOTE_COLUMN
     items: list[ScoredItem] = []
@@ -221,6 +278,7 @@ def _count_value(value: object) -> int | None:
 
 
 def _agent_records(run_dir: Path, benchmark: str) -> list[dict]:
+    """Load the agent trace records for a run, or [] when the agent did not run."""
     patterns = (
         ("*/_grep_agent_traces.jsonl",)
         if benchmark == "longmem"
@@ -246,6 +304,12 @@ def _agent_records(run_dir: Path, benchmark: str) -> list[dict]:
 
 
 def score_agent(run_dir: Path, benchmark: str) -> dict[str, object] | None:
+    """Summarize the grep agent's effect: what it kept, added, and dropped.
+
+    Reported separately from accuracy because the agent's job is to change the
+    evidence set, and its contribution is only visible as the difference between
+    what retrieval offered and what survived.
+    """
     records = _agent_records(run_dir, benchmark)
     if not records:
         return None
@@ -277,6 +341,12 @@ def score_run(
     include_adversarial: bool = False,
     include_agent: bool = False,
 ) -> RunScore:
+    """Score one run: overall, per category, lexical, and agent statistics.
+
+    The top-level entry point. Lexical metrics are computed alongside the judged
+    accuracy as a cross-check -- judged accuracy moving while lexical overlap
+    holds still usually means the judge changed, not the system.
+    """
     items = (
         load_longmem(run_dir, column)
         if benchmark == "longmem"

@@ -1,3 +1,11 @@
+"""Judge and open-domain prompts, plus their message builders.
+
+The `build_*` wrappers below forward to `helpers.llm` at call time rather than
+importing it here. That indirection breaks a cycle: the helpers need the prompt
+templates this package exports, so importing them at module scope would have
+each waiting on the other.
+"""
+
 from .judge import PROMPT_TEMPLATES, SYSTEM_PROMPT_PLUS
 
 

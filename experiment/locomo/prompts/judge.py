@@ -1,3 +1,19 @@
+"""Judge prompts for LoCoMo: is a generated answer equivalent to the gold one?
+
+The grading task is equivalence, not string match. Gold answers are short
+phrases while generated answers are sentences, so "CORRECT" has to mean the
+same fact stated differently. The prompts spell that out because a judge left
+to its own reading of "correct" drifts toward rewarding fluency.
+
+CORRECT/WRONG is deliberately binary. A graded score would need a rubric the
+judge applies consistently across thousands of questions, and in practice it
+does not -- the binary call is the one that reproduces.
+
+PROMPT_TEMPLATES is keyed by question category so the judge can be told what
+kind of answer to expect; a temporal question and an open-domain one fail in
+different ways.
+"""
+
 SYSTEM_PROMPT = (
     "You are an expert grader that determines if answers to questions match a gold standard answer."
 )

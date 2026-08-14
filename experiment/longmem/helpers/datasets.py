@@ -1,3 +1,16 @@
+"""Discover and select which LongMemEval datasets a run should cover.
+
+A "dataset" here is one category's CSV. Selection has to reconcile several
+inputs -- explicit names, glob patterns, what exists on disk, and what a
+previous run already completed -- which is why it is a module rather than a
+line in the runner.
+
+`output_csv_needs_rerun` is the resume predicate: it decides whether an
+existing output is complete enough to keep. Getting it wrong in one direction
+wastes a full re-run, and in the other silently keeps a truncated result and
+reports it as final.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

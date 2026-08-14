@@ -1,3 +1,20 @@
+"""LLM access for the LoCoMo evaluation and judging stages.
+
+Separate from `grace_mem.llm.client` on purpose. That client serves the system
+under test; this one serves the evaluator, and mixing them would put judge
+tokens into the pipeline's own cost accounting and make the two share retry and
+seeding behaviour that should be tunable independently.
+
+The same seed negotiation appears here as in the pipeline client -- send
+seeded, retry unseeded if the backend rejects it, log the transition once --
+because a judge that silently stopped being deterministic would move scores
+between runs for reasons unrelated to the change under test.
+
+The `build_*_messages` builders exist per (task, dataset variant) pair because
+locomo-plus supplies extra context that changes the prompt's shape, not just
+its content.
+"""
+
 import json
 import os
 import sys
@@ -33,6 +50,22 @@ def _chat_completion(
     timeout: int = 120,
 ) -> dict:
     # Judge calls use a dedicated endpoint when JUDGE_LLM_API is set.
+    """Post one chat completion to the judge endpoint, retrying unseeded if rejected.
+
+    JUDGE_LLM_API and JUDGE_MODEL_NAME take precedence over the pipeline's own
+    LLM_API and MODEL_NAME. That separation is the point: judging the system
+    with the same model that generated the answers lets a model's preference for
+    its own phrasing show up as accuracy.
+
+    The seed dance mirrors `grace_mem.llm.client` -- send seeded, retry once
+    unseeded on a 400/422 mentioning "seed", and log the transition once so a run
+    that quietly lost determinism is visible in the log rather than only in
+    diverging scores.
+
+    Raises:
+        requests.HTTPError: On any non-seed failure.
+        RuntimeError: If the backend returns a non-object payload.
+    """
     base_url = (os.getenv("JUDGE_LLM_API") or os.getenv("LLM_API") or "").rstrip("/")
     model_name = os.getenv("JUDGE_MODEL_NAME") or os.getenv("MODEL_NAME", "")
     seed = get_runtime_reproducibility().seed
@@ -69,6 +102,12 @@ def _chat_completion(
 
 
 def _extract_completion_text(payload: dict) -> tuple[str, dict]:
+    """Pull the reply text and usage block out of a completion payload.
+
+    Returns:
+        (text, usage). Usage is {} when the backend omitted it, so callers can
+        index it without guarding.
+    """
     choices = payload.get("choices") or []
     choice0 = choices[0] if choices else {}
     message = choice0.get("message") or {}
@@ -90,6 +129,12 @@ def llm_post(
     retry_sleep_sec: float = 1.0,
     return_meta: bool = False,
 ) -> str | tuple[str, dict]:
+    """Send a chat completion with retries, returning just the reply text.
+
+    The workhorse for judging and answer generation. Retries because judging a
+    full run makes thousands of calls and a transient failure would otherwise
+    leave a hole in the results that reads as a wrong answer.
+    """
     last_content = ""
     last_meta: dict = {}
     last_error: Exception | None = None
@@ -159,6 +204,12 @@ def llm_post_json(messages: list[dict], *, temperature: float = 0.1, max_tokens:
 
 
 def normalize_prompt_category(label: str, category: str | None) -> str:
+    """Map a question's category onto the prompt template that should grade it.
+
+    Categories have been labelled differently across dataset revisions, and an
+    unrecognised label must not silently select the wrong rubric -- a temporal
+    question graded by the open-domain prompt is scored on the wrong criterion.
+    """
     normalized = str(category or "").strip()
     if normalized.lower() == "common-sense":
         return "common-sense"

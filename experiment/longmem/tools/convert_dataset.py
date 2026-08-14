@@ -45,6 +45,12 @@ _SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 
 @dataclass(frozen=True)
 class ConversionSummary:
+    """What one dataset conversion produced, for the manifest.
+
+    Written alongside the output so a later run can tell whether an existing
+    conversion matches the source it would produce now -- see
+    `_matching_complete_manifest`.
+    """
     source_file: str
     source_revision: str
     source_sha256: str
@@ -137,6 +143,12 @@ def _required(record: dict[str, Any], key: str, expected_type: type) -> Any:
 
 
 def _text_scalar(record: dict[str, Any], key: str) -> str:
+    """Coerce a field to a stripped string, tolerating the shapes the source uses.
+
+    The upstream JSON is inconsistent about whether a text field is a string, a
+    single-element list, or absent, and each variant would otherwise need
+    handling at every call site.
+    """
     value = record.get(key)
     if isinstance(value, str):
         return value
@@ -149,6 +161,16 @@ def _text_scalar(record: dict[str, Any], key: str) -> str:
 
 
 def _rows_for_record(record: dict[str, Any]) -> tuple[str, str, list[dict[str, Any]]]:
+    """Expand one upstream question record into per-turn CSV rows.
+
+    The core of the conversion. Upstream nests sessions inside a question; the
+    pipeline wants one row per turn carrying session id, turn index, role, text,
+    and the has_answer marker.
+
+    That marker is the part to get right: it is what every recall and oracle
+    measurement is computed against, so a turn mislabelled here silently shifts
+    every downstream number for that question.
+    """
     question_id = _required(record, "question_id", str).strip()
     if not question_id or not _SAFE_ID.fullmatch(question_id):
         raise ValueError(f"Unsafe or empty LongMemEval question_id: {question_id!r}")
@@ -249,6 +271,13 @@ def _matching_complete_manifest(
     source_sha256: str,
     variant: str,
 ) -> ConversionSummary | None:
+    """Whether an existing conversion still matches what would be produced now.
+
+    Comparing the manifest against the current source is what makes conversion
+    skippable. Existence alone is not enough -- a conversion from a different
+    source revision would be silently reused and every result computed against
+    the wrong data.
+    """
     manifest = _read_manifest(output_dir / MANIFEST_NAME)
     if not manifest:
         return None
@@ -272,6 +301,11 @@ def _matching_complete_manifest(
 
 
 def _write_question_csv(path: Path, rows: list[dict[str, Any]]) -> str:
+    """Write one question's turns to its own CSV.
+
+    One file per question, not per category: the pipeline evaluates questions
+    independently and in parallel, and a shared file would serialize them.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_suffix(path.suffix + ".tmp")
     try:
@@ -295,6 +329,14 @@ def convert_longmem_dataset(
     variant: str,
     force: bool = False,
 ) -> ConversionSummary:
+    """Convert the upstream LongMemEval JSON into per-question CSVs.
+
+    Skips the work when a manifest shows an existing conversion matches the
+    current source, so this is cheap to call on every run.
+
+    Returns:
+        A summary of what was written, which becomes the new manifest.
+    """
     source = source.resolve()
     output_dir = output_dir.resolve()
     if not source.is_file():

@@ -53,6 +53,19 @@ EVIDENCE_ID = re.compile(r"D(\d+):(\d+)", re.IGNORECASE)
 
 @dataclass(frozen=True)
 class OracleConfig:
+    """Settings for an oracle run: answer with gold evidence, skip retrieval.
+
+    The oracle establishes the ceiling. Feeding the model exactly the gold
+    evidence answers "how much of the remaining error is retrieval's fault?" --
+    whatever the oracle still gets wrong is answer-generation error that better
+    retrieval cannot fix.
+
+    Attributes:
+        window: Turns of context included on each side of a gold turn. Non-zero
+            because a gold turn read alone often loses its referent, and a
+            ceiling measured on unusable evidence is not a ceiling.
+    """
+
     benchmark: str
     run_tag: str
     window: int
@@ -65,6 +78,16 @@ _thread_local = threading.local()
 
 
 def _answer_client(config: OracleConfig) -> LLMClient:
+    """Return this thread's client, rebuilding it if the endpoint changed.
+
+    Thread-local because LLMClient is not thread-safe and the oracle answers
+    questions in parallel. Keyed on (base_url, model) so a sweep that varies
+    the answering model does not keep reusing a client pointed at the previous
+    one.
+
+    The timeout is far above the default: oracle prompts carry whole sessions
+    of gold evidence and are correspondingly slow.
+    """
     key = (config.answer_base_url, config.answer_model)
     if getattr(_thread_local, "client_key", None) != key:
         api_key = (
@@ -102,6 +125,16 @@ def expand_longmem_sids(corpus: Corpus, gold_sids: Sequence[str], window: int) -
 
 
 def longmem_gold_sids(frame: pd.DataFrame) -> list[str]:
+    """Read the gold-evidence sids from a LongMemEval question CSV.
+
+    The CSV marks gold per turn, while sids address user/assistant pairs, so a
+    user turn maps to the following index and an assistant turn to its own.
+    That off-by-one is the thing to get right: reversed, the oracle is fed the
+    turns adjacent to the evidence rather than the evidence.
+
+    Returns [] when the frame has no has_answer column, which is how a file
+    without gold annotation is skipped rather than treated as having none.
+    """
     if "has_answer" not in frame.columns:
         return []
     result: list[str] = []
@@ -115,6 +148,16 @@ def longmem_gold_sids(frame: pd.DataFrame) -> list[str]:
 
 
 def build_longmem_context(csv_path: Path, window: int) -> tuple[str, list[str]]:
+    """Render the gold evidence for one question as the oracle's context.
+
+    Sids are emitted inline so the answer can be traced back to specific turns,
+    and dates are included because many questions are temporal and unanchored
+    evidence cannot answer them.
+
+    Returns:
+        (rendered context, the sids it covers) -- the sid list is what recall
+        is measured against.
+    """
     frame = pd.read_csv(csv_path, encoding="utf-8-sig")
     frame.columns = [column.lstrip("\ufeff") for column in frame.columns]
     corpus = load_corpus(csv_path)
@@ -129,6 +172,12 @@ def build_longmem_context(csv_path: Path, window: int) -> tuple[str, list[str]]:
 
 
 def _locomo_turns(sample: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten a LoCoMo sample's sessions into one ordered turn list.
+
+    Sessions are visited in numeric order so turn positions match the
+    conversation; the evidence expansion below addresses turns by position, and
+    lexical session ordering would shift every one of them.
+    """
     conversation = sample.get("conversation", {}) or {}
     turns: list[dict[str, Any]] = []
     for key, values in conversation.items():
@@ -160,6 +209,14 @@ def expand_locomo_evidence(
     evidence: Sequence[str],
     window: int,
 ) -> list[dict[str, Any]]:
+    """Widen gold evidence ids to include neighbouring turns.
+
+    A gold turn read alone often loses its referent -- "yes, that one" needs the
+    turn that named it -- so a ceiling measured on isolated turns understates
+    what perfect retrieval could achieve. Expansion is bounded to the same
+    session, since adjacency across a session boundary is not adjacency in the
+    conversation.
+    """
     turns = _locomo_turns(sample)
     targets = {
         (int(match.group(1)), int(match.group(2)))
@@ -184,6 +241,11 @@ def build_locomo_context(
     window: int,
     include_photo: bool,
 ) -> tuple[str, list[str]]:
+    """Render a LoCoMo question's expanded gold evidence as the oracle's context.
+
+    Speaker and date are kept on each turn: many questions are temporal or turn
+    on who said something, and stripped of both the evidence cannot answer them.
+    """
     turns = expand_locomo_evidence(sample, evidence, window)
     lines = ["### Gold Evidence"]
     for turn in turns:
@@ -196,6 +258,11 @@ def build_locomo_context(
 
 
 def _ask(config: OracleConfig, question: str, context: str, question_date: str | None = None) -> str:
+    """Ask the answering model one question against a fixed context.
+
+    The single place the oracle calls a model, so retrieval is provably not in
+    the loop -- whatever it gets wrong is answer-generation error.
+    """
     stage = QAEvalStage()
     rewritten = stage.rewrite_temporal_question(question, query_time=question_date)
     return stage.ask_llm(
@@ -218,6 +285,12 @@ def _process_longmem_file(
     output: Path,
     config: OracleConfig,
 ) -> str:
+    """Run the oracle over one LongMemEval question file.
+
+    Returns:
+        A result record, or None when the file carries no gold annotation and so
+        has no evidence to feed the oracle.
+    """
     frame = pd.read_csv(source, encoding="utf-8-sig")
     frame.columns = [column.lstrip("\ufeff") for column in frame.columns]
     question = _first_text(frame, "question")
@@ -290,6 +363,12 @@ def _process_locomo_sample(
     include_adversarial: bool,
     limit: int,
 ) -> str:
+    """Run the oracle over every question in one LoCoMo sample.
+
+    The sample's conversation is flattened once and reused across its questions,
+    since re-flattening per question is the dominant cost for a long
+    conversation.
+    """
     rows: list[dict[str, object]] = []
     for raw_item in load_qa_items_from_sample(sample):
         item = normalize_qa_item(raw_item)

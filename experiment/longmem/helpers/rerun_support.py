@@ -1,3 +1,15 @@
+"""Re-run a subset of a completed LongMemEval run without redoing the rest.
+
+Iterating on a judge prompt or a retrieval parameter should not cost a full
+sweep. This finds a previous run's outputs, works out what actually needs
+recomputing, and merges the new results back into the existing tables so the
+comparison stays apples-to-apples.
+
+The merge is an upsert keyed by dataset, so re-running one category replaces
+its row rather than appending a second and quietly double-counting it in the
+aggregate.
+"""
+
 from __future__ import annotations
 
 import logging

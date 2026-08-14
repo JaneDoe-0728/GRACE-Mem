@@ -1,3 +1,15 @@
+"""Argument parsing for the LoCoMo runner, and the worker command it builds.
+
+Kept separate from the runner so the argument surface can be tested and
+inspected without importing the pipeline, and because both the orchestrator and
+each worker subprocess parse the same arguments -- `build_worker_command`
+round-trips a parsed config back into the argv the child will re-parse.
+
+That round-trip is the constraint to respect when adding a flag: an option the
+orchestrator accepts but does not forward silently applies to the parent only,
+and the sample it was meant to affect runs without it.
+"""
+
 import argparse
 import sys
 from datetime import datetime

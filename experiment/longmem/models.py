@@ -1,3 +1,15 @@
+"""Value types for a LongMemEval run: dataset identity and its derived paths.
+
+`DatasetConfig` is the identity of one evaluation unit and `DatasetPaths` is
+where that unit's files live. They are separate because paths are derived --
+recomputing them from the config everywhere is what keeps a resumed run
+reading the same files the original wrote.
+
+LongMemEval splits into categories (single-session-user, multi-session, and so
+on) that are evaluated independently and reported separately, so almost
+everything here is keyed by category rather than by run.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

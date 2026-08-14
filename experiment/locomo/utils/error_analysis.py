@@ -1,3 +1,11 @@
+"""Compatibility shim re-exporting the error-analysis helpers from grace_mem.
+
+These functions used to live here. They moved to `grace_mem.utils.error_analysis`
+once the LongMem runner needed them too, and this module stays so existing
+LoCoMo imports and any saved analysis scripts keep working. Import from
+grace_mem directly in new code.
+"""
+
 # Re-exports from grace_mem so existing LoCoMo imports continue to work unchanged.
 from grace_mem.utils.error_analysis import (
     append_analysis_record,

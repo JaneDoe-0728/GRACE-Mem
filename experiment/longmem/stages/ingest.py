@@ -1,3 +1,15 @@
+"""LongMemEval ingest stage: sessions in, knowledge graph out.
+
+Offers two granularities, and the choice changes what the graph can answer.
+`ingest_by_turn_pairs` treats each user/assistant exchange as one unit, which
+keeps provenance precise enough to cite a specific turn. `ingest_by_session`
+ingests a whole session at once, which is cheaper and gives extraction more
+context but makes provenance session-level.
+
+A trailing user turn with no reply is dropped by default: extraction on a
+question nobody answered yields entities with no facts attached to them.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict

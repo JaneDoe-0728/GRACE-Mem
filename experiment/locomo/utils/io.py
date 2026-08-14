@@ -1,3 +1,12 @@
+"""Filesystem helpers shared by the LoCoMo runner and its stages.
+
+Everything here is append-only or create-if-absent. Samples run concurrently
+and write into the same run root, so a helper that truncated or rewrote a
+shared file would let one worker discard another's output. `EVAL_COLUMNS`
+fixes the evaluation CSV's column order, which is what allows per-sample CSVs
+to be concatenated later without reconciling headers.
+"""
+
 import csv
 import json
 import shutil
@@ -92,6 +101,11 @@ def load_csv_rows(path: str | Path, *, encoding: str = "utf-8-sig") -> list[dict
 
 
 def load_jsonl_records(path: str | Path) -> list[dict[str, Any]]:
+    """Read a JSONL file, skipping unparseable lines.
+
+    Tolerant for the same reason as the LongMem equivalent: trace files are
+    appended to during a run, so the last line is frequently incomplete.
+    """
     target = Path(path)
     records: list[dict[str, Any]] = []
     with target.open("r", encoding="utf-8") as fh:
@@ -122,6 +136,15 @@ def append_text(path: str | Path, text: str) -> None:
 
 
 def append_csv_with_sample(src_csv: Path, dst_csv: Path, *, sample_index: int) -> None:
+    """Append one sample's eval CSV to a combined file, tagging each row.
+
+    The sample index is added as a column because rows lose their origin once
+    concatenated, and per-sample breakdowns are how a run-wide regression gets
+    localised to the sample that caused it.
+
+    The header is written only when the destination is new, so repeated appends
+    do not interleave header rows into the data.
+    """
     if not src_csv.exists():
         return
     with src_csv.open("r", encoding="utf-8", newline="") as src_fh:
@@ -165,6 +188,12 @@ def backup_artifacts_and_logs(
     also_copy: Sequence[Path],
     include_artifacts: bool = True,
 ) -> None:
+    """Copy a sample's artifacts and logs aside before the next sample overwrites them.
+
+    Samples reuse one working artifacts directory, so without this each sample
+    destroys the previous one's evidence -- and a failure is usually only
+    diagnosable from the state of the run that produced it.
+    """
     if include_artifacts:
         copy_dir(resolve_artifacts_dir(), sample_dir / "artifacts")
     copy_dir(Path("./logs"), sample_dir / "logs")

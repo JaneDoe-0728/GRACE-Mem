@@ -1,3 +1,20 @@
+"""Worker: runs one LoCoMo sample end to end, in its own process.
+
+Spawned by `pipeline/runner.py` with a sample index and the flags for that
+sample. Process isolation is the point -- see the runner's docstring -- and the
+consequence here is that everything this worker learns has to leave through
+files: the eval CSV, the judge CSV, the stats JSON, and the error-analysis
+bundle. Nothing is returned to the parent in memory.
+
+The sequence per sample is restore -> ingest -> qa_eval -> judge -> export,
+with each stage skippable. Skipping is not just a speed feature: it is how a
+run resumes after a failure, and how an ablation reuses a previous run's
+ingestion while varying only retrieval.
+
+`_emit_error_analysis_bundle` runs at the end regardless of outcome, so a
+sample that failed still leaves behind the diagnostics explaining why.
+"""
+
 import os
 import shutil
 import json
@@ -88,6 +105,12 @@ def _configure_sample_pretty_trace_log(*, run_root: Path, sample_index: int) -> 
 
 
 def _selected_stages(args) -> set[str]:
+    """Resolve which stages this worker will run.
+
+    Stage selection is how a run resumes after a failure and how an ablation
+    reuses a previous run's ingestion while varying only retrieval, so an
+    unrecognised stage name must not silently reduce to running nothing.
+    """
     from experiment.locomo.cli import resolve_stages
 
     return set(
@@ -100,6 +123,11 @@ def _selected_stages(args) -> set[str]:
 
 
 def _resolve_existing_artifact_dir(args, *, run_root: Path) -> Path | None:
+    """Find a previous run's artifacts for this sample, or None.
+
+    What makes ingest skippable: with artifacts present the worker restores them
+    instead of rebuilding the graph, which is the whole cost of a sample.
+    """
     explicit_artifact_dir = artifact_dir_for_sample(args)
     if explicit_artifact_dir is not None:
         return explicit_artifact_dir
@@ -111,6 +139,16 @@ def _resolve_existing_artifact_dir(args, *, run_root: Path) -> Path | None:
 
 
 def _require_existing_file(path: Path, *, stage: str, flag_hint: str) -> None:
+    """Fail with a pointed message when a skipped stage's input is absent.
+
+    Skipping qa_eval requires its output to already exist; without this check
+    the worker proceeds and judges an empty file, reporting zero accuracy as
+    though it were a result. The message names the flag that would produce the
+    missing input.
+
+    Raises:
+        SystemExit: If the file is missing.
+    """
     if path.exists():
         return
     raise FileNotFoundError(
@@ -126,6 +164,12 @@ def _refresh_sample_outputs(
     judge_csv: Path,
     no_judge: bool,
 ) -> None:
+    """Clear this sample's stale outputs before the stages that will rewrite them.
+
+    Only the outputs of stages about to run are removed. Clearing everything
+    would destroy the results of skipped stages, which is precisely the state a
+    resumed or ablated run depends on.
+    """
     also_copy = [eval_csv]
     if not no_judge:
         also_copy.append(judge_csv)
@@ -137,6 +181,12 @@ def _refresh_sample_outputs(
 
 
 def _parse_json_list(value: object) -> list[object]:
+    """Parse a CSV cell that holds a JSON list, returning [] if it does not.
+
+    These columns round-trip through pandas, so a cell arrives as a string, as
+    NaN, or as the literal "nan". Returning [] for all of them keeps callers
+    from guarding each case.
+    """
     if isinstance(value, list):
         return value
     if not value:
@@ -156,6 +206,13 @@ def _emit_error_analysis_bundle(
     judge_csv: Path,
     no_judge: bool,
 ) -> None:
+    """Write every diagnostic artifact for this sample, whatever the outcome.
+
+    Runs at the end of a sample regardless of success, because a failed sample
+    is exactly the one whose diagnostics are needed. Each artifact is written
+    independently so one unavailable input -- no reranker scores, no judge
+    output -- shortens the bundle rather than losing all of it.
+    """
     log_dir = ensure_dir(sample_dir / "logs")
     ingest_records: list[dict[str, object]] = []
     ingest_path = log_dir / "error_analysis_ingest_delta.jsonl"
@@ -274,6 +331,12 @@ def _emit_error_analysis_bundle(
 
 
 def _load_replay_question_context(sample_run_dir: Path) -> dict[str, dict[str, object]]:
+    """Load a previous run's per-question retrieval context, for replay ablations.
+
+    Replay holds retrieval fixed while varying what the retrieved set contains,
+    so a difference in accuracy cannot be attributed to retrieval having found
+    different things. This is where the prior run's choices are read back in.
+    """
     retrieval_summary_path = sample_run_dir / "logs" / "error_analysis_retrieval_summary.jsonl"
     if not retrieval_summary_path.exists():
         raise FileNotFoundError(f"Replay retrieval summary not found: {retrieval_summary_path}")

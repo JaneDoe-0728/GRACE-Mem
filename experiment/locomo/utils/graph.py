@@ -1,3 +1,21 @@
+"""Export and restore the knowledge graph as a JSON snapshot.
+
+A run evaluates many samples against the same conversation, and rebuilding the
+graph per sample is the dominant cost. Exporting once and restoring per sample
+removes it.
+
+The exported file is therefore load-bearing rather than a convenience, and it
+is validated on both sides: `validate_graph_export` before restoring, and
+`validate_vdb_artifacts` on the vector stores that accompany it. A truncated
+export restored without checking produces a partial graph, which does not fail
+-- it quietly lowers recall for every question in the sample and looks like a
+retrieval regression.
+
+ARTIFACTS_SRC resolves KG_ARTIFACTS_DIR at import time, so each worker process
+must set that variable before importing this module or they will share one
+artifacts directory and overwrite each other.
+"""
+
 from __future__ import annotations
 
 import json

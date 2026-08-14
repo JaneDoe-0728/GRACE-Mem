@@ -1,3 +1,20 @@
+"""Judge stage: score generated answers and aggregate by category.
+
+Three metrics, kept together because they disagree in informative ways. The LLM
+judge decides semantic equivalence, which is the number that matters. F1 and
+BLEU-1 are lexical and cheap, and they exist as a sanity check on the judge: a
+run where judge accuracy moved but lexical overlap did not usually means the
+judge changed its mind, not that the system improved.
+
+Adversarial questions are excluded from the headline average by default. They
+are unanswerable by construction, so scoring them together with answerable ones
+conflates "found the wrong evidence" with "correctly declined" -- they are
+reported separately instead.
+
+Stats are computed per category as well as overall, since an aggregate can hide
+a regression in one question type behind gains in another.
+"""
+
 import os
 import pandas as pd
 import re
@@ -52,6 +69,20 @@ CATEGORY_MAP = {
 }
 
 def compute_correctness_stats(df: pd.DataFrame, *, exclude_adversarial: bool = True) -> dict:
+    """Aggregate judged rows into overall and per-category accuracy, plus F1/BLEU.
+
+    Per-category alongside the overall figure because an aggregate hides a
+    regression in one question type behind a gain in another.
+
+    Args:
+        exclude_adversarial: Adversarial questions are unanswerable by
+            construction; averaging them with answerable ones conflates finding
+            the wrong evidence with correctly declining to answer.
+
+    Returns:
+        Stats with None -- not 0 -- where there was nothing to average, so an
+        empty category is distinguishable from one that scored zero.
+    """
     stats = {
         "avg_correctness": None,
         "avg_correctness_percent": None,
@@ -179,6 +210,12 @@ def judge_single(
     return 0
 
 def simple_tokenize(text: str) -> list[str]:
+    """Lowercase and split on non-alphanumerics, for the F1 overlap metric.
+
+    Deliberately cruder than the BLEU tokenizer: F1 here is a bag-of-words
+    overlap check on the LLM judge, and punctuation or casing differences should
+    not register as disagreement.
+    """
     text = str(text)
     return (
         text.lower()
@@ -191,6 +228,12 @@ def simple_tokenize(text: str) -> list[str]:
 
 
 def safe_bleu_tokenize(text: str) -> list[str]:
+    """Tokenize for BLEU, falling back to a simple split if NLTK data is missing.
+
+    The punkt data is a separate download, and a scoring run must not fail
+    because it is absent. The fallback shifts BLEU values slightly, so compare
+    BLEU only within a run, not across machines.
+    """
     normalized = str(text).strip().lower()
     if not normalized:
         return []
@@ -201,6 +244,20 @@ def safe_bleu_tokenize(text: str) -> list[str]:
         return simple_tokenize(normalized)
 
 def compute_f1_and_bleu1(gold: str, pred: str) -> tuple[float, float]:
+    """Compute token-overlap F1 and BLEU-1 between gold and prediction.
+
+    Both are lexical, and neither is the headline metric -- the LLM judge is.
+    They exist as a cross-check on it: a run where judged accuracy moved but
+    lexical overlap did not usually means the judge changed its mind rather than
+    the system improving.
+
+    Unigram BLEU specifically, with smoothing, because gold answers are short
+    phrases where higher-order n-gram precision is mostly zero and would swamp
+    the signal.
+
+    Returns:
+        (f1, bleu1), both 0.0 when either side is empty.
+    """
     if not pred or not gold:
         return 0.0, 0.0
 
@@ -229,6 +286,11 @@ def compute_f1_and_bleu1(gold: str, pred: str) -> tuple[float, float]:
     return f1, bleu1
 
 def load_category_map(dataset_json_path: str, sample_index: int) -> dict:
+    """Load question -> category for one sample, for the per-category breakdown.
+
+    The eval CSVs do not carry categories; they live only in the source dataset,
+    and this is the join back to it.
+    """
     qa_list = load_qa_items(dataset_json_path, sample_index=sample_index)
     q_to_cat = {}
     for item in qa_list:
@@ -269,6 +331,13 @@ def _build_dia_index(conversation: dict) -> dict:
 
 
 def _find_evidence_turns(dataset: list, question: str, sample: str | None) -> list[str]:
+    """Locate a question's gold evidence turns in the dataset.
+
+    Searches the named sample first and falls back to scanning all of them,
+    because the sample label is absent or malformed in older outputs. The
+    fallback can match an identically worded question in a different sample --
+    acceptable, since this feeds diagnostics rather than scoring.
+    """
     q_norm = question.strip()
     candidates = dataset
     if sample and sample.startswith("sample_"):

@@ -1,3 +1,11 @@
+"""Merge per-category results into the run-level answer table and progress rows.
+
+Called as each category finishes rather than once at the end, so a run
+interrupted part-way still leaves a valid partial aggregate. Both writers are
+read-modify-write against files other workers also touch, which is why the
+progress update goes through the locked helper in `helpers/progress.py`.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

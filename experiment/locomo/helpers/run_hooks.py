@@ -1,3 +1,14 @@
+"""Run-level hooks: what happens around each sample, not inside it.
+
+The runner owns the loop; these own the bookkeeping at its edges -- collecting
+a finished worker's outputs, updating the run summary, syncing logs, and
+refreshing the backend between samples.
+
+They are separated from the runner so that per-dataset differences live in
+`DatasetStrategy` flags consulted here, rather than as branches in the loop
+itself.
+"""
+
 from __future__ import annotations
 
 import json

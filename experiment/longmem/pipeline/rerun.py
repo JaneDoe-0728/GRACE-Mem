@@ -1,3 +1,14 @@
+"""Re-run selected parts of a finished LongMemEval run.
+
+Entry point for the iterate-on-one-thing workflow: change a judge prompt or a
+retrieval parameter, recompute only what that affects, and merge the results
+back into the existing tables so the comparison stays valid.
+
+`gc` is imported and used deliberately -- a rerun walks many datasets in one
+process, each loading a pipeline and its models, and without explicit
+collection between them the process grows until it is killed.
+"""
+
 from __future__ import annotations
 
 import argparse

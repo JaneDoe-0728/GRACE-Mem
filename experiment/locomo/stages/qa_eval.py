@@ -1,3 +1,34 @@
+"""QA evaluation stage: ask each question and record how the answer was reached.
+
+Produces one row per question -- the answer, the retrieved context, latency,
+and the trace of what retrieval did -- which is the input to both judging and
+error analysis.
+
+The module holds mutable global state (`retriever`, `retrieval_mode`, the
+`_gold_*` and `_replay_*` maps) that workers set before calling
+`evaluate_items`. That is unusual and worth knowing about: it exists because
+this file doubles as a standalone script and as a stage the worker drives, and
+the ablation modes below need to reach deep into evaluation without threading a
+config through every call. It also means one process can only be in one
+retrieval mode at a time.
+
+The retrieval modes are the ablation surface, each isolating one contribution:
+
+    gold_summary_only                 skip retrieval, feed the gold session
+                                      summaries -- an upper bound on what
+                                      perfect summary retrieval could achieve
+    gold_raw_text_only                same, but raw text, which separates the
+                                      summarizer's contribution from retrieval's
+    replay_summary_raw_text_from_run  reuse a prior run's retrieved summary_ids
+                                      but substitute raw text, holding retrieval
+                                      fixed while varying what it returns
+    replay_summary_fact_from_run      same, with facts extracted from that text
+
+The replay modes are what make comparisons fair: they hold the retrieved set
+constant across variants, so a difference in accuracy cannot be attributed to
+retrieval having found different things.
+"""
+
 import re
 import csv
 import json
@@ -330,6 +361,16 @@ def _split_at_sentence(text: str, max_chars: int) -> list[str]:
 
 def _extract_facts_from_chunk(chunk: str, chunk_idx: int, total_chunks: int,
                                event_date_str: str, event_date_iso: str) -> list[str]:
+    """Extract salient facts from one chunk of raw session text.
+
+    Used by the concise replay ablations, which substitute extracted facts for
+    raw text while holding the retrieved set fixed -- isolating how much the
+    verbosity of the evidence costs, separately from what was retrieved.
+
+    Falls back to returning the chunk unchanged on any failure, so an
+    extraction problem degrades the ablation to the raw-text condition rather
+    than losing the question.
+    """
     import json as _json
     user_message = (
         f"Extract facts from the following text chunk.\n\n"
@@ -664,6 +705,11 @@ def _parse_replay_summary_id(summary_id: str) -> tuple[str | None, str | None]:
 
 
 def _render_session_raw_text(session_id: str) -> tuple[str | None, str | None]:
+    """Render a session's turns as the speaker-prefixed text the model sees.
+
+    Speaker prefixes are kept because many LoCoMo questions turn on who said
+    something, and stripped of them the evidence cannot answer those.
+    """
     key = f"session_{session_id}"
     turns = _gold_session_raw_texts.get(key, [])
     if not isinstance(turns, list) or not turns:
@@ -748,6 +794,12 @@ def _render_replay_context_text(
     *,
     request_id: str | None,
 ) -> str:
+    """Render a replayed context so it is byte-comparable with the original run.
+
+    Replay ablations only mean something if the two contexts differ in exactly
+    the intended way, so the surrounding formatting -- markers, ordering,
+    separators -- has to match the live path's rendering exactly.
+    """
     lines: list[str] = []
 
     if entities:
@@ -1096,37 +1148,6 @@ def rag_answer(
             f"Question: {query}\n\nAnswer:"
         )},
     ]
-    # messages = [
-    #     {
-    #         "role": "system",
-    #         "content": (
-    #             "You must ground your answer in the retrieved KG context.\n\n"
-    #             "Grounding constraint:\n"
-    #             "- Treat the KG/evidence as the only source of factual information.\n"
-    #             "- Do not introduce new entities, numbers, dates, events, or details that are not supported by the KG.\n\n"
-    #             "Allowed reasoning (general, non-specific):\n"
-    #             "- You may perform ONLY semantic normalization to produce a better short answer.\n"
-    #             "  Semantic normalization means mapping what is already implied or referenced in the KG into a more standard, canonical, "
-    #             "or directly requested form, WITHOUT adding any new factual content.\n"
-    #             "  This can include resolving a reference to its canonical label, converting to a more general label explicitly asked by the question, "
-    #             "or compressing a description into a well-known name when strongly supported by the KG description.\n\n"
-    #             "Safety checks:\n"
-    #             "- If multiple normalized answers are plausible, output 'Likely <answer>' (or 'Unknown' if too ambiguous).\n"
-    #             "- If the KG does not contain enough evidence to support even a normalized answer, output 'Unknown'.\n"
-    #             "- Output must be minimal: ideally a single name/label, otherwise one short sentence.\n\n"
-    #             "Do NOT explain your reasoning."
-    #         ),
-    #     },
-    #     {"role": "system", "content": f"---Retrieved Context---\n{kg_context}\n------------------"},
-    #     {
-    #         "role": "user",
-    #         "content": (
-    #             "Please answer based on the retrieved knowledge graph context above. "
-    #             "Be concise and accurate.\n\n"
-    #             f"Question: {query}\n\nAnswer:"
-    #         ),
-    #     },
-    # ]
     t0 = time.time()
     answer_raw = llm_post(messages, temperature=0.0, max_tokens=1024)
     elapsed = time.time() - t0
@@ -1197,6 +1218,7 @@ def load_questions(
     sample_index: int = 7,
     include_adversarial: bool = True,
 ):
+    """Load one sample's questions, normalized, honouring the adversarial filter."""
     qa_list = load_qa_items(
         dataset_json_path,
         sample_index=sample_index,
@@ -1218,6 +1240,12 @@ def pick_gold_answer(item: dict) -> str:
 
 
 def prediction_fallback(error: Exception) -> dict:
+    """Produce an answer when generation returned nothing usable.
+
+    An empty prediction would be judged wrong, which is the correct outcome but
+    the wrong diagnosis -- it looks like a retrieval failure rather than a
+    generation one. The fallback makes that distinction visible in the results.
+    """
     return {
         "answer": f"(ERROR: {error})",
         "retrieved_context": "",
@@ -1428,12 +1456,6 @@ def main():
         rows = evaluate_items(qa_items, simplify_evidence=False)
 
         df = pd.DataFrame(rows, columns=EVAL_COLUMNS)
-
-        # Derive default output prefix
-        # out_prefix = args.out_prefix or f"qa_eval_sample{args.sample_index}"
-        # raw_csv_path = f"{out_prefix}.csv"
-        # df.to_csv(raw_csv_path, index=False, encoding="utf-8", quoting=csv.QUOTE_ALL)
-        # print(f"[DONE] Wrote RAW CSV:  {raw_csv_path}")
 
         # === Cleaning + coverage ===
         df_clean = df.copy()
