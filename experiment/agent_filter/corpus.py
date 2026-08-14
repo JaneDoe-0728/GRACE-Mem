@@ -21,6 +21,16 @@ import pandas as pd
 
 @dataclass
 class Turn:
+    """One conversation turn, addressable by sid.
+
+    Attributes:
+        sid: The split sid, "session:pair:role" -- e.g. "answer_abc:6:u". This is
+            the identifier the agent, retrieval, and gold annotation all speak in.
+        pos: Position within the session in CSV order, 0-based. Distinct from
+            turn_index, which comes from the source data; pos is what neighbour
+            expansion counts in, so it must reflect storage order rather than
+            whatever numbering upstream used.
+    """
     sid: str            # split sid, e.g. "answer_abc:6:u"
     session_id: str
     turn_index: int
@@ -43,6 +53,17 @@ def _snippet(text: str, match: re.Match | None, width: int = 90) -> str:
 
 
 class Corpus:
+    """A question's turns, indexed for sid lookup, grep, and neighbour expansion.
+
+    Three indexes are built up front because the agent hits all of them per
+    question: by sid for resolution, by session for neighbour expansion, and the
+    flat list for grep.
+
+    `resolve` is deliberately forgiving. Sids reach it from an LLM, which drops
+    session prefixes and suffixes, so an exact-match-only lookup would fail on
+    sids that name a real turn -- and the agent would then look like it selected
+    nothing rather than like it wrote the sid slightly wrong.
+    """
     def __init__(self, turns: list[Turn]):
         self.turns = turns
         self.by_sid: dict[str, Turn] = {t.sid: t for t in turns}

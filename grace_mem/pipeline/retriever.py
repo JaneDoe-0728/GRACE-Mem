@@ -159,6 +159,13 @@ def _keyword_cache_key(prompt: str) -> str:
 
 
 def _load_keyword_cache() -> Dict[str, Dict[str, List[str]]]:
+    """Load the on-disk keyword-extraction cache, if one exists.
+
+    Keyword extraction is an LLM call per question, and evaluation re-asks the
+    same questions across ablation runs. Caching removes that cost from every
+    run after the first -- and, more importantly, removes it as a source of
+    variation between them.
+    """
     global _keyword_cache
     if _keyword_cache is None:
         try:
@@ -170,6 +177,7 @@ def _load_keyword_cache() -> Dict[str, Dict[str, List[str]]]:
 
 
 def _keyword_cache_get(prompt: str) -> Optional["KeywordExtractionResult"]:
+    """Look up cached keywords for a question, or None on a miss."""
     if _KEYWORD_CACHE_DISABLED:
         return None
     with _keyword_cache_lock:
@@ -184,6 +192,7 @@ def _keyword_cache_get(prompt: str) -> Optional["KeywordExtractionResult"]:
 
 
 def _keyword_cache_put(prompt: str, res: "KeywordExtractionResult") -> None:
+    """Store a question's extracted keywords and persist the cache."""
     if _KEYWORD_CACHE_DISABLED:
         return
     with _keyword_cache_lock:
@@ -687,6 +696,14 @@ class Retriever:
         ]
 
         def append_branch(branch_name: str, stages: List[Dict[str, Any]]) -> None:
+            """Record one retrieval branch's state into the trace.
+
+            What the differential analysis in `derive_drop_reasons` later diffs: each
+            stage appends the entities and relationships still standing, and what
+            disappeared between consecutive entries is what that stage dropped. A stage
+            that does not append here is invisible to failure analysis, and its drops
+            get attributed to the next stage that does.
+            """
             lines.append(f"[{branch_name}]")
             if not stages:
                 lines.append("  (no stages)")
@@ -995,6 +1012,7 @@ class Retriever:
             skipped: bool = False,
             reason: Optional[str] = None,
         ) -> None:
+            """Append one step record to the retrieval trace."""
             previous = branch[-1] if branch else None
             branch.append(
                 self._build_stage_trace_snapshot(
@@ -1009,6 +1027,7 @@ class Retriever:
             )
 
         def emit_trace(stop_reason: Optional[str] = None) -> None:
+            """Write the accumulated trace out as a structured log event."""
             self._emit_retrieval_stage_trace(
                 request_id=request_id,
                 question=question,

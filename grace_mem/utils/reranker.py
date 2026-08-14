@@ -92,6 +92,7 @@ _SYSTEM_PROMPT = (
 # ---------------------------------------------------------------------------
 
 def _build_chat_messages(query: str, doc: str, instruction: str) -> list:
+    """Frame a (query, document) pair as the yes/no question the reranker scores."""
     return [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {
@@ -143,6 +144,18 @@ class APIPointwiseReranker:
         print(f"[Reranker] API mode: base={api_base!r}, model={model!r}")
 
     def _score_one(self, query: str, doc: str, instruction: str) -> float:
+        """Score one pair from the logprobs of a single generated token.
+
+        The relevance score is the yes/no logprob margin, not the sampled token: one
+        token is generated with logprobs requested, and the gap between P(yes) and
+        P(no) is read off the distribution. That yields a continuous, rankable score
+        where the sampled token alone would give only a binary.
+
+        `top_logprobs=20` is margin. "yes" and "no" are normally the top candidates,
+        but tokenizers emit leading-space variants, so the lookup strips those and
+        needs room to find both. A token absent from the list falls back to -100.0 --
+        effectively impossible, without tripping over a true zero probability.
+        """
         messages = _build_chat_messages(query, doc, instruction)
         try:
             resp = self._client.chat.completions.create(
@@ -195,6 +208,7 @@ class APIPointwiseReranker:
         batch_size: int = _DEFAULT_BATCH,
         doc_type: DocType = "entity",
     ) -> List[Tuple[int, float]]:
+        """Score documents against a query and return them ordered, best first."""
         scores = self._score_all(query, docs, doc_type=doc_type, max_workers=batch_size)
         results = list(enumerate(scores))
         results.sort(key=lambda x: x[1], reverse=True)
@@ -207,6 +221,11 @@ class APIPointwiseReranker:
         threshold: Optional[float] = None,
         doc_type: DocType = "entity",
     ) -> List[Tuple[int, float]]:
+        """Score explicit (query, document) pairs, returning scores in input order.
+
+        Unlike `rerank`, input order is preserved rather than sorted, so callers can
+        zip the scores back onto their own structures.
+        """
         if not texts:
             return []
         results = self.rerank(query, texts, doc_type=doc_type)
@@ -274,6 +293,16 @@ class LLMPointwiseReranker:
         self.model.eval()
 
     def _score_one(self, query: str, doc: str, doc_type: DocType = "entity") -> float:
+        """Score one pair locally, reading the yes/no margin from the model's logits.
+
+        The same margin trick as the API reranker, computed from the logits directly
+        rather than from a returned logprob list -- so both backends produce scores
+        on a comparable scale.
+
+        Falls back to `_score_one_cpu` on CUDA OOM: a long document can exceed
+        memory even at batch size 1, and losing its score entirely would drop a
+        candidate silently.
+        """
         import torch
         instruction = INSTRUCTIONS[doc_type]
         prompt = _build_local_prompt(query, doc, instruction)
@@ -357,6 +386,7 @@ class LLMPointwiseReranker:
     def rerank(
         self, query: str, docs: List[str], batch_size: int = _DEFAULT_BATCH, doc_type: DocType = "entity"
     ) -> List[Tuple[int, float]]:
+        """Score documents against a query and return them ordered, best first."""
         scores = self._score_batch(query, docs, batch_size=batch_size, doc_type=doc_type)
         results = list(enumerate(scores))
         results.sort(key=lambda x: x[1], reverse=True)
@@ -369,6 +399,7 @@ class LLMPointwiseReranker:
         threshold: Optional[float] = None,
         doc_type: DocType = "entity",
     ) -> List[Tuple[int, float]]:
+        """Score explicit (query, document) pairs, returning scores in input order."""
         if not texts:
             return []
         results = self.rerank(query, texts, doc_type=doc_type)

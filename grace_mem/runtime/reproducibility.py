@@ -28,6 +28,11 @@ _CONFIG_DEFAULTS: dict[str, Any] = {}
 
 @dataclass(frozen=True)
 class ReproducibilityConfig:
+    """The seed and determinism settings a run was executed under.
+
+    Recorded into run metadata, so a result can be reproduced from what is
+    stored rather than from memory of how it was invoked.
+    """
     seed: int = DEFAULT_SEED
     deterministic: bool = DEFAULT_DETERMINISTIC
 
@@ -74,6 +79,19 @@ def resolve_reproducibility_config(
 
 
 def prepare_reproducibility_env(seed: int, deterministic: bool = True) -> dict[str, Any]:
+    """Set the environment variables that must be in place before torch loads.
+
+    CUBLAS_WORKSPACE_CONFIG is the reason this is separate from `set_global_seed`:
+    cuBLAS reads it at initialization, so setting it after torch has touched the
+    GPU has no effect and `use_deterministic_algorithms` then fails at the first
+    matmul. Call this before importing torch.
+
+    The NCCL defaults pin collective-operation ordering, which is otherwise a
+    source of run-to-run variation on multi-GPU machines.
+
+    Returns:
+        The resulting reproducibility state, for the run metadata.
+    """
     os.environ["EXPERIMENT_SEED"] = str(int(seed))
     os.environ["EXPERIMENT_DETERMINISTIC"] = "1" if deterministic else "0"
     if deterministic:
@@ -86,6 +104,21 @@ def prepare_reproducibility_env(seed: int, deterministic: bool = True) -> dict[s
 
 
 def set_global_seed(seed: int, deterministic: bool = True) -> dict[str, Any]:
+    """Seed every RNG in the process and switch torch to deterministic kernels.
+
+    Four independent sources of randomness have to be seeded -- Python's
+    `random`, NumPy, torch CPU, and torch CUDA -- because each has its own
+    generator and missing one leaves a channel through which a run can diverge.
+
+    Failures raise rather than warn. A run that believes it is seeded but is not
+    produces results that cannot be reproduced and gives no indication of it,
+    which is worse than failing at startup.
+
+    Args:
+        deterministic: Also force deterministic algorithm selection. Costs
+            throughput -- some fast kernels have no deterministic variant, and
+            torch raises instead of silently substituting one.
+    """
     prepare_reproducibility_env(seed, deterministic)
     random.seed(seed)
 
@@ -134,6 +167,10 @@ def activate_reproducibility(
     defaults: Mapping[str, Any] | None = None,
     log_prefix: str | None = None,
 ) -> ReproducibilityConfig:
+    """Apply the reproducibility configuration for this run.
+
+    The entry point every runner calls at startup, before any model is loaded.
+    """
     global _RUNTIME_CONFIG
     config = resolve_reproducibility_config(
         seed=seed,
@@ -161,6 +198,12 @@ def get_runtime_reproducibility() -> ReproducibilityConfig:
 def current_reproducibility_state(
     config: ReproducibilityConfig | None = None,
 ) -> dict[str, Any]:
+    """Snapshot the seed and determinism settings actually in effect.
+
+    Read from the environment rather than from the config object, so what is
+    recorded is what the process will really use -- including an override set
+    externally that the config never saw.
+    """
     resolved = config or get_runtime_reproducibility()
     payload = asdict(resolved)
     payload["env"] = {
@@ -177,6 +220,11 @@ def attach_reproducibility_metadata(
     *,
     config: ReproducibilityConfig | None = None,
 ) -> dict[str, Any]:
+    """Stamp a metadata payload with the run's reproducibility state.
+
+    Called on every artifact that gets written, so any result file carries the
+    seed that produced it.
+    """
     output = dict(payload)
     output["reproducibility"] = current_reproducibility_state(config)
     return output
@@ -187,6 +235,12 @@ def write_reproducibility_file(
     *,
     filename: str = "reproducibility.json",
 ) -> Path:
+    """Write the reproducibility state as a standalone file in the run directory.
+
+    Duplicated from the run metadata on purpose: it is the one file someone
+    reads when asking "what seed was this?", and burying it inside a larger
+    payload makes that question harder than it should be.
+    """
     target_dir = Path(directory)
     target_dir.mkdir(parents=True, exist_ok=True)
     path = target_dir / filename
@@ -200,6 +254,12 @@ def write_reproducibility_file(
 def build_dataloader_seed_components(
     seed: int,
 ) -> tuple[Callable[[int], None], Any]:
+    """Derive the per-worker seed components for a torch DataLoader.
+
+    DataLoader workers are separate processes that inherit no RNG state, so
+    without an explicit per-worker seed each one draws from an unseeded
+    generator and the loading order stops being reproducible.
+    """
     import numpy as np
     import torch
 
@@ -207,6 +267,12 @@ def build_dataloader_seed_components(
     generator.manual_seed(seed)
 
     def seed_worker(worker_id: int) -> None:
+        """DataLoader `worker_init_fn`: seed this worker deterministically.
+
+        Derives from the base seed and the worker id, so workers are seeded
+        differently from each other -- identical seeds would make them draw the same
+        augmentations -- but identically across runs.
+        """
         worker_seed = seed + int(worker_id)
         random.seed(worker_seed)
         np.random.seed(worker_seed)

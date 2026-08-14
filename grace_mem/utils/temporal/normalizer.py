@@ -39,6 +39,12 @@ def build_time_context(
     last_weekday_policy: str = "nearest_previous",
     daypart_anchor_times: Optional[dict[str, str]] = None,
 ) -> TimeContext:
+    """Construct the reference frame relative expressions resolve against.
+
+    The timezone default is not cosmetic: it decides which calendar day a
+    boundary-crossing timestamp falls on, and therefore whether "yesterday"
+    resolves one day out.
+    """
     return TimeContext(
         reference_dt=reference_dt,
         reference_time_str=reference_time_str,
@@ -50,6 +56,13 @@ def build_time_context(
 
 
 def parse_temporal_expressions(text: str, context: TimeContext) -> list[TemporalConstraint]:
+    """Detect and resolve every temporal expression in a text.
+
+    Returns:
+        Resolved constraints. Expressions that could not be resolved are still
+        returned, carrying a non-RESOLVED status -- the caller needs to know an
+        expression was present and failed, not merely that nothing was found.
+    """
     constraints: list[TemporalConstraint] = []
     for match in classify_temporal_matches(text):
         resolution = resolve_match(match.text, match.span, match.category, context)
@@ -91,6 +104,16 @@ def _replacement_prefix_for_granularity(
     source_text: str,
     start: int,
 ) -> str:
+    """Choose the preposition to prepend when substituting a resolved value.
+
+    "last week" becomes a date range, and dropped in bare it reads as
+    ungrammatical -- "I saw him 2023-05-29 to 2023-06-04". A granularity-
+    appropriate preposition keeps the rewritten text readable, which matters
+    because it is fed back to an LLM.
+
+    Returns "" when the preceding text already supplies one, so "since last
+    week" does not become "since from 2023-05-29".
+    """
     prefix = source_text[max(0, start - 10):start].lower()
     if any(token in prefix for token in ("from ", "since ", "on ", "in ", "during ", "before ", "after ")):
         return ""
@@ -126,6 +149,13 @@ def _marker_text_for_constraint(constraint: TemporalConstraint) -> str | None:
 
 
 def _rewrite_constraint(constraint: TemporalConstraint, source_text: str) -> str | None:
+    """Render one resolved constraint as its replacement text, or None to skip.
+
+    None when the resolution is not confident enough to substitute -- an
+    unresolved or ambiguous expression left as written is better than one
+    replaced by a wrong date, which downstream code cannot distinguish from a
+    correct one.
+    """
     resolution = constraint.resolution
     if resolution.status is not ResolutionStatus.RESOLVED:
         return None
@@ -259,6 +289,18 @@ def augment_temporal_text(
 
 
 def rewrite_temporal_text(text: str, context: TimeContext) -> tuple[str, dict]:
+    """Replace relative time expressions in a text with resolved absolute values.
+
+    Replacements are applied right to left -- the constraints are sorted by span
+    in reverse -- so that each substitution leaves the spans of the not-yet-
+    applied ones valid. Rewriting left to right would shift every subsequent
+    span by the length difference and corrupt the text.
+
+    Returns:
+        (rewritten text, metadata). The metadata carries the constraints,
+        including ones that could not be resolved and were therefore left
+        in place.
+    """
     constraints = parse_temporal_expressions(text, context)
     rewritten_text = text
     unresolved_constraints = []

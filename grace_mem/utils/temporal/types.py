@@ -9,6 +9,17 @@ from typing import Optional
 
 
 class TimeCategory(str, Enum):
+    """What kind of time expression a phrase is, which selects how it resolves.
+
+    The distinctions are resolution strategies, not linguistic categories. An
+    ABSOLUTE_DATE needs no reference time; a RELATIVE_DAY ("yesterday") needs
+    one; a WEEK_POINT ("last week") resolves to a range rather than an instant;
+    and a BOUNDARY ("before July") produces an open-ended constraint. Merging
+    any two would mean resolving one of them by the wrong rule.
+
+    UNKNOWN is the explicit no-match, so an unclassified phrase is visible in
+    the trace rather than silently defaulting into some other category.
+    """
     ABSOLUTE_DATE = "absolute_date"
     ABSOLUTE_TIME = "absolute_time"
     RELATIVE_DAY = "relative_day"
@@ -28,6 +39,15 @@ class TimeCategory(str, Enum):
 
 
 class ResolutionStatus(str, Enum):
+    """How completely a temporal expression was resolved.
+
+    Graded rather than boolean because the middle states are actionable.
+    PARTIALLY_RESOLVED (a month with no year) still narrows retrieval; AMBIGUOUS
+    means several readings are equally supported and picking one would be a
+    guess; INVALID means the phrase resolved to an impossible date, which is a
+    parser bug rather than missing input. Collapsing these to resolved/unresolved
+    loses the distinction between "cannot" and "should not".
+    """
     RESOLVED = "resolved"
     PARTIALLY_RESOLVED = "partially_resolved"
     AMBIGUOUS = "ambiguous"
@@ -36,6 +56,13 @@ class ResolutionStatus(str, Enum):
 
 
 class TimeGranularity(str, Enum):
+    """How wide a resolved time value is.
+
+    Carried through to the graph and consulted at retrieval: a query bounded to
+    a day must not match a node spanning a year. WEEKEND is separate from WEEK
+    because it is a two-day subrange, not a shorter week, and matching it as a
+    week would pull in five irrelevant days.
+    """
     DAY = "day"
     TIME = "time"
     WEEK = "week"
@@ -48,6 +75,13 @@ class TimeGranularity(str, Enum):
 
 @dataclass(frozen=True)
 class ValidationResult:
+    """Whether a resolution passed its sanity checks, and why not if it failed.
+
+    Attached to every resolution rather than raised, because an invalid one is
+    data worth keeping -- the trace shows what the parser produced and which
+    check rejected it, which is how parser bugs get found. `code` is stable for
+    programmatic grouping; `message` is for people.
+    """
     ok: bool
     code: str
     message: str = ""
@@ -62,6 +96,19 @@ class ValidationResult:
 
 @dataclass(frozen=True)
 class TimeContext:
+    """The reference frame relative expressions resolve against.
+
+    Without this, "last Tuesday" has no meaning. `reference_dt` is the turn's
+    own timestamp, which is why resolution happens at ingest time -- by query
+    time the frame is gone and cannot be reconstructed.
+
+    Attributes:
+        last_weekday_policy: How "last Tuesday" resolves when the reference day
+            is itself a Tuesday. "nearest_previous" picks the week before rather
+            than the same day, which is what speakers mean.
+        daypart_anchor_times: Clock times for "morning", "evening" and friends.
+            Configurable because the mapping is a convention, not a fact.
+    """
     reference_dt: datetime
     reference_time_str: Optional[str] = None
     timezone: str = "Asia/Taipei"
@@ -72,6 +119,22 @@ class TimeContext:
 
 @dataclass(frozen=True)
 class ResolvedTimeRange:
+    """One temporal expression, fully resolved, with its provenance.
+
+    Always a range -- start and end -- even for an expression that names an
+    instant, so downstream comparisons are interval overlaps in every case
+    rather than branching on granularity.
+
+    The original text and span are retained so a resolution can be traced back
+    to the phrase that produced it, which is the only way to tell a
+    mis-resolution from a mis-detection.
+
+    `to_dict` emits several redundant spellings of the same values
+    (original_phrase alongside original_text, reference_time alongside
+    anchor_reference_time). That redundancy is deliberate: consumers written
+    against earlier versions of this schema read the older names, and dropping
+    them would break stored artifacts rather than only new code.
+    """
     original_text: str
     span: tuple[int, int]
     category: TimeCategory
@@ -110,6 +173,13 @@ class ResolvedTimeRange:
 
 @dataclass(frozen=True)
 class TemporalConstraint:
+    """A resolved expression plus the operator relating a question to it.
+
+    The difference from a bare `ResolvedTimeRange` is the operator: "in July",
+    "before July", and "after July" share one resolved range but select disjoint
+    sets of events. `anchor_resolution` holds the second range for expressions
+    anchored to another ("the week before my birthday").
+    """
     original_text: str
     span: tuple[int, int]
     operator: Optional[str]

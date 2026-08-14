@@ -52,6 +52,7 @@ BATCH_MODULE = "experiment.longmem.pipeline.batch"
 
 
 class RerunTarget(NamedTuple):
+    """A dataset the watchdog has decided to re-run, and why."""
     category: str | None
     data_folder: Path | None
     artifact_dir: Path
@@ -522,6 +523,7 @@ def mark_stuck_child_datasets_as_skipped(
 # ---------------------------------------------------------------------------
 
 class RunResult(NamedTuple):
+    """Outcome of one watchdog pass: what completed and what remains."""
     return_code: int
     timed_out: bool
 

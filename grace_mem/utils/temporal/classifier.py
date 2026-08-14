@@ -11,6 +11,13 @@ from .types import ResolutionStatus, TimeCategory
 
 @dataclass(frozen=True)
 class TemporalMatch:
+    """One detected time expression: its text, position, and category.
+
+    The classifier's output, before resolution. Keeping the span means the
+    phrase can later be rewritten in place, which is how a question's relative
+    expressions are replaced with absolute dates without disturbing the rest of
+    it.
+    """
     text: str
     span: tuple[int, int]
     category: TimeCategory
@@ -40,6 +47,12 @@ _PATTERN_SPECS: tuple[tuple[object, TimeCategory, ResolutionStatus, int], ...] =
 
 
 def _iter_candidates(text: str) -> Iterable[TemporalMatch]:
+    """Yield candidate temporal spans in the order patterns should be tried.
+
+    Order is significant: the patterns overlap, and a longer expression must be
+    offered before the shorter one nested inside it, or "the week before July
+    15" is consumed as the bare date and the operator is lost.
+    """
     for regex, category, status, priority in _PATTERN_SPECS:
         for match in regex.finditer(text):
             yield TemporalMatch(

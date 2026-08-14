@@ -742,6 +742,12 @@ class EvidenceBuilder:
         entry_score_cache: dict[str, Optional[float]] = {}
 
         def score_entry(entry_id: str) -> Optional[float]:
+            """Score one evidence entry, memoizing by entry id.
+
+            The same entry is reached through several entities and relationships, and
+            scoring involves an embedding comparison -- so without the cache a
+            well-connected entry is rescored once per path that reaches it.
+            """
             if entry_id in entry_score_cache:
                 return entry_score_cache[entry_id]
             raw = self.summaries_vdb.compare_by_id_raw(
@@ -761,6 +767,11 @@ class EvidenceBuilder:
         ev_source: dict[str, str] = {}  # entry_id → entity/rel id
 
         def collect_events(events: list[dict], source_id: str) -> None:
+            """Gather the provenance events behind one entity or relationship.
+
+            The step that turns a graph hit into citable evidence: provenance is what
+            maps a retrieved node back to the conversation turns that produced it.
+            """
             for ev in events:
                 summary_id = ev.get("summary_id")
                 if not summary_id:
@@ -800,6 +811,13 @@ class EvidenceBuilder:
 
         # Helper: append direct-vector hits (by raw cosine) not already collected.
         def add_direct(min_score: float) -> int:
+            """Add an entry reached directly by search, ahead of graph-expanded ones.
+
+            Direct hits matched the query itself, while expanded entries were reached
+            through a graph edge and are relevant only by association. Marking the
+            difference lets the ranking prefer direct evidence when both compete for the
+            same top-k slot.
+            """
             if not (summary_direct_vector_topn and summary_direct_vector_topn > 0):
                 return 0
             have = {entry_id for _, entry_id, _ in scored_entries}

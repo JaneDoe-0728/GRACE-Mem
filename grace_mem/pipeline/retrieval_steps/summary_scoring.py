@@ -191,6 +191,12 @@ def _popularity_penalty(ref_count: int, pool_size: int) -> float:
 
 
 def _rel_display_label(rid: str, entity_id2meta: Dict, rel_id2meta: Dict) -> str:
+    """Render a relationship as "source -> target" for logs and evidence text.
+
+    Stable formatting matters here: the label is parsed back out when replaying
+    a prior run's relationships, so a change to it breaks replay against
+    existing artifacts.
+    """
     meta = rel_id2meta.get(rid, {}) or {}
     if not meta:
         return rid

@@ -101,6 +101,12 @@ def _last_day_of_month(year: int, month: int) -> int:
 
 
 def _add_months(day: date, months: int) -> date:
+    """Add months to a date, clamping the day to the target month's length.
+
+    Plain arithmetic overflows: Jan 31 plus one month has no February 31.
+    Clamping to the month end is the convention that keeps "a month later"
+    monotonic, which matters because these values become range boundaries.
+    """
     total_month = (day.year * 12 + (day.month - 1)) + months
     year = total_month // 12
     month = total_month % 12 + 1
@@ -136,6 +142,12 @@ def _make_result(
     display_value: str | None = None,
     validation_result: ValidationResult = None,
 ) -> ResolvedTimeRange:
+    """Assemble a ResolvedTimeRange with its validation applied.
+
+    The single construction point for resolver output, so every result carries a
+    validation verdict -- a resolution built by hand elsewhere could skip the
+    check and enter the graph unvalidated.
+    """
     return ResolvedTimeRange(
         original_text=original_text,
         span=span,
@@ -163,6 +175,13 @@ def _validate_point_or_range(
     end: datetime | None,
     display_value: str | None = None,
 ) -> ResolvedTimeRange:
+    """Check a resolved value for the impossible results parsing can produce.
+
+    Guards against ranges that end before they start, dates outside the
+    plausible corpus span, and instants presented as ranges. These are parser
+    bugs rather than bad input, and catching them here keeps them out of the
+    graph, where a reversed range silently matches nothing.
+    """
     if start is None or end is None:
         return _make_result(
             original_text=original_text,
@@ -232,6 +251,13 @@ def _season_from_ordinal(ordinal: int) -> tuple[int, int]:
 
 
 def _season_window(season_idx: int, label_year: int) -> tuple[date, date]:
+    """Return the date window for a named season in a given year.
+
+    Meteorological seasons (three whole months) rather than astronomical ones,
+    because conversational "summer" means the months, not the solstice-bounded
+    interval -- and month boundaries make the window comparable with other
+    month-granularity values.
+    """
     if season_idx == 0:
         return date(label_year, 3, 1), date(label_year, 5, 31)
     if season_idx == 1:
@@ -247,6 +273,11 @@ def _season_display(season_idx: int, label_year: int) -> str:
 
 
 def _fuzzy_display(original_text: str, context: TimeContext) -> str:
+    """Render an imprecise resolution for display, without implying precision.
+
+    A partially resolved value shown as a full ISO date reads as certain, and
+    the uncertainty is exactly what a reader needs to see.
+    """
     ref = _ref_date(context).isoformat()
     text = original_text.strip().lower()
     mapping = {
@@ -268,6 +299,11 @@ def _daypart_anchor_map(context: TimeContext) -> dict[str, str]:
 
 
 def _parse_hhmm(value: str) -> tuple[int, int] | None:
+    """Parse a clock time, returning None rather than raising on a non-time.
+
+    Called speculatively on candidate spans, so a miss is the normal case and
+    must stay cheap.
+    """
     try:
         hour_str, minute_str = value.split(":", 1)
         hour = int(hour_str)
@@ -285,6 +321,12 @@ def _weekday_target(
     ref_day: date,
     policy: str,
 ) -> date:
+    """Resolve "last/next <weekday>" against the reference date.
+
+    The hard case is when the reference day is that same weekday: "last Tuesday"
+    spoken on a Tuesday means the week before, not today. `last_weekday_policy`
+    on the TimeContext decides, defaulting to nearest_previous.
+    """
     current_weekday = ref_day.weekday()
     if modifier == "this":
         week_start = ref_day - timedelta(days=current_weekday)

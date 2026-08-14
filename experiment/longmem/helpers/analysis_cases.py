@@ -427,6 +427,12 @@ def build_error_analysis_llm():
         raise ValueError("ERROR_ANALYSIS_LLM_API / ERROR_ANALYSIS_MODEL_NAME not set in .env")
 
     class _SimpleClient:
+        """Minimal LLM client for the analysis pass's one-off judgement calls.
+
+        Local rather than reusing the pipeline's client so that analysis of a run
+        cannot perturb that run's token accounting, and so this module stays
+        importable without the pipeline's dependencies.
+        """
         def __init__(self, base_url: str, model_name: str):
             self._client = OpenAI(base_url=base_url, api_key="lm-studio")
             self.model = model_name

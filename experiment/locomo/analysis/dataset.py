@@ -30,6 +30,12 @@ from experiment.locomo.utils.io import load_json_records
 
 @dataclass(frozen=True)
 class ConversationStats:
+    """Per-conversation shape: session count, turn counts, question counts.
+
+    What a result has to be read against -- an improvement concentrated in one
+    category means something different once you know that category is 4% of the
+    set.
+    """
     conv_id: str
     session_count: int
     turn_count: int

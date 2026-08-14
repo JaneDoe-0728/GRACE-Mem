@@ -240,6 +240,12 @@ class VDBManager:
         errors: list[str] = []
 
         def _check_chroma(label: str, chroma_dir: Path) -> None:
+            """Verify a Chroma directory is present and non-empty.
+
+            An empty directory is the signature of a failed or interrupted persist: it
+            exists, so the resume path treats it as valid, and the run then evaluates
+            against an index holding nothing.
+            """
             sqlite = chroma_dir / "chroma.sqlite3"
             if not sqlite.exists() or sqlite.stat().st_size == 0:
                 errors.append(f"{label}/chroma.sqlite3 missing or empty")

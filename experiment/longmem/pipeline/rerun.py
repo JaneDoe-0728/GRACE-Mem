@@ -49,6 +49,15 @@ from grace_mem.utils.error_analysis import (
 
 
 class LongMemRerun:
+    """Drives a partial re-run over a completed LongMemEval run.
+
+    Holds the resolved targets and the pipeline components across datasets, so
+    weights are loaded once for the whole sweep rather than per dataset.
+
+    The consequence is that this object is long-lived and accumulates: it calls
+    `gc` explicitly between datasets, because otherwise a sweep over many
+    categories grows until the process is killed.
+    """
     def __init__(self, *, llm, graph) -> None:
         self.llm = llm
         self.graph = graph

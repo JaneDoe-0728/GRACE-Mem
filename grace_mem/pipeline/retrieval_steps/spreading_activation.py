@@ -34,6 +34,14 @@ _jlog = make_module_jlog(name="grace_mem.Retrieval.SA", filename="kg_retrieval_s
 
 @dataclass
 class SAConfig:
+    """Parameters for spreading activation over the entity graph.
+
+    See the module docstring for what the algorithm does. The two thresholds
+    pull against each other: `max_hops` bounds how far activation travels and
+    `tau_a` bounds how weak a node may be and still count as activated. Raising
+    hops without raising tau_a floods the result with distant, barely-activated
+    nodes.
+    """
     max_hops: int = 2          # depth used to build the subgraph (Phase 1)
     rescale_c: float = 0.4     # c in w' = (w - c) / (1 - c)
     tau_a: float = 0.5         # activation threshold — only nodes above this are "activated"

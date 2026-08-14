@@ -16,6 +16,7 @@ QUESTION_KEY = "\ufeffquestion"
 
 @dataclass(frozen=True)
 class QuestionRunData:
+    """One question's outcome in one run, for cross-run comparison."""
     question: str
     correctness: str
     model_answer: str
@@ -26,6 +27,14 @@ class QuestionRunData:
 
 @dataclass(frozen=True)
 class FlipRecord:
+    """A question whose verdict changed between two runs.
+
+    Flips are the signal a raw accuracy delta hides: two runs can score
+    identically while disagreeing on a third of the questions, which means the
+    change moved behaviour without improving it. Direction is kept -- gained
+    versus lost -- since a net-zero delta made of equal flips both ways is a very
+    different result from no change at all.
+    """
     question: str
     baseline_correctness: str
     candidate_correctness: str

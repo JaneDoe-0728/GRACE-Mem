@@ -7,6 +7,22 @@ from dataclasses import dataclass
 
 @dataclass
 class RecallStats:
+    """Accumulates the recall and accuracy figures a gold-recall report needs.
+
+    Several denominators are tracked because they answer different questions and
+    are easy to conflate. `gold_hit / gold_total` is turn-level recall -- how
+    much of the evidence was found. `all_gold_hit / questions_with_gold` is the
+    stricter question-level figure: how often *every* gold turn was found, which
+    is what matters for a multi-hop question that needs all of them.
+
+    `all_gold_hit_correct` is the interesting one. It counts questions that got
+    perfect retrieval and were still answered wrong, which is the cleanest
+    available measure of answer-generation error with retrieval held out.
+
+    Questions with no gold annotation are excluded from the retrieval
+    denominators but still counted for accuracy, so the two sets of numbers have
+    different bases by design.
+    """
     questions: int = 0
     correct: int = 0
     gold_total: int = 0

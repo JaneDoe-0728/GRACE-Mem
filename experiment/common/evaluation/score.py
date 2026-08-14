@@ -49,6 +49,11 @@ SKIP_FILES = {"all_answers.csv", "progress.csv"}
 
 @dataclass(frozen=True)
 class ScoredItem:
+    """One judged question: its category, verdict, gold, and generated answer.
+
+    The common shape both benchmarks are loaded into, so scoring runs once
+    rather than per benchmark.
+    """
     category: str
     verdict: int
     gold: str
@@ -57,6 +62,7 @@ class ScoredItem:
 
 @dataclass(frozen=True)
 class CategoryScore:
+    """Correct and total for one question category."""
     correct: int
     total: int
     accuracy_percent: float
@@ -64,6 +70,12 @@ class CategoryScore:
 
 @dataclass(frozen=True)
 class LexicalScore:
+    """Mean F1 and BLEU-1 over a run.
+
+    Carried alongside the judged accuracy as a cross-check: accuracy moving
+    while lexical overlap holds still usually means the judge changed its mind
+    rather than the system improving.
+    """
     total: int
     f1_percent: float | None
     bleu1_percent: float | None

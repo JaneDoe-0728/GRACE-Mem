@@ -136,6 +136,11 @@ class DatasetConfig:
 
 @dataclass(frozen=True)
 class DatasetPaths:
+    """Where one dataset's inputs, outputs, and checkpoints live.
+
+    Derived from `DatasetConfig` rather than stored, so a resumed run recomputes
+    the same paths the original wrote to instead of relying on a record of them.
+    """
     base_output_dir: Path
     dataset_name: str
 
