@@ -25,7 +25,7 @@ def main():
         snapshot_download(
             repo_id=repo_id,
             local_dir=str(local_dir),
-            local_dir_use_symlinks=False,  # 複製實體檔，方便封裝/搬移
+            local_dir_use_symlinks=False,  # copy the real files, so the result is easy to package and move
             revision=revision,
             ignore_patterns=["*.pt", "*.bin.tmp"],
         )

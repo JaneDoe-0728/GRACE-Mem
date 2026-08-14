@@ -1,22 +1,30 @@
-"""把 grep-agent 的 _grep_agent_traces.jsonl 編成一份 self-contained HTML viewer。
+"""Compile the grep agent's _grep_agent_traces.jsonl into a self-contained HTML
+viewer.
 
-replay_run.py 每題把 trace append 到 output/<run-tag>/<cat>/_grep_agent_traces.jsonl
-(含 sample/category/question/gold/answer/commands/kept/dropped/fallback/agent_ms…)。
-本腳本補上兩類「推導」欄位,再把資料內嵌進 template.html:
+For each question replay_run.py appends a trace to
+output/<run-tag>/<cat>/_grep_agent_traces.jsonl, carrying sample, category,
+question, gold, answer, commands, kept, dropped, fallback, agent_ms and so on.
+This script adds two kinds of *derived* field, then embeds the data into
+template.html:
 
-  * correctness   — 從 output/<run-tag>/<cat>/<sample>.csv 的 correctness 欄 join
-                    (replay --no-judge 時為空 → null,viewer 顯示「未評分」)
+  * correctness   -- joined from the correctness column of
+                     output/<run-tag>/<cat>/<sample>.csv (empty under
+                     replay --no-judge -> null, which the viewer shows as
+                     "unscored")
   * gold_sids / seed_recall / final_recall
-                    — 用 script_data 的 has_answer=True turn 當 gold,套 corpus 的
-                      sid 對應(user t → {sess}:{t+1}:u,assistant t → {sess}:{t}:a)。
-                      seed_recall 對 seed_sids;final_recall 對 context_sids
-                      (fallback 時 context 不變 → 等於 seed_recall)。
+                  -- taking script_data's has_answer=True turns as gold and
+                     applying the corpus sid mapping (user t -> {sess}:{t+1}:u,
+                     assistant t -> {sess}:{t}:a).
+                     seed_recall is measured against seed_sids, final_recall
+                     against context_sids (on a fallback the context is unchanged,
+                     so the two are equal).
 
-用法:
+Usage:
     python -m tools.agent_filter_trace_viewer.build --run-tag rr2-grep
-    # 產出 output/rr2-grep/trace_viewer.html(雙擊即開)
-    #   + output/rr2-grep/agent_traces.enriched.jsonl(補完欄位的原始資料)
-    # 之後有 judge 分數,重跑一次即可把 correctness 帶進來。
+    # produces output/rr2-grep/trace_viewer.html (just double-click it)
+    #   + output/rr2-grep/agent_traces.enriched.jsonl (the raw data with the
+    #     derived fields filled in)
+    # Once judge scores exist, rerunning this pulls correctness in.
 """
 from __future__ import annotations
 
@@ -58,7 +66,8 @@ def _corpus(data_root: Path, cat: str, stem: str):
 
 
 def sid_texts(data_root: Path, cat: str, stem: str, sids: set[str]) -> dict[str, str]:
-    """relevant sid → raw turn 文字(前端點 SID 反查用),截 300 字。"""
+    """relevant sid -> raw turn text, truncated to 300 characters, for the front
+    end's click-a-SID lookup."""
     corp = _corpus(data_root, cat, stem)
     if corp is None:
         return {}
@@ -82,7 +91,7 @@ def gold_sids(data_root: Path, cat: str, stem: str) -> set[str]:
     out: set[str] = set()
     if p.exists():
         df = pd.read_csv(p)
-        df.columns = [c.lstrip("﻿") for c in df.columns]
+        df.columns = [c.lstrip("\ufeff") for c in df.columns]
         if {"has_answer", "role", "session_id", "turn_index"} <= set(df.columns):
             for _, r in df.iterrows():
                 if str(r.get("has_answer")).strip().lower() not in ("true", "1", "yes"):
@@ -99,8 +108,9 @@ def gold_sids(data_root: Path, cat: str, stem: str) -> set[str]:
     return out
 
 
-# judge 分數可能落在不同欄位(rejudge_output_dirs.py 預設寫 correctness_new;
-# 也支援 4o-mini / 自訂欄位)。依序取第一個有值的。
+# The judge score may land in any of several columns (rejudge_output_dirs.py
+# writes correctness_new by default, and 4o-mini or custom columns are supported
+# too). Take the first one that has a value, in order.
 _CORR_COLS = ("correctness", "correctness_new", "correctness_4o",
               "correctness_4omini", "correctness_v2", "correctness_normalized")
 _JUDGE_COLS = {
@@ -124,7 +134,8 @@ def _coerce_corr(c):
 
 
 def correctness(out_root: Path, run_tag: str, cat: str, stem: str):
-    """從 agent run 的答題輸出 CSV 取 judge 分數(未 judge → None → 前端顯示未評分)。"""
+    """Read the judge score from the agent run's answer output CSV (not yet judged
+    -> None -> the front end shows it as unscored)."""
     key = (cat, stem)
     if key in _corr_cache:
         return _corr_cache[key]
@@ -178,7 +189,8 @@ def enrich(rec: dict, out_root: Path, data_root: Path, run_tag: str) -> dict:
     ctx = set(rec.get("context_sids") or rec.get("final_sids") or []) or seed
     rec["seed_recall"] = round(len(seed & g) / len(g), 3) if g else None
     rec["final_recall"] = round(len(ctx & g) / len(g), 3) if g else None
-    # session 級 recall(分母寬窄問題:strict gold turn recall 可能很低但答案仍對)
+    # Session-level recall (a question of how wide the denominator is: strict gold
+    # turn recall can be very low while the answer is still right)
     gsess = {_session_of(s) for s in g}
     csess = {_session_of(s) for s in ctx}
     rec["gold_sessions"] = sorted(gsess)
@@ -189,7 +201,7 @@ def enrich(rec: dict, out_root: Path, data_root: Path, run_tag: str) -> dict:
     if scores:
         rec["judge_scores"] = scores
         rec["judge_model"] = "4o-mini" if "4o-mini" in scores else next(iter(scores))
-    # relevant sid → raw turn 文字(點 SID 反查)
+    # relevant sid -> raw turn text (for the click-a-SID lookup)
     relevant = seed | ctx | g | set(rec.get("added") or []) | set(rec.get("dropped") or [])
     rec["sid_text"] = sid_texts(data_root, cat, stem, relevant)
     return rec
@@ -216,7 +228,8 @@ def collect(out_root: Path, data_root: Path, run_tag: str) -> list[dict]:
 
 
 def build_html(rows: list[dict], run_name: str) -> str:
-    # </ → <\/ 讓 result/reply 內若含 </script> 也不會提前結束 script tag(JSON 仍合法)
+    # </ becomes <\/ so that a </script> inside result/reply cannot end the script
+    # tag early. The JSON stays valid either way.
     ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in rows).replace("</", "<\\/")
     html = TEMPLATE.read_text(encoding="utf-8")
     return html.replace("__NDJSON_DATA__", ndjson).replace("__RUN_NAME__", run_name)
@@ -224,17 +237,17 @@ def build_html(rows: list[dict], run_name: str) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--run-tag", required=True, help="agent run 的 output 目錄名(含 _grep_agent_traces.jsonl)")
-    ap.add_argument("--output-root", default=str(OUTPUT_ROOT), help="run 目錄的根(預設 experiment/longmem/output)")
-    ap.add_argument("--data-root", default=str(DATA_ROOT), help="script_data 根(算 gold recall 用)")
-    ap.add_argument("--out", default=None, help="輸出 HTML 路徑(預設 <run>/trace_viewer.html)")
+    ap.add_argument("--run-tag", required=True, help="name of the agent run's output directory, the one holding _grep_agent_traces.jsonl")
+    ap.add_argument("--output-root", default=str(OUTPUT_ROOT), help="root holding the run directories (default experiment/longmem/output)")
+    ap.add_argument("--data-root", default=str(DATA_ROOT), help="script_data root, used to compute gold recall")
+    ap.add_argument("--out", default=None, help="output HTML path (default <run>/trace_viewer.html)")
     args = ap.parse_args()
 
     out_root = Path(args.output_root).resolve()
     data_root = Path(args.data_root).resolve()
     rows = collect(out_root, data_root, args.run_tag)
     if not rows:
-        raise SystemExit(f"找不到任何 trace:{out_root / args.run_tag}/*/_grep_agent_traces.jsonl")
+        raise SystemExit(f"no traces found: {out_root / args.run_tag}/*/_grep_agent_traces.jsonl")
 
     run_dir = out_root / args.run_tag
     html_path = Path(args.out) if args.out else run_dir / "trace_viewer.html"

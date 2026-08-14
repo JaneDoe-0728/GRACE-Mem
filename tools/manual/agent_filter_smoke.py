@@ -1,7 +1,8 @@
 """Standalone smoke test for the grep agent harness.
 
-模擬「檢索結果不完美」的情境:seed 候選故意放 幾個 distractor + 部分 gold,
-看 agent 能否 (a) 保住 gold、(b) grep 補回缺的 gold、(c) 丟掉 distractor。
+Simulates an imperfect retrieval result: the seed candidates deliberately mix a
+few distractors with some of the gold, to see whether the agent can (a) hold on
+to the gold, (b) grep back the gold that is missing, and (c) drop the distractors.
 
 Usage:
     python -m tools.manual.agent_filter_smoke \

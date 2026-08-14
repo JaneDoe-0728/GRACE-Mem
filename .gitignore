@@ -61,7 +61,7 @@ experiment/locomo/autoresearch/oss-20b-0515/
 experiment/longmem/ablation/results
 test/fixed_output/results/
 
-# 實驗資料產物(勿入版控)
+# Experiment data artefacts (keep out of version control)
 experiment/locomo/_iterlogs/
 experiment/locomo/autoresearch/experiment/
 
