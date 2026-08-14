@@ -72,6 +72,7 @@ def load_sessions(
     sessions_jsonl: str | Path | None = None,
     dataset_json: str | Path | None = None,
 ) -> List[Dict[str, Any]]:
+    """Load session records from JSONL or from the dataset JSON."""
     sessions_path = resolve_dataset_path(
         dataset=dataset,
         kind="sessions_jsonl",
@@ -189,6 +190,11 @@ def ingest_by_session_one_turn(
     entity_sim_topk: Optional[int] = None,
     entity_sim_threshold: Optional[float] = None,
 ) -> dict:
+    """Ingest each session as a single turn.
+
+    The coarse granularity: extraction sees a whole session at once, which gives
+    it more context but leaves provenance session-level rather than turn-level.
+    """
     need_cols = {"session_id", "message_id", "user_text", "assistant_text", "dialogue_datetime"}
     miss = need_cols - set(df.columns)
     if miss:

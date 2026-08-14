@@ -42,6 +42,12 @@ RETRIEVAL_ONLY_STAGES = tuple(stage for stage in VALID_STAGES if stage != "inges
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Define the LoCoMo runner's full argument surface.
+
+    One parser serves both the orchestrator and the worker subprocess, since the
+    child re-parses the argv `build_worker_command` produces. A flag added here
+    but not forwarded there applies to the parent only.
+    """
     parser = argparse.ArgumentParser(
         description="Conversational multisample ingest/eval/judge pipeline"
     )
@@ -154,6 +160,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def parse_sample_ids(raw: str) -> list[int]:
+    """Expand a sample spec like "0,2,5-7" into [0, 2, 5, 6, 7].
+
+    Ranges are inclusive at both ends, matching how sample ids are written in
+    the run logs.
+    """
     out = set()
     for part in (raw or "").split(","):
         part = part.strip()
@@ -178,6 +189,12 @@ def resolve_stages(
     no_judge: bool = False,
     artifact_dir: str | Path | None = None,
 ) -> list[str]:
+    """Work out which stages will run, from the include and skip flags.
+
+    Centralised because the orchestrator and the worker must agree: if the
+    parent thinks judging is on and the child does not, the run finishes with no
+    judge output and no error.
+    """
     retrieval_only = artifact_dir is not None
     resolved = list(stages) if stages else list(RETRIEVAL_ONLY_STAGES if retrieval_only else DEFAULT_STAGES)
 
@@ -196,6 +213,13 @@ def resolve_stages(
 
 
 def build_worker_command(*, args, config: RunConfig, plan: SamplePlan) -> list[str]:
+    """Render a sample's plan back into the argv its worker will parse.
+
+    The round trip that makes subprocess isolation work. Every setting the child
+    needs has to appear here -- an option the parent accepted but does not
+    forward silently applies to the parent alone, and the sample runs without
+    it.
+    """
     cmd = [
         sys.executable,
         "-m",

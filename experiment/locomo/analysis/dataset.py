@@ -50,6 +50,11 @@ def session_sort_key(key: str) -> tuple[int, str]:
 
 
 def extract_sessions(sample: dict[str, Any]) -> list[tuple[str, list[Any]]]:
+    """Pull a sample's sessions out, ordered numerically.
+
+    Numeric ordering because session 10 must follow 9 rather than 1; turn
+    positions are derived from this order and feed every recall measurement.
+    """
     conversation = sample.get("conversation")
     if not isinstance(conversation, dict):
         return []
@@ -72,6 +77,11 @@ def extract_qa_items(sample: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def conversation_id(sample: dict[str, Any], index: int) -> str:
+    """Return a sample's conversation id, falling back to its index.
+
+    Older dataset revisions omit the id, and a report keyed on a missing value
+    would collapse every such sample onto one row.
+    """
     for key in ("sample_id", "conversation_id", "id"):
         value = sample.get(key)
         if value is not None and str(value).strip():
@@ -80,6 +90,12 @@ def conversation_id(sample: dict[str, Any], index: int) -> str:
 
 
 def analyze_samples(samples: list[dict[str, Any]]) -> tuple[list[ConversationStats], Counter[str], dict[str, int]]:
+    """Compute per-conversation statistics and the dataset-wide category mix.
+
+    Returns:
+        (per-conversation stats, category counts, question totals) -- the three
+        figures a result has to be read against.
+    """
     conv_stats: list[ConversationStats] = []
     overall_categories: Counter[str] = Counter()
     irregular = {
@@ -127,6 +143,7 @@ def analyze_samples(samples: list[dict[str, Any]]) -> tuple[list[ConversationSta
 
 
 def summarize_numeric(values: Iterable[int]) -> dict[str, float]:
+    """Reduce a series to min, max, and mean, tolerating an empty input."""
     values = list(values)
     if not values:
         return {"min": 0, "max": 0, "avg": 0.0, "total": 0}
@@ -139,6 +156,7 @@ def summarize_numeric(values: Iterable[int]) -> dict[str, float]:
 
 
 def markdown_table(headers: list[str], rows: list[list[str]]) -> str:
+    """Render rows as a markdown table, for pasting into notes and issues."""
     lines = [
         "| " + " | ".join(headers) + " |",
         "| " + " | ".join(["---"] * len(headers)) + " |",
@@ -153,6 +171,7 @@ def format_float(value: float) -> str:
 
 
 def build_report(dataset_path: Path) -> str:
+    """Render the full dataset report as markdown."""
     samples = load_json_records(dataset_path)
     conv_stats, overall_categories, irregular = analyze_samples(samples)
 

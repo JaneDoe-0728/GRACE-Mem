@@ -259,6 +259,7 @@ class JudgeEngine:
         category: str | None,
         is_abstention: bool,
     ) -> list[dict[str, str]]:
+        """Build the judge prompt for one (question, gold, generated) triple."""
         if self.benchmark == "locomo":
             hint = normalize_temporal_gold(gold)
             judge_gold = f"{gold}\n[Normalized: {hint}]" if hint else gold
@@ -280,6 +281,12 @@ class JudgeEngine:
         return int(verdict) if verdict is not None else 0
 
     def _one(self, messages: list[dict[str, str]], temperature: float) -> int:
+        """Get one judge verdict, retrying on a transient failure.
+
+        Retries because judging a full run makes thousands of calls, and a transient
+        error would otherwise leave a hole that reads as a wrong answer rather than
+        as a missing measurement.
+        """
         delay = 2.0
         for attempt in range(self.max_attempts):
             try:
@@ -307,6 +314,13 @@ class JudgeEngine:
         is_abstention: bool = False,
         votes: int = 1,
     ) -> int:
+        """Judge one answer, taking a majority vote when several votes are requested.
+
+        A single judge call is not deterministic enough to separate small accuracy
+        differences between runs; an odd number of votes reduces that noise at
+        linear cost. With one vote this is a single call and the vote machinery is
+        bypassed.
+        """
         if votes < 1:
             raise ValueError("votes must be at least 1")
         messages = self._messages(
@@ -432,6 +446,7 @@ def _client_factory(args: argparse.Namespace) -> Callable[[], LLMClient]:
     local = threading.local()
 
     def factory() -> LLMClient:
+        """Return this thread's LLMClient, constructing it on first use."""
         if not hasattr(local, "client"):
             api_key = openai_api_key() if args.judge_base_url.rstrip("/").endswith("openai.com/v1") else None
             local.client = LLMClient(
@@ -539,6 +554,7 @@ def _judge_locomo_file(
         return len(jobs), skipped, 0
 
     def judge_row(job: tuple[int, str, str, str, int | None]) -> tuple[int, int, int]:
+        """Judge one dataframe row and return its verdict."""
         index, question, gold, generated, first = job
         engine = JudgeEngine(client_factory(), "locomo")
         first, final = engine.judge_with_carry(
@@ -730,6 +746,12 @@ def _score_longmem(
     votes: int,
     column: str | None,
 ) -> dict:
+    """Aggregate accuracy over a LongMemEval run, overall and per category.
+
+    Unjudged rows are excluded from both numerator and denominator rather than
+    counted wrong, so an interrupted judge pass lowers the sample size instead
+    of faking a quality regression.
+    """
     total = correct = 0
     by_category: dict[str, list[int]] = {}
     for path in paths:
@@ -772,6 +794,12 @@ def _score_longmem(
 
 
 def run_longmem(args: argparse.Namespace) -> int:
+    """Judge every requested LongMemEval category and print the aggregate.
+
+    Returns:
+        A process exit code, non-zero if any file failed to judge -- a partial
+        run must not report success to a shell.
+    """
     output_root = Path(args.output_root)
     client_factory = _client_factory(args)
     total_judged = total_skipped = 0
@@ -790,6 +818,7 @@ def run_longmem(args: argparse.Namespace) -> int:
             )
 
         def judge_file(job: tuple[Path, str]) -> tuple[Path, int, int, str]:
+            """Judge every unjudged row in one file, in parallel."""
             path, category = job
             judged, skipped, target = _judge_longmem_file(
                 path,

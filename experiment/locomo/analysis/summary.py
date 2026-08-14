@@ -118,6 +118,7 @@ def _compute_from_df(df: DataFrame, *, exclude_adversarial: bool) -> Dict[str, o
 
 
 def compute_summary_from_df(df: DataFrame, *, exclude_adversarial: bool) -> Dict[str, Any]:
+    """Summarize a judged dataframe into overall and per-category accuracy."""
     stats = _compute_from_df(df, exclude_adversarial=exclude_adversarial)
     by_category = dict(stats["by_category"])
     macro_values = [
@@ -151,5 +152,10 @@ def compute_summary_from_rows(
     *,
     exclude_adversarial: bool,
 ) -> Dict[str, Any]:
+    """Summarize judged rows without requiring a dataframe.
+
+    The row-based entry point, so the worker can summarize its own results
+    without pandas on the critical path.
+    """
     pd = _require_pandas()
     return compute_summary_from_df(pd.DataFrame(list(rows)), exclude_adversarial=exclude_adversarial)

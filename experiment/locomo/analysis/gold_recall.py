@@ -124,6 +124,7 @@ def _build_question_evidence(data: list) -> dict[int, dict[str, list[tuple[int, 
 # --------------------------------------------------------------------------- #
 def _gold_sids(units: list[tuple[int, int]], sample_idx: int, n: int,
               turn_index: dict[int, dict[int, int]]) -> set[str]:
+    """Read a question's gold evidence ids from the dataset."""
     out: set[str] = set()
     for sess, turn in units:
         if n <= 0:
@@ -153,6 +154,11 @@ def _raw_retrieved_ids(selected: object, context: object) -> list[str]:
 
 
 def _retrieved_sids(selected: object, context: object, sample_idx: int, n: int) -> set[str]:
+    """Parse the sids actually retrieved out of a stored context string.
+
+    The context is formatted text by the time it reaches here, so recall is
+    measured by parsing the markers back out of it.
+    """
     ids = _raw_retrieved_ids(selected, context)
     out: set[str] = set()
     for sid in ids:

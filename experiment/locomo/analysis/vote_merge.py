@@ -57,6 +57,12 @@ def load_raw(run):
 
 
 def cluster(llm, question: str, answers: list[str]) -> list[list[int]]:
+    """Group differing answers across runs into clusters of equivalent ones.
+
+    Runs phrase the same answer differently, so a plain string comparison
+    reports disagreement that is not there. Clustering first makes the majority
+    vote count meanings rather than spellings.
+    """
     body = "\n\n".join(f"ANSWER {i+1}: {a[:600]}" for i, a in enumerate(answers))
     try:
         resp = llm.chat(messages=[

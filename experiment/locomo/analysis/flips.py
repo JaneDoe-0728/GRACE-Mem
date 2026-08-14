@@ -68,6 +68,11 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _find_single_judge_csv(sample_dir: Path) -> Path:
+    """Locate the one judge CSV in a run directory, or fail.
+
+    Ambiguity raises rather than picking the first match: silently comparing
+    against the wrong file produces a flip report that looks valid and is not.
+    """
     matches = sorted(sample_dir.glob("*_judge.csv"))
     if len(matches) != 1:
         raise FileNotFoundError(
@@ -83,6 +88,12 @@ def _load_judge_rows(sample_dir: Path) -> list[dict[str, str]]:
 
 
 def _load_keyword_map(sample_dir: Path) -> dict[str, dict[str, tuple[str, ...]]]:
+    """Load question -> extracted keywords, for annotating flips.
+
+    Keywords are the cheapest explanation of a flip: a question whose verdict
+    changed and whose keywords also changed flipped because retrieval was
+    asked something different, not because the system got better at it.
+    """
     log_path = sample_dir / "logs" / "kg_retriever.jsonl"
     if not log_path.exists():
         raise FileNotFoundError(f"Retriever log not found: {log_path}")
@@ -104,6 +115,11 @@ def _load_keyword_map(sample_dir: Path) -> dict[str, dict[str, tuple[str, ...]]]
 
 
 def _rows_by_question(rows: list[dict[str, str]]) -> dict[str, dict[str, str]]:
+    """Index a run's judged rows by question text.
+
+    Question text is the only key shared across runs -- row order and ids are
+    run-local -- so it is what two runs are joined on.
+    """
     by_question: dict[str, dict[str, str]] = {}
     for row in rows:
         question = (row.get(QUESTION_KEY) or row.get("question") or "").strip()
@@ -116,6 +132,7 @@ def _rows_by_question(rows: list[dict[str, str]]) -> dict[str, dict[str, str]]:
 
 
 def _build_question_run_data(sample_dir: Path) -> dict[str, QuestionRunData]:
+    """Assemble one question's per-run outcomes for comparison."""
     rows = _rows_by_question(_load_judge_rows(sample_dir))
     keywords = _load_keyword_map(sample_dir)
     result: dict[str, QuestionRunData] = {}
@@ -136,6 +153,17 @@ def _compute_flips(
     baseline: dict[str, QuestionRunData],
     candidate: dict[str, QuestionRunData],
 ) -> list[FlipRecord]:
+    """Find questions whose verdict changed between two runs.
+
+    The measurement a raw accuracy delta hides: two runs can score identically
+    while disagreeing on a third of their questions, which means the change
+    moved behaviour without improving it. Direction is recorded, since a
+    net-zero delta made of equal flips both ways is a very different result from
+    no change at all.
+
+    Questions judged in only one run are excluded -- an unjudged question is
+    missing data, and counting it as a flip would manufacture one.
+    """
     baseline_questions = set(baseline)
     candidate_questions = set(candidate)
     if baseline_questions != candidate_questions:
@@ -176,6 +204,11 @@ def _compute_flips(
 
 
 def _summarize_flip(flip: FlipRecord) -> dict[str, Any]:
+    """Describe one flip with the context needed to explain it.
+
+    Carries both runs' answers and retrieved evidence, since a flip is only
+    interpretable next to what changed underneath it.
+    """
     return {
         "question": flip.question,
         "correctness": {

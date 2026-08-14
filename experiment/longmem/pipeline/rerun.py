@@ -124,6 +124,12 @@ class LongMemRerun:
         no_judge: bool = False,
         stages: set[str] | None = None,
     ) -> dict:
+        """Re-run the requested stages for one dataset and merge the results back.
+
+        Merging rather than replacing keeps the comparison apples-to-apples: only
+        the recomputed columns change, and everything else stays as the original run
+        left it.
+        """
         selected_stages = set(stages or {"qa_eval", "judge"})
         run_qa = "qa_eval" in selected_stages
         run_judge = "judge" in selected_stages and not no_judge
@@ -346,6 +352,7 @@ def resolve_rerun_targets(
     result_root: Path | None,
     type_names: list[str] | None,
 ) -> list[tuple[str | None, Path | None, Path | None, Path, Path | None]]:
+    """Decide which datasets this rerun will cover."""
     if type_names:
         return [
             (

@@ -95,6 +95,7 @@ def toks(t: str) -> list[str]:
 
 
 def load_run(run: str) -> dict:
+    """Load one run's answers, for cross-run adjudication."""
     out = {}
     for f in glob.glob(str(OUTPUT / run / "*" / "*.csv")):
         p = Path(f)
@@ -119,6 +120,7 @@ def norm_answer(a: str) -> str:
 
 
 def evidence_for(corpus, question: str, candidate: str, k: int = 6) -> str:
+    """Return the evidence a given run used for a question."""
     docs = [toks(t.text) for t in corpus.turns]
     bm = BM25Okapi(docs)
     q = toks(question) + toks(candidate)
@@ -135,6 +137,14 @@ def evidence_for(corpus, question: str, candidate: str, k: int = 6) -> str:
 
 
 def verify(question: str, qdate: str, candidate: str, evidence: str) -> int:
+    """Adjudicate between runs that disagree on one question.
+
+    Where several runs answer differently, at least one is wrong, and each
+    candidate is checked against the evidence that produced it. That separates a
+    retrieval difference from a generation difference -- an answer unsupported
+    by its own evidence is a generation failure regardless of what retrieval
+    found.
+    """
     msgs = [
         {"role": "system", "content": VERIFIER_SYSTEM},
         {"role": "user", "content":

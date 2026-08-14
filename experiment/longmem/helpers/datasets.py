@@ -26,6 +26,12 @@ from experiment.longmem.utils.io import glob_sorted, read_csv_frame
 
 
 def discover_csv_datasets(folder_path: str, file_pattern: str = "*.csv") -> list[Path]:
+    """List a folder's dataset CSVs in sorted order.
+
+    Sorted so a run covers datasets in a stable sequence -- resume logic
+    compares against what previous runs did, and directory order is not stable
+    across filesystems.
+    """
     folder = Path(folder_path)
     if not folder.exists():
         raise ValueError(f"Folder not found: {folder_path}")
@@ -41,6 +47,7 @@ def resolve_child_datasets(
     *,
     type_name: list[str] | str | None = None,
 ) -> dict[str, list[Path]]:
+    """Group the datasets named by a child manifest, by category."""
     root = Path(data_root)
     entries = filter_child_entries(read_child_manifest(manifest_path), type_name)
     if not entries:
@@ -79,6 +86,12 @@ def select_dataset_names(
     *,
     scope_label: str,
 ) -> list[str]:
+    """Apply the user's selector to the discovered dataset names.
+
+    Supports explicit names, globs, and slices. Kept in one place so the runner,
+    the watchdog, and the rerun tool all interpret a selector identically --
+    three implementations would eventually cover three different sets.
+    """
     if not selector:
         return list(dataset_names)
 
@@ -143,6 +156,7 @@ def select_datasets(
     *,
     scope_label: str,
 ) -> list[Path]:
+    """Filter dataset paths by the same selector rules as `select_dataset_names`."""
     selected_names = select_dataset_names(
         [path.stem for path in csv_paths],
         selector,
@@ -153,6 +167,7 @@ def select_datasets(
 
 
 def get_question_info(dataset_name: str, data_folder: Path | None, output_csv: Path) -> tuple[str, str | None, str]:
+    """Read a dataset's question text and gold answer, for reporting."""
     import pandas as pd
 
     if data_folder is not None:
@@ -179,6 +194,13 @@ def get_question_info(dataset_name: str, data_folder: Path | None, output_csv: P
 
 
 def output_csv_needs_rerun(csv_path: Path) -> bool:
+    """Whether an existing output is incomplete and must be recomputed.
+
+    The resume predicate. Checks contents, not existence: an output file is
+    created when work starts, so treating existence as completion silently
+    reports a truncated run as final. Errs toward re-running, since redoing
+    finished work costs time while keeping a partial result costs correctness.
+    """
     import pandas as pd
 
     try:

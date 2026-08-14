@@ -58,6 +58,7 @@ def discover_dataset_configs(
     ingest_params: dict,
     retrieval_params: dict,
 ) -> list[DatasetConfig]:
+    """Build the per-dataset configs a batch run will execute."""
     datasets: list[DatasetConfig] = []
     for csv_file in discover_csv_datasets(folder_path, file_pattern):
         datasets.append(
@@ -84,6 +85,7 @@ def _write_run_metadata(
     dataset_selector: str | None,
     run_targets: list[tuple[str, list[Path]]],
 ) -> None:
+    """Record the batch's configuration before any dataset runs."""
     target_rows: list[dict[str, object]] = []
     subfolders = sorted([p for p in data_root.iterdir() if p.is_dir()]) if data_root.exists() else []
     has_subfolders = len(subfolders) > 0

@@ -71,6 +71,7 @@ def remove_if_exists(path: str | Path) -> None:
 
 
 def load_json_records(path: str | Path) -> list[dict[str, Any]]:
+    """Load a JSON file expected to hold a list of records."""
     target = Path(path)
     with target.open("r", encoding="utf-8") as fh:
         data = json.load(fh)
@@ -86,6 +87,7 @@ def load_json_records(path: str | Path) -> list[dict[str, Any]]:
 
 
 def load_json_object(path: str | Path) -> dict[str, Any]:
+    """Load a JSON file expected to hold an object."""
     target = Path(path)
     with target.open("r", encoding="utf-8") as fh:
         data = json.load(fh)
@@ -174,6 +176,7 @@ def token_usage_log_path(run_root: Path, sample_index: int) -> Path:
 
 
 def write_summary_map(path: Path, per_sample_stats: Dict[str, dict]) -> None:
+    """Write the run's per-sample statistics map."""
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "per_sample": per_sample_stats,
@@ -221,6 +224,11 @@ def write_eval_csv(
     eval_csv: str | Path,
     rows: Sequence[dict[str, Any]],
 ) -> None:
+    """Write evaluation rows with the canonical column order.
+
+    EVAL_COLUMNS fixes the order so per-sample CSVs concatenate later without
+    reconciling headers.
+    """
     output_path = Path(eval_csv)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pandas_module.DataFrame(list(rows), columns=EVAL_COLUMNS).to_csv(

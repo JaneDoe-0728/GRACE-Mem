@@ -34,6 +34,12 @@ _SEEDED_BACKENDS: set[tuple[str, str, str]] = set()
 
 
 def _log_seed_backend_state(base_url: str, model: str, state: str, detail: str) -> None:
+    """Log a seed-support transition once per (endpoint, model, state).
+
+    Deduplicated because the alternative is one warning per judged question:
+    against a backend that ignores seeds, an unfiltered log buries everything
+    else in the run.
+    """
     key = (base_url, model, state)
     if key in _SEEDED_BACKENDS:
         return
@@ -243,6 +249,12 @@ def build_plus_messages(
     pred: str,
     evidence: str,
 ) -> list[dict[str, str]]:
+    """Build messages for the locomo-plus variant, which supplies extra context.
+
+    Separate from `build_messages` because the extra context changes the
+    prompt's structure, not just its content -- one builder with a conditional
+    would have to keep both shapes correct in one place.
+    """
     template_key = normalize_prompt_category(label, category)
     template = judge_prompts.PROMPT_TEMPLATES.get(template_key, judge_prompts.PROMPT_TEMPLATES["default"])
     return build_messages(
@@ -252,6 +264,7 @@ def build_plus_messages(
 
 
 def build_judge_standard_messages(*, question: str, gold: str, gen: str) -> list[dict[str, str]]:
+    """Build the judge prompt for standard LoCoMo questions."""
     return build_messages(
         system_prompt=judge_prompts.SYSTEM_PROMPT,
         user_prompt=judge_prompts.ACCURACY_PROMPT.format(
@@ -270,6 +283,7 @@ def build_judge_plus_messages(
     pred: str,
     evidence: str,
 ) -> list[dict[str, str]]:
+    """Build the judge prompt for locomo-plus questions."""
     return build_plus_messages(
         label=label,
         category=category,
@@ -286,6 +300,12 @@ def build_open_domain_standard_messages(
     gen: str,
     evidence_turns: str,
 ) -> list[dict[str, str]]:
+    """Build the open-domain judge prompt, where gold is one acceptable answer.
+
+    Uses the open-domain rubric rather than the standard one: these questions
+    admit several correct answers, and the standard prompt marks correct answers
+    wrong for not matching the reference.
+    """
     return build_messages(
         system_prompt=open_domain_prompts.SYSTEM_PROMPT,
         user_prompt=open_domain_prompts.ACCURACY_PROMPT.format(
@@ -305,6 +325,7 @@ def build_open_domain_plus_messages(
     pred: str,
     evidence: str,
 ) -> list[dict[str, str]]:
+    """Build the open-domain judge prompt for locomo-plus questions."""
     return build_plus_messages(
         label=label,
         category=category,

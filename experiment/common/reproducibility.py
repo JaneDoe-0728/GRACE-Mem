@@ -18,6 +18,11 @@ build_dataloader_seed_components = _runtime.build_dataloader_seed_components
 
 
 def _load_experiment_reproducibility_params() -> dict[str, Any]:
+    """Read reproducibility defaults from experiment_config, tolerating its absence.
+
+    Imported lazily and guarded, so the analysis tooling can use this module
+    without a full experiment config on the path.
+    """
     try:
         module = importlib.import_module("experiment.experiment_config")
     except Exception:
@@ -37,6 +42,12 @@ def resolve_reproducibility_config(
     seed: int | None = None,
     deterministic: bool | None = None,
 ) -> ReproducibilityConfig:
+    """Determine the seed and determinism settings for this run.
+
+    Resolution order is explicit argument, then experiment config, then default.
+    The seed is resolved once and recorded, so a run's artifacts state the seed
+    rather than leaving it to be inferred from how the command was invoked.
+    """
     return _runtime.resolve_reproducibility_config(
         seed=seed,
         deterministic=deterministic,
@@ -50,6 +61,11 @@ def activate_reproducibility(
     deterministic: bool | None = None,
     log_prefix: str | None = None,
 ) -> ReproducibilityConfig:
+    """Apply reproducibility settings before any model is loaded.
+
+    Forwards to `grace_mem.runtime.reproducibility`, which must run before torch
+    initializes -- see its docstring for why the ordering is load-bearing.
+    """
     return _runtime.activate_reproducibility(
         seed=seed,
         deterministic=deterministic,
@@ -74,6 +90,7 @@ def attach_reproducibility_metadata(
     *,
     cfg: ReproducibilityConfig | None = None,
 ) -> dict[str, Any]:
+    """Stamp a metadata payload with the active seed and determinism state."""
     return _runtime.attach_reproducibility_metadata(
         payload,
         config=cfg or get_runtime_reproducibility(),
@@ -85,6 +102,7 @@ def write_reproducibility_file(
     *,
     filename: str = "reproducibility.json",
 ) -> Path:
+    """Write the reproducibility state as a standalone file in the run directory."""
     _experiment_defaults()
     return _runtime.write_reproducibility_file(directory, filename=filename)
 

@@ -136,6 +136,13 @@ def resolve_run(reference: str, benchmark: str = "auto") -> tuple[Path, str]:
 
 
 def detect_benchmark(run_dir: Path) -> str:
+    """Infer which benchmark a run directory belongs to from its layout.
+
+    LoCoMo writes sample_N directories, LongMemEval writes per-category ones.
+    Used only when the caller did not say; an ambiguous directory is reported
+    rather than guessed at, since scoring the wrong benchmark's files produces
+    numbers that look valid.
+    """
     if any((run_dir / category).is_dir() for category in LONGMEM_CATEGORIES):
         return "longmem"
     if any(run_dir.glob("sample_*")):
@@ -144,6 +151,12 @@ def detect_benchmark(run_dir: Path) -> str:
 
 
 def _read_first(path: Path) -> pd.Series | None:
+    """Read a CSV's first row, or None when the file is empty or unreadable.
+
+    The LongMem outputs hold one question per file, so the first row is the
+    row. None rather than raising, so a failed question shortens the score's
+    denominator instead of aborting the run.
+    """
     try:
         frame = pd.read_csv(path, encoding="utf-8-sig")
     except Exception:
@@ -280,6 +293,7 @@ def load_locomo(
 
 
 def _count_value(value: object) -> int | None:
+    """Count how many records carry a given value for a field."""
     if isinstance(value, (list, tuple, set)):
         return len(value)
     if isinstance(value, bool):
@@ -418,6 +432,7 @@ def score_run(
 
 
 def _print_run(result: RunScore) -> None:
+    """Print one run's scores: overall, per category, lexical, and agent."""
     print(f"\n=== {Path(result.run).name} ({result.benchmark}) ===")
     print(f"protocol: {result.protocol}")
     print(f"{'category':28s} {'correct':>9s} {'total':>7s} {'accuracy':>10s}")
@@ -448,6 +463,7 @@ def _print_run(result: RunScore) -> None:
 
 
 def _print_multi_run(results: Sequence[RunScore]) -> None:
+    """Print several runs side by side, for comparison."""
     if len(results) < 2:
         return
     accuracies = [result.accuracy_percent for result in results if result.accuracy_percent is not None]

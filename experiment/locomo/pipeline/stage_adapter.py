@@ -16,6 +16,12 @@ from typing import Any, Sequence
 
 
 def skipped_judge_stats(*, exclude_adversarial: bool) -> dict[str, Any]:
+    """Return a judge-stats shape with None values, for a run that skipped judging.
+
+    Same keys as a real result so aggregation never has to special-case a
+    skipped stage. None rather than 0, so "not judged" stays distinguishable
+    from "judged and scored zero".
+    """
     return {
         "avg_correctness": None,
         "avg_correctness_percent": None,
@@ -28,6 +34,12 @@ def skipped_judge_stats(*, exclude_adversarial: bool) -> dict[str, Any]:
 
 
 def configure_retriever(retriever: Any, *, adaptive: bool, tau: float) -> None:
+    """Apply the run's adaptive-retrieval settings to a retriever instance.
+
+    Args:
+        tau: Confidence threshold below which the adaptive second pass triggers.
+            Only consulted when `adaptive` is on.
+    """
     if not adaptive:
         return
     retriever.cfg = dataclasses.replace(
@@ -50,6 +62,7 @@ def run_ingest_stage_for_locomo(
     entity_sim_threshold: float,
     chunk_turns: int,
 ) -> dict[str, Any]:
+    """Ingest one LoCoMo sample's sessions into the knowledge graph."""
     sessions = ingest_module.load_sessions(
         dataset=dataset,
         sessions_jsonl=sessions_jsonl,
@@ -83,6 +96,12 @@ def run_ingest_stage_for_records(
     entity_sim_threshold: float,
     chunk_turns: int,
 ) -> dict[str, Any]:
+    """Ingest pre-built session records, bypassing dataset loading.
+
+    The entry point for replays and for datasets whose records were assembled
+    elsewhere, so those paths share the ingestion code rather than duplicating
+    it against a different loader.
+    """
     df = ingest_module.session_records_to_df(
         list(records), conv_id=conv_id, chunk_turns=chunk_turns
     )
@@ -101,6 +120,7 @@ def build_eval_rows(
     qa_items: Sequence[dict[str, Any]],
     simplify_gold_evidence: bool,
 ) -> list[dict[str, Any]]:
+    """Run QA evaluation over a sample's questions and return the result rows."""
     return qa_eval_module.evaluate_items(
         list(qa_items),
         simplify_evidence=simplify_gold_evidence,
@@ -117,6 +137,7 @@ def run_judge_stage(
     dataset: str,
     exclude_adversarial: bool,
 ) -> dict[str, Any]:
+    """Judge a sample's evaluation rows and return the accuracy statistics."""
     return judge_module.llm_as_judge_singlemode(
         input_csv=str(input_csv),
         output_csv=str(output_csv),

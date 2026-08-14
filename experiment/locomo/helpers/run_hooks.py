@@ -27,6 +27,7 @@ def _worker_paths_for_sample(
     sample_index: int,
     strategy: DatasetStrategy,
 ) -> WorkerPaths:
+    """Compute where one sample's worker will write, honouring the dataset strategy."""
     run_root = runtime.config.run_root
     sample_dir = ensure_dir(run_root / f"sample_{sample_index}")
     if not strategy.uses_run_dirs:
@@ -60,6 +61,11 @@ def _record_sample_outputs(
     sample_paths: WorkerPaths,
     strategy: DatasetStrategy,
 ) -> None:
+    """Collect a finished worker's stats into the run summary.
+
+    Read from the child's files rather than returned in memory -- the worker is
+    a separate process, so its outputs are the only channel back.
+    """
     if not strategy.uses_run_dirs:
         return
 
@@ -83,6 +89,7 @@ def _log_success(
     plan: SamplePlan,
     strategy: DatasetStrategy,
 ) -> None:
+    """Log a sample's completion with the figures worth seeing while a run is live."""
     if not strategy.uses_run_dirs:
         return
     if args.no_judge:
@@ -97,6 +104,12 @@ def _log_success(
 
 
 def _refresh_system(*, sleep_seconds: float) -> None:
+    """Restart the graph backend between samples and wait for it to settle.
+
+    The sleep is not padding: the backend accepts connections before it can
+    serve them, and a query issued in that window fails in a way that looks like
+    a retrieval bug rather than a startup race.
+    """
     log_event("REFRESH", "Cleaning system for next sample")
     refresh_cmd = [
         sys.executable, "-c",

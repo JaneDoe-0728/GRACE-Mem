@@ -83,6 +83,12 @@ def _write_watchdog_metadata(
     dataset_selector: str | None,
     rerun_mode: bool,
 ) -> None:
+    """Record what the watchdog was configured to supervise, and how.
+
+    Written alongside the run so an interrupted or partly-skipped sweep can be
+    read back later: which datasets were in scope, what counted as stuck, and
+    what the watchdog was permitted to do about it.
+    """
     write_run_metadata(
         metadata_path,
         {
@@ -126,6 +132,12 @@ def _write_watchdog_metadata(
 # ---------------------------------------------------------------------------
 
 def setup_logger(log_dir: Path) -> logging.Logger:
+    """Configure the watchdog's own log, separate from the run's.
+
+    Separate because the watchdog outlives individual datasets and its decisions
+    -- what it skipped, what it restarted -- need to stay legible next to a run
+    log that is being written by several workers at once.
+    """
     ensure_dir(log_dir)
     log_path = log_dir / "watchdog.log"
 
@@ -382,6 +394,7 @@ def count_completion_child(
     type_name: list[str] | str | None,
     dataset_selector: str | None = None,
 ) -> tuple[int, int]:
+    """Count how many of a child manifest's datasets have finished."""
     grouped = resolve_child_datasets(data_root, child_file, type_name=type_name)
     total = 0
     completed = 0
@@ -529,6 +542,12 @@ class RunResult(NamedTuple):
 
 
 def run_once(py: str, module: str, env: dict, logger: logging.Logger, timeout_sec: int) -> RunResult:
+    """Perform one supervision pass: check progress, skip what is wedged.
+
+    Called on a poll interval rather than continuously. Each pass is independent
+    and reads state from disk, so the watchdog can be restarted mid-sweep
+    without losing track of what it had already decided.
+    """
     import signal
 
     cmd = [py, "-m", module]
@@ -591,6 +610,12 @@ def _resolve_rerun_targets(
     output_root_base: Path,
     type_names: list[str] | None,
 ) -> list[RerunTarget]:
+    """Work out which datasets a rerun pass should cover, and why each qualifies.
+
+    The reason is carried alongside the target so the rerun log states what
+    prompted each one -- a dataset re-run for a stall and one re-run for an
+    incomplete output are different situations.
+    """
     from experiment.longmem.helpers.rerun_support import retrieval_datasets_from_artifacts
 
     if type_names:
@@ -647,6 +672,7 @@ def _run_rerun_mode(
     *,
     data_folder: Path | None = None,
 ) -> int:
+    """Run the watchdog in rerun mode: re-do the datasets that need it, then stop."""
     from experiment.longmem.pipeline.aggregate import update_all_answers_csv, update_progress_rows
     from experiment.longmem.helpers.rerun_support import (
         cleanup_retrieval_loggers,

@@ -424,6 +424,7 @@ class MultiDatasetProcessor:
         self._reopen_retriever(config, artifact_dir)
 
     def _build_context(self, question: str, config: DatasetConfig, query_time: str | None = None) -> str:
+        """Retrieve and render the context for one question."""
         return self.qa_stage.build_context(
             self.current_retriever,
             question=question,
@@ -432,6 +433,7 @@ class MultiDatasetProcessor:
         )
 
     def _ask_llm(self, question: str, context: str, question_date: str | None = None) -> str:
+        """Ask the model one question against a retrieved context."""
         return self.qa_stage.ask_llm(
             llm=self.llm,
             question=question,
@@ -801,6 +803,7 @@ class MultiDatasetProcessor:
 
     @staticmethod
     def _read_answer_data(output_path: Path) -> Dict:
+        """Read back a previously written answer, for resume and rerun paths."""
         if not output_path.exists():
             raise FileNotFoundError(f"Output CSV not found: {output_path}")
         result_df = read_csv_frame(output_path)
@@ -809,6 +812,12 @@ class MultiDatasetProcessor:
         return result_df.iloc[0].to_dict()
 
     def _persist_correctness(self, output_path: Path, correctness: str) -> None:
+        """Write a judged verdict back onto the stored answer row.
+
+        Separate from answer writing so judging can be re-run over existing answers
+        without regenerating them -- which is what makes judge-prompt iteration
+        cheap.
+        """
         if not output_path.exists():
             return
         out_df = read_csv_frame(output_path)
@@ -1106,6 +1115,7 @@ class MultiDatasetProcessor:
         category: str | None = None,
         is_abstention: bool = False,
     ) -> int:
+        """Judge one answer and return its binary verdict."""
         return self.judge_stage.judge_single(
             llm=self.llm,
             question=question,
@@ -1127,6 +1137,7 @@ class MultiDatasetProcessor:
 
     def _save_progress_row(self, dataset: str, status: str, correctness: str = "",
                            question: str = "", gold_answer: str = "", generated_answer: str = ""):
+        """Update this dataset's row in the shared progress table, under its lock."""
         row = {
             "dataset": dataset,
             "status": status,
@@ -1144,6 +1155,11 @@ class MultiDatasetProcessor:
         shared_init_progress_rows(self.base_output_dir, [cfg.name for cfg in configs])
 
     def _append_stuck_history(self, dataset: str, processed: int, total) -> None:
+        """Record that this dataset stalled, keeping any earlier stalls.
+
+        Appended rather than replaced: repeated stalls on one dataset distinguish a
+        transient backend problem from a reproducible one in that data.
+        """
         shared_append_stuck_history(
             self.base_output_dir,
             dataset=dataset,

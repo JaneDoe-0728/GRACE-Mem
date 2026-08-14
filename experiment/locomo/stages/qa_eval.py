@@ -331,6 +331,11 @@ def _split_at_sentence(text: str, max_chars: int) -> list[str]:
 
     def find_cut(remaining: str, ideal: int) -> int:
         # Search in a window around the ideal cut point, never exceeding max_chars
+        """Find the sentence boundary nearest a target offset.
+
+        Cuts are snapped to a boundary so a chunk never ends mid-sentence, which
+        would leave the fact extractor working on a fragment.
+        """
         lo = max(ideal - ideal // 4, 1)
         hi = min(ideal + ideal // 4, max_chars, len(remaining) - 1)
         window = remaining[lo:hi]
@@ -735,6 +740,12 @@ def _render_session_raw_text(session_id: str) -> tuple[str | None, str | None]:
 
 
 def _parse_replay_relationship_label(label: str) -> tuple[str, str, str]:
+    """Parse a "source -> target" relationship label back into its endpoints.
+
+    The inverse of the renderer in summary_scoring. Replay depends on the pair
+    round-tripping, so a change to either side breaks replay against artifacts
+    already on disk.
+    """
     text = str(label or "").strip()
     if not text:
         return "", "", ""
@@ -751,6 +762,7 @@ def _render_replay_temporal_tag(item_type: str, prov: Any, request_id: str | Non
 
 
 def _build_replay_entities(entity_names: list[Any]) -> list[dict[str, Any]]:
+    """Reconstruct entity metadata from a previous run's recorded names."""
     entities: list[dict[str, Any]] = []
     seen_names: set[str] = set()
     for entity_name in entity_names:
@@ -769,6 +781,7 @@ def _build_replay_entities(entity_names: list[Any]) -> list[dict[str, Any]]:
 
 
 def _build_replay_relationships(relationship_names: list[Any]) -> list[dict[str, Any]]:
+    """Reconstruct relationship metadata from a previous run's recorded labels."""
     relationships: list[dict[str, Any]] = []
     seen_labels: set[str] = set()
     for relationship_name in relationship_names:
@@ -1232,6 +1245,7 @@ def load_questions(
 
 def pick_gold_answer(item: dict) -> str:
     # Prefer 'answer'; fallback to 'adversarial_answer' for category 5 items
+    """Choose the gold answer to score against, honouring the adversarial variant."""
     if "answer" in item and item["answer"] not in (None, "", []):
         return str(item["answer"])
     if "adversarial_answer" in item and item["adversarial_answer"] not in (None, "", []):
@@ -1278,6 +1292,11 @@ def evaluate_item(
     *,
     simplify_evidence: bool = False,
 ) -> dict | None:
+    """Evaluate one question: retrieve, answer, and record the trace.
+
+    The retrieval path is selected by the module-level `retrieval_mode` -- see
+    the module docstring for what each ablation isolates.
+    """
     question = str(item.get("question", "")).strip()
     if not question:
         return None
@@ -1337,6 +1356,7 @@ def evaluate_items(
     simplify_evidence: bool = False,
 ) -> list[dict]:
     # Optional filter: KG_QUESTION_FILTER env var (newline-separated substrings)
+    """Evaluate every question in a sample and return the result rows."""
     _filter_raw = os.environ.get("KG_QUESTION_FILTER", "").strip()
     _filter_strs = [s.strip().lower() for s in _filter_raw.splitlines() if s.strip()] if _filter_raw else []
 

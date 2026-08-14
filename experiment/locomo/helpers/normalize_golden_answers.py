@@ -110,6 +110,12 @@ def _preprocess(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _parse_date_parts(day: str, month: str, year: str) -> Optional[date]:
+    """Extract (day, month, year) from a date written either day- or month-first.
+
+    Both orders are present in the corpus, so which capture groups matched is
+    what disambiguates them -- the numbers alone cannot, since 3/4 is valid
+    either way.
+    """
     m = _MONTHS.get(month.strip().lower())
     if not m:
         return None
@@ -120,6 +126,11 @@ def _parse_date_parts(day: str, month: str, year: str) -> Optional[date]:
 
 
 def _weekday_before(anchor: date, weekday_name: str) -> Optional[date]:
+    """Resolve "the <weekday> before <date>" to an absolute date.
+
+    Strictly before: when the anchor date is itself that weekday, the previous
+    week is meant, not the anchor itself.
+    """
     wd = _WEEKDAYS.get(weekday_name.lower())
     if wd is None:
         return None
@@ -179,6 +190,13 @@ def _try_parser(text: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 def normalize_answer(text: str) -> dict:
+    """Rewrite a gold answer's dates into a canonical form.
+
+    Gold answers write dates as prose ("15 July 2023", "July 15 2023"), and a
+    judge comparing those against a model's ISO output can mark a correct answer
+    wrong on formatting alone. Normalizing both sides removes that from the
+    measurement.
+    """
     raw = _preprocess(text)
 
     # 1. Weekday-before-date (not handled by parser)
@@ -205,6 +223,7 @@ def normalize_answer(text: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def normalize_locomo_file(input_path: Path, output_path: Path) -> None:
+    """Rewrite a dataset file's gold answers in place, reporting how many changed."""
     with open(input_path) as f:
         data = json.load(f)
 

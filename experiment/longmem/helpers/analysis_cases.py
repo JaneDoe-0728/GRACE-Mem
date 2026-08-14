@@ -63,6 +63,7 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def events_by_type(records: list[dict]) -> dict[str, list[dict]]:
+    """Group a trace's events by type, for the per-step analysis below."""
     result: dict[str, list[dict]] = {}
     for record in records:
         event = record.get("event", "")
@@ -385,6 +386,13 @@ CUT_ITEMS_JUDGE_SYSTEM = (
 
 
 def llm_judge_cut_items(llm, question: str, gold_answer: str, cut_entities: list[str], cut_rels: list[str], entity_meta: dict, rel_meta: dict) -> str:
+    """Ask an LLM whether the text a filter cut actually held the answer.
+
+    The distinction that makes a filtering cut interpretable. Losing the gold
+    turn is only a real failure if that turn carried answer information -- gold
+    annotation marks turns, not sentences, so a cut gold turn may have contained
+    nothing useful. Without this check every cut looks equally bad.
+    """
     lines = []
     for entity_id in cut_entities:
         meta = entity_meta.get(entity_id, {})
@@ -416,6 +424,7 @@ def llm_judge_cut_items(llm, question: str, gold_answer: str, cut_entities: list
 
 
 def build_error_analysis_llm():
+    """Construct the client used for the analysis pass's judgement calls, if enabled."""
     from dotenv import load_dotenv
     from openai import OpenAI
 
@@ -459,6 +468,12 @@ def analyze_one(
     output_dir: Path,
     llm=None,
 ) -> dict:
+    """Run all nine trace steps for one question and assemble its case file.
+
+    Steps run in pipeline order so the first failure is attributable: every
+    later step depends on the earlier ones, and a question that failed at ingest
+    will also show empty entities, empty evidence, and a wrong answer.
+    """
     log_dir = output_dir / f"logs_{dataset_id}"
     artifacts_dir = output_dir / f"artifacts_{dataset_id}"
 
@@ -523,6 +538,7 @@ def collect_cases(
     no_llm: bool = False,
     no_overwrite: bool = False,
 ) -> int:
+    """Analyze every question in a run and write one case file each."""
     cases_dir = analysis_dir / "cases"
     ensure_dir(cases_dir)
 

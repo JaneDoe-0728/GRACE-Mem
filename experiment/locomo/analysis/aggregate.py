@@ -61,6 +61,7 @@ def read_csvs(csv_files: Sequence[Path]) -> tuple[list[DataFrame], list[str]]:
 
 
 def load_dataset_items(dataset_json: Path) -> list[dict[str, Any]]:
+    """Load the dataset's questions, for joining categories onto judged rows."""
     with dataset_json.open("r", encoding="utf-8") as fh:
         data = json.load(fh)
     if not isinstance(data, list):
@@ -111,6 +112,11 @@ def _latest_judge_csv(sample_dir: Path) -> Path | None:
 
 
 def _require_pandas():
+    """Import pandas on demand, with a clear message if it is absent.
+
+    Deferred so the runner can import this module -- and reach its path helpers
+    -- without pandas installed.
+    """
     try:
         import pandas as pd
     except ModuleNotFoundError as exc:
@@ -180,6 +186,7 @@ def aggregate_judge_csv_files(
 
 
 def _summary_entry_from_payload(data: dict[str, Any], source: Path | str) -> Dict[str, object]:
+    """Extract one sample's summary row from its stats payload."""
     return {
         "avg_correctness": data.get("avg_correctness"),
         "avg_correctness_percent": data.get("avg_correctness_percent"),
@@ -208,6 +215,12 @@ def _missing_entry() -> Dict[str, object]:
 
 
 def _print_skipped(errors: Sequence[str]) -> None:
+    """Report samples that produced no output.
+
+    Printed rather than passed over, so a run of eight samples is
+    distinguishable from a run of ten with two silent failures -- the averages
+    alone would not show it.
+    """
     if not errors:
         return
     print(f"[WARN] Skipped {len(errors)} files due to read errors:")
@@ -216,6 +229,7 @@ def _print_skipped(errors: Sequence[str]) -> None:
 
 
 def _run_locomo(args: argparse.Namespace) -> None:
+    """Aggregate a standard LoCoMo run into its summary JSON and merged CSV."""
     if not args.root:
         raise SystemExit("--root is required when --dataset=locomo")
 
@@ -304,6 +318,7 @@ def _run_locomo(args: argparse.Namespace) -> None:
 
 
 def _run_locomo_plus(args: argparse.Namespace) -> None:
+    """Aggregate a locomo-plus run, which stores results per run directory."""
     if not args.eval_dir:
         raise SystemExit("--eval-dir is required when --dataset=locomo-plus")
     if not args.dataset_json:
@@ -384,6 +399,7 @@ _AGGREGATE_SCRIPT = Path(__file__).resolve()
 
 
 def _aggregate_locomo_run(run_root: Path, *, include_adversarial: bool) -> Optional[AggregateResult]:
+    """Aggregate one LoCoMo run directory."""
     output_json = run_root / "_correctness_aggregate.json"
     merged_csv = run_root / "_judge_merged.csv"
     cmd = [
@@ -411,6 +427,7 @@ def _aggregate_locomo_plus_run(
     *,
     include_adversarial: bool,
 ) -> Optional[AggregateResult]:
+    """Aggregate one locomo-plus run directory."""
     judge_files = sorted(
         (path for path in judge_dir.glob("*.csv") if path.stem.isdigit()),
         key=lambda path: int(path.stem),
@@ -439,6 +456,11 @@ def maybe_aggregate_run(
     judge_dir: Optional[Path],
     include_adversarial: bool,
 ) -> Optional[AggregateResult]:
+    """Aggregate a finished run, if there is anything to aggregate.
+
+    Called unconditionally at the end of a run, so it has to tolerate a run
+    that produced nothing -- an aborted sweep should not fail on its way out.
+    """
     if no_judge:
         log_event("AGGREGATE", "Skipped because judge phase was disabled")
         return None

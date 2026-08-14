@@ -92,6 +92,7 @@ def compute_correctness_stats(df: pd.DataFrame, *, exclude_adversarial: bool = T
     }
 
     def ensure_category_stats(label: str) -> dict:
+        """Return the stats bucket for a category, creating it on first sight."""
         return stats["by_category"].setdefault(
             str(label),
             {
@@ -302,6 +303,12 @@ def load_category_map(dataset_json_path: str, sample_index: int) -> dict:
 
 
 def _load_all_category_map(dataset_json: str) -> dict[str, str]:
+    """Load question -> category across every sample in the dataset.
+
+    Used when a row's sample is unknown, which happens with older outputs. Can
+    match an identically worded question in another sample; acceptable, since
+    this only affects the reporting breakdown, not the verdict.
+    """
     samples = load_raw_samples(dataset_json)
     q_to_cat: dict[str, str] = {}
     for sample_index in range(len(samples)):
@@ -317,6 +324,7 @@ def _load_all_category_map(dataset_json: str) -> dict[str, str]:
 
 
 def _build_dia_index(conversation: dict) -> dict:
+    """Index a conversation's turns by their D{session}:{turn} evidence id."""
     dia_index = {}
     for key, turns in conversation.items():
         if not key.startswith("session_") or key.endswith("_date_time"):
@@ -394,6 +402,7 @@ def _find_evidence_turns(dataset: list, question: str, sample: str | None) -> li
 
 
 def _infer_sample_index(input_csv: str) -> int | None:
+    """Recover a sample index from a path or filename, or None."""
     match = re.search(r"sample(\d+)", Path(input_csv).name)
     if match:
         try:
@@ -413,6 +422,12 @@ def llm_as_judge_singlemode(
     exclude_adversarial: bool = True,
 ):
     # Resume from existing output if present (incremental mode).
+    """Judge one answer with the standard LoCoMo rubric.
+
+    Category selects the prompt template: a temporal question and an open-domain
+    one fail in different ways, and grading both by one rubric scores at least
+    one of them on the wrong criterion.
+    """
     output_path = Path(output_csv)
     if output_path.exists():
         df = pd.read_csv(output_csv)
@@ -532,6 +547,12 @@ def llm_as_judge_open_domain(
     dataset_json: str,
     dataset: str,
 ):
+    """Judge one open-domain answer, where gold is a reference rather than an oracle.
+
+    Separate from the standard path because the grading rule genuinely differs:
+    these questions admit several correct answers, and the standard rubric marks
+    correct answers wrong for not matching the reference string.
+    """
     df = pd.read_csv(input_csv)
     locomo_data = load_raw_samples(dataset_json)
 

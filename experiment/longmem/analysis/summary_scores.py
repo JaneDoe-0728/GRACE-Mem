@@ -39,6 +39,7 @@ def _is_main(p: Path) -> bool:
 
 
 def _gold_sids(src: Path) -> set[str]:
+    """Read the gold-evidence sids for one question CSV."""
     df = pd.read_csv(src)
     df.columns = [c.lstrip("\ufeff") for c in df.columns]
     if "has_answer" not in df.columns:
@@ -52,6 +53,7 @@ def _gold_sids(src: Path) -> set[str]:
 
 
 def _evidence_entries(ctx) -> list[tuple[str, float]]:
+    """Parse the retrieved evidence entries out of a stored context."""
     if not isinstance(ctx, str):
         return []
     i = ctx.find(_HEADER)
@@ -66,6 +68,12 @@ def _evidence_entries(ctx) -> list[tuple[str, float]]:
 
 
 def _stats(xs: list[float]) -> str:
+    """Summarize a score distribution: count, mean, and quantiles.
+
+    Quantiles rather than mean alone, because these distributions are routinely
+    bimodal -- a handful of strong hits and a long tail of near-zero scores --
+    and a mean over that describes neither group.
+    """
     if not xs:
         return "n=0"
     xs = sorted(xs)
@@ -78,6 +86,7 @@ def _stats(xs: list[float]) -> str:
 
 
 def _hist(xs: list[float], lo: float, hi: float, bins: int = 14, width: int = 40) -> str:
+    """Render a score distribution as a text histogram, for terminal reading."""
     if not xs:
         return "  (empty)"
     step = (hi - lo) / bins

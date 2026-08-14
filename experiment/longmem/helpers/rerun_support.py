@@ -48,6 +48,7 @@ def resolve_artifact_dir(root: Path, dataset_name: str) -> Path | None:
 
 
 def failed_datasets(output_dir: Path, specified: list[str] | None) -> list[str]:
+    """List datasets a previous run did not complete successfully."""
     if specified:
         return specified
 
@@ -111,6 +112,11 @@ def retrieval_datasets_from_artifacts(
 
 
 def output_csv_needs_rerun(csv_path: Path) -> bool:
+    """Whether an existing output is too incomplete to keep.
+
+    Checks contents rather than existence: the file is created when work starts,
+    so existence alone would accept a truncated result as final.
+    """
     try:
         df = read_csv_frame(csv_path)
         if "Retrieved_Context" not in df.columns or len(df) == 0:
@@ -122,6 +128,7 @@ def output_csv_needs_rerun(csv_path: Path) -> bool:
 
 
 def setup_retrieval_loggers(dataset_name: str, log_dir: Path) -> None:
+    """Point retrieval logging at this dataset's directory for the rerun."""
     from grace_mem.utils.logger_config import make_module_jlog
 
     import grace_mem.pipeline.retrieval_steps.evidence as evidence_module
@@ -183,6 +190,12 @@ def setup_retrieval_loggers(dataset_name: str, log_dir: Path) -> None:
 
 
 def cleanup_retrieval_loggers(log_dir: Path) -> None:
+    """Close this dataset's retrieval loggers before moving to the next.
+
+    A rerun walks many datasets in one process, and each leaves open file
+    handles behind. Without this the process eventually exhausts its descriptor
+    limit, partway through a long sweep and far from the cause.
+    """
     from grace_mem.utils.logger_config import close_event_loggers
 
     close_event_loggers(log_dir=str(log_dir))

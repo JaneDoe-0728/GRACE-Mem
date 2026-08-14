@@ -43,6 +43,12 @@ def artifact_dir_for_sample(args) -> Path | None:
 
 
 def restore_artifacts_from_dir(artifact_dir: Path) -> None:
+    """Copy a previous sample's artifacts into the working directory.
+
+    What makes ingest skippable. Copied rather than pointed at, because the
+    sample about to run will write into them and must not corrupt the archived
+    copy that a later resume may need.
+    """
     log_event("ARTIFACT", "Loading artifacts", path=artifact_dir)
     if not artifact_dir.exists():
         raise FileNotFoundError(f"--artifact-dir not found: {artifact_dir}")
@@ -72,6 +78,13 @@ def reload_mgr_state_from_artifacts(mgr) -> None:
 
 
 def restore_graph_from_artifact_dir(graph, artifact_dir: Path) -> None:
+    """Rebuild the graph backend from an exported snapshot.
+
+    The expensive step a resumed or same-conversation sample avoids. The export
+    is validated before restore -- a truncated snapshot restores without error
+    and simply lowers recall, which reads as a retrieval regression rather than
+    a corrupt artifact.
+    """
     graph_export = artifact_dir / GRAPH_EXPORT_FILE
     if graph_export.exists():
         log_event("ARTIFACT", "Restoring FalkorDB graph", path=graph_export)
@@ -84,6 +97,7 @@ def restore_graph_from_artifact_dir(graph, artifact_dir: Path) -> None:
 
 
 def export_graph_to_artifacts(graph, *, sample_index: int | None = None) -> None:
+    """Write the current graph out so the next sample can restore it."""
     export_path = ARTIFACTS_SRC / GRAPH_EXPORT_FILE
     if write_graph_export(export_path, graph) is None:
         return
@@ -95,6 +109,12 @@ def export_graph_to_artifacts(graph, *, sample_index: int | None = None) -> None
 
 
 def validate_and_export_graph(graph, *, sample_index: int) -> None:
+    """Validate the graph, then export it.
+
+    Validating before writing keeps a known-bad snapshot from reaching disk,
+    where a later run would restore it and inherit the problem without any
+    indication of where it came from.
+    """
     export_path = ARTIFACTS_SRC / GRAPH_EXPORT_FILE
     graph_data = write_graph_export(export_path, graph, validate=True)
     if graph_data is None:
@@ -112,6 +132,12 @@ def validate_and_export_graph(graph, *, sample_index: int) -> None:
 
 
 def invoke_snapshot_builder(*, args, conv_id: str, max_session_id: int, run_root: Path) -> None:
+    """Spawn the snapshot builder for one conversation, up to a session bound.
+
+    A subprocess for the same reason samples are: it builds a graph and loads
+    models, and doing that in the parent would leave that state behind for every
+    subsequent sample.
+    """
     snap_cmd = [
         sys.executable,
         "-m",

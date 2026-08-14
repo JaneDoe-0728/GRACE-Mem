@@ -311,6 +311,11 @@ def _process_longmem_file(
 
 
 def run_longmem(args: argparse.Namespace) -> Path:
+    """Run the oracle over a LongMemEval run and report its ceiling.
+
+    Whatever the oracle gets wrong given perfect evidence is answer-generation
+    error that no retrieval improvement can recover.
+    """
     config = OracleConfig(
         benchmark="longmem",
         run_tag=args.run_tag,
@@ -415,6 +420,7 @@ def _process_locomo_sample(
 
 
 def run_locomo(args: argparse.Namespace) -> Path:
+    """Run the oracle over a LoCoMo run and report its ceiling."""
     dataset_path = Path(args.dataset_json)
     samples = json.loads(dataset_path.read_text(encoding="utf-8"))
     sample_ids = parse_sample_ids(args.samples)
@@ -468,6 +474,7 @@ def run_locomo(args: argparse.Namespace) -> Path:
 
 
 def _write_metadata(run_dir: Path, config: OracleConfig, args: argparse.Namespace) -> None:
+    """Record the oracle run's configuration alongside its results."""
     run_dir.mkdir(parents=True, exist_ok=True)
     metadata = {
         "entrypoint": "experiment.common.evaluation.oracle",
@@ -485,6 +492,11 @@ def _write_metadata(run_dir: Path, config: OracleConfig, args: argparse.Namespac
 
 
 def _run_judge(args: argparse.Namespace) -> None:
+    """Judge the oracle's answers using the same judge as a normal run.
+
+    The same judge on purpose: an oracle scored by a different rubric would not
+    be comparable with the runs it is meant to bound.
+    """
     command = [
         sys.executable,
         "-m",

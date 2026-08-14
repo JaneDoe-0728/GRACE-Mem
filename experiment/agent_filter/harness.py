@@ -208,6 +208,11 @@ def _flatten_json(obj) -> tuple[list[str], list[int]]:
 
 
 def _parse_harmony(reply: str) -> tuple[str, str] | None:
+    """Parse a Harmony-format reply into its channels.
+
+    Some backends wrap replies in Harmony's channel markup; unwrapping here
+    keeps the callers from having to know which backend produced a reply.
+    """
     m = None
     for m in _HARMONY_RE.finditer(reply):
         pass  # take the last tool call
@@ -303,6 +308,7 @@ def _parse_command(reply: str) -> tuple[str, str] | None:
 
 
 def _candidates_block(corpus: Corpus, sids: list[str]) -> str:
+    """Render the candidate turns the agent will decide over."""
     lines = []
     for s in sids:
         entry = corpus.display_entry(s, max_chars=400)
@@ -702,6 +708,13 @@ def refine_context(
         ]
 
         def _extract_final(arg: str, full_reply: str = "") -> list[str]:
+            """Pull the agent's final sid list out of its reply.
+
+            The reply is free text and the model varies how it presents the list -- a
+            line after "FINAL:", a bullet list, or both. Accepting all the observed
+            shapes matters because a parse miss reads as the agent having selected
+            nothing.
+            """
             sids = _SID_RE.findall(arg) + [
                 s for s in re.split(r"[,\s]+", _SID_RE.sub("", arg)) if s and ":" in s
             ]

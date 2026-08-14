@@ -74,6 +74,11 @@ def _write_run_metadata(
     sessions_jsonl_path: Path | None,
     selected_stages: list[str],
 ) -> None:
+    """Record the run's configuration before any sample executes.
+
+    Written up front so an interrupted run is still self-describing -- results
+    without the configuration that produced them cannot be interpreted later.
+    """
     metadata = {
         "entrypoint": "locomo.pipeline.runner",
         "run_tag": run_root.name,
@@ -101,6 +106,7 @@ def _write_run_metadata(
 # ---------------------------------------------------------------------------
 
 def _build_runtime(args) -> RunRuntime:
+    """Assemble the run's config, paths, and mutable state from parsed arguments."""
     from experiment.locomo.helpers.dataset import (
         default_output_variant_dir,
         load_raw_samples,
@@ -172,6 +178,13 @@ def _build_runtime(args) -> RunRuntime:
 # ---------------------------------------------------------------------------
 
 def run_orchestrator(args) -> None:
+    """Run every requested sample in sequence, one subprocess each.
+
+    A failed sample is recorded and the loop continues: a sweep of ten samples
+    should not be lost to one bad conversation. That does mean a run can finish
+    "successfully" with fewer samples than requested, which is why the summary
+    records per-sample outcomes rather than only the aggregate.
+    """
     from experiment.locomo.helpers.dataset import is_cognitive_item
     from experiment.locomo.cli import build_worker_command, resolve_stages
 
@@ -269,6 +282,11 @@ def run_orchestrator(args) -> None:
 
 
 def dispatch_pipeline(args) -> None:
+    """Route to the orchestrator or to a single worker, per the parsed arguments.
+
+    One entry point serving both roles is what lets the orchestrator spawn
+    children with `python -m` on this same module.
+    """
     if args.build_snapshots:
         _snapshot_builder(args)
         return

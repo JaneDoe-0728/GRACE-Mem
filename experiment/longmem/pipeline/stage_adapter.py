@@ -19,6 +19,7 @@ def normalize_sessions(df):
 
 
 def ingest_by_turn_pairs(*, ingestor, df, prev_k=None, entity_sim_topk=None, entity_sim_threshold=None, ignore_trailing_user_without_reply=True):
+    """Module-level forwarder to `IngestStage.ingest_by_turn_pairs`."""
     return _INGEST_STAGE.ingest_by_turn_pairs(
         ingestor,
         df,
@@ -30,6 +31,7 @@ def ingest_by_turn_pairs(*, ingestor, df, prev_k=None, entity_sim_topk=None, ent
 
 
 def ingest_by_session(*, ingestor, df, prev_k=None, entity_sim_topk=None, entity_sim_threshold=None):
+    """Module-level forwarder to `IngestStage.ingest_by_session`."""
     return _INGEST_STAGE.ingest_by_session(
         ingestor,
         df,
@@ -48,6 +50,7 @@ def load_question_from_csv(path):
 
 
 def build_context(*, retriever, question: str, retrieval_params: dict, query_time: str | None) -> str:
+    """Module-level forwarder to `QAEvalStage.build_context`."""
     return _QA_STAGE.build_context(
         retriever,
         question=question,
@@ -57,6 +60,7 @@ def build_context(*, retriever, question: str, retrieval_params: dict, query_tim
 
 
 def ask_llm(*, llm, question: str, context: str, question_date: str | None) -> str:
+    """Module-level forwarder to `QAEvalStage.ask_llm`."""
     return _QA_STAGE.ask_llm(
         llm,
         question=question,
@@ -74,6 +78,7 @@ def judge_single(
     category: str | None = None,
     is_abstention: bool = False,
 ) -> int:
+    """Module-level forwarder to `JudgeStage.judge_single`."""
     return _JUDGE_STAGE.judge_single(
         llm,
         question=question,
@@ -85,6 +90,7 @@ def judge_single(
 
 
 def single_result_frame(*, question: str, question_date: str | None, context: str, answer: str, gold: str, correctness: str = ""):
+    """Module-level forwarder to `QAEvalStage.single_result_frame`."""
     return _QA_STAGE.single_result_frame(
         question=question,
         question_date=question_date,

@@ -138,6 +138,7 @@ def _read_split_ids(chroma_dir: Path) -> set[str]:
 
 
 def _expected_split_ids(turns: list[dict]) -> set[str]:
+    """Compute the split ids an artifact should contain, to find what is missing."""
     expected: set[str] = set()
     for turn in turns:
         base_id = f"{turn['session_id']}:{int(turn['message_id'])}"
@@ -173,6 +174,12 @@ def _replace_index_transactionally(
 
 
 def rebuild_artifact(artifact_dir: Path, lookup: RawContextLookup, compressor, dry_run: bool) -> dict:
+    """Regenerate the split-turn summaries for one artifact directory.
+
+    Repairs artifacts written before turns were split into :u and :a entries, so
+    an older run's stores can be used with current retrieval instead of being
+    re-ingested from scratch.
+    """
     meta_path = artifact_dir / "summaries_meta.jsonl"
     chroma_dir = artifact_dir / "summaries_chroma"
     backup_dir = artifact_dir / "summaries_chroma_bak"

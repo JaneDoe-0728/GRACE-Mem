@@ -118,6 +118,12 @@ def load_raw_samples(path: str | Path) -> List[Dict[str, Any]]:
 
 
 def category_to_label(value: Any) -> str:
+    """Map a numeric category code to its human-readable label.
+
+    Unknown codes pass through as their own string rather than becoming
+    "Unknown", so a category added upstream shows up in reports as an
+    unrecognised code instead of silently merging into an existing bucket.
+    """
     if value is None:
         return "Unknown"
     text = str(value).strip()
@@ -295,6 +301,7 @@ def build_conversation_from_input_prompt(prompt: str) -> Dict[str, Any]:
 
 
 def get_sample_conversation(sample: Dict[str, Any]) -> Dict[str, Any]:
+    """Return one sample's conversation, whichever shape the variant stores it in."""
     if "conversation" in sample and isinstance(sample["conversation"], dict):
         return sample["conversation"]
     if "input_prompt" in sample:
@@ -501,6 +508,7 @@ def is_cognitive_item(sample: Dict[str, Any]) -> bool:
 
 
 def find_evidence_turns_from_sample(sample: Dict[str, Any], question: str) -> List[str]:
+    """Resolve a question's evidence ids to the turns they name."""
     normalized = [normalize_qa_item(item) for item in load_qa_items_from_sample(sample)]
     question_norm = question.strip()
     for item in normalized:
@@ -510,6 +518,7 @@ def find_evidence_turns_from_sample(sample: Dict[str, Any], question: str) -> Li
 
 
 def load_qa_items_from_sample(sample: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Normalize an already-loaded sample's questions, without re-reading the file."""
     if "qa" in sample and isinstance(sample["qa"], list):
         return [item for item in sample["qa"] if isinstance(item, dict)]
     if {"input_prompt", "trigger", "answer"} <= set(sample.keys()):

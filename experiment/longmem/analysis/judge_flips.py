@@ -38,6 +38,11 @@ _SKIP_FILES = {"progress.csv", "all_answers.csv"}
 
 
 def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    """Find a column by any of its historical names, case- and BOM-insensitive.
+
+    The CSVs have been written by several generations of tooling and are often
+    round-tripped through Excel, which prepends a BOM to the first header.
+    """
     lower = {c.lower().lstrip("\ufeff"): c for c in df.columns}
     for name in candidates:
         if name.lower() in lower:
@@ -46,6 +51,7 @@ def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
 
 
 def _val(x) -> int | None:
+    """Read a cell as a stripped string, returning "" for missing or NaN."""
     s = str(x).strip()
     try:
         return int(float(s))
@@ -55,6 +61,12 @@ def _val(x) -> int | None:
 
 def collect_flips(run_dir: str, *, from_col: str, to_col: str,
                   from_val: int, to_val: int) -> list[dict]:
+    """Find questions two judges disagreed about.
+
+    The judge's own reliability check. Where two judges disagree, at least one
+    is wrong, and the disagreement rate bounds how much of a small accuracy
+    difference between runs could be judge noise rather than signal.
+    """
     base = OUTPUT_DIR / run_dir
     rows: list[dict] = []
     for sub in _CATEGORY_SUBDIRS:
@@ -85,6 +97,7 @@ def collect_flips(run_dir: str, *, from_col: str, to_col: str,
 
 def write_outputs(run_dir: str, rows: list[dict], *, from_col: str, to_col: str,
                   from_val: int, to_val: int) -> tuple[Path, Path]:
+    """Write the flip list and its summary to disk."""
     base = OUTPUT_DIR / run_dir
     tag = f"{from_col}{from_val}_to_{to_col}{to_val}"
     cols = ["type", "category", "file", "question", "question_date", "gold",
