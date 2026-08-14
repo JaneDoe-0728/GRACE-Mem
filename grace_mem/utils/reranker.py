@@ -222,7 +222,7 @@ class APIPointwiseReranker:
 
 class LLMPointwiseReranker:
     """
-    使用 LLM + prompt + yes/no logits 做 point-wise reranking.
+    Point-wise reranking driven by an LLM prompt and its yes/no logits.
     Automatically retries with halved batch_size on CUDA OOM.
     """
 
@@ -230,18 +230,19 @@ class LLMPointwiseReranker:
     MODEL_PATH = MODELS_DIR / "qwen3-reranker-0.6b"
 
     def _resolve_model_name(self, name: str) -> str:
-        """把 RERANKER_MODEL_NAME 解析成可載入的路徑或 HF repo id。
+        """Resolve RERANKER_MODEL_NAME to a loadable path or an HF repo id.
 
-        1. 絕對路徑或既有相對路徑 → 直接用
-        2. models/reranker/ 底下的子資料夾名（如 "qwen3-reranker-4b"）→ 用本地
-        3. 以上都不是 → 當成 HF repo id（如 "Qwen/Qwen3-Reranker-4B"）
+        1. an absolute path, or a relative one that exists -> use it as given
+        2. a subdirectory name under models/reranker/ (e.g. "qwen3-reranker-4b")
+           -> use the local copy
+        3. anything else -> treat it as an HF repo id (e.g. "Qwen/Qwen3-Reranker-4B")
         """
         if os.path.isabs(name) or os.path.isdir(name):
             return name
         local = self.MODELS_DIR / name
         if local.is_dir():
             return str(local)
-        print(f"[Reranker] 本地找不到 {name}，當成 HF repo id 載入")
+        print(f"[Reranker] {name} not found locally, loading it as an HF repo id")
         return name
 
     def __init__(self, model_name: Optional[str] = None, device: Optional[str] = None) -> None:

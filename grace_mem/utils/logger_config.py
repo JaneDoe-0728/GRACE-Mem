@@ -4,14 +4,14 @@ from logging.handlers import RotatingFileHandler
 from typing import Optional, Any, Dict, Tuple
 
 __all__ = [
-    "setup_logger",          # 人類可讀: [ts][LEVEL] name: msg
-    "get_event_logger",      # JSONL 事件日誌
-    "close_event_loggers",   # 關閉事件 logger handlers
-    "_jlog",                 # 寫一行 JSON 事件
+    "setup_logger",          # human-readable: [ts][LEVEL] name: msg
+    "get_event_logger",      # JSONL event log
+    "close_event_loggers",   # close the event logger handlers
+    "_jlog",                 # write one JSON event line
     "_StepTimer",
 ]
 
-# ----------- Human-readable logger (server 用) -----------
+# ----------- Human-readable logger (for the server) -----------
 def setup_logger(
     name: str = "server",
     log_dir: str = "logs",
@@ -22,8 +22,9 @@ def setup_logger(
     to_console: bool = True,
 ) -> logging.Logger:
     """
-    與你 server 現有版本對齊：人類可讀格式 + 檔案輪替 +（可選）console。
-    若重複呼叫，不會重複加 handler。
+    Matches the server's existing setup: human-readable format, rotating file,
+    and an optional console handler.
+    Calling this repeatedly does not attach duplicate handlers.
     """
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f"{name}.log")
@@ -52,7 +53,7 @@ def setup_logger(
 
     return logger
 
-# ----------- JSONL event logger (KG 檢索/追蹤用) -----------
+# ----------- JSONL event logger (for KG retrieval/tracing) -----------
 _EVENT_LOGGERS: Dict[Tuple[str, str], logging.Logger] = {}
 
 def get_event_logger(
@@ -112,8 +113,8 @@ def make_module_jlog(
     also_stdout: bool = False,
 ) -> Any:
     """
-    回傳一個「已綁定到指定檔案」的 _jlog(event, request_id, **data)。
-    模組把它指派給 _jlog 名稱即可，呼叫點完全不用改。
+    Return a _jlog(event, request_id, **data) already bound to the given file.
+    A module only has to assign it to the name _jlog; no call site changes.
     """
     logger = get_event_logger(
         name=name,

@@ -13,14 +13,15 @@ RelKeySTD = Tuple[str, str, str]  # (source_id, target_id, description)
 
 class RelationshipManager:
     """
-    將抽取到的關係對應到已解析好的實體，合併描述與關鍵詞後，存入向量資料庫與快取
+    Map extracted relationships onto already-resolved entities, merge their
+    descriptions and keywords, then persist to the vector store and the cache.
     """
     def __init__(
         self,
         *,
-        embedder: Any,                          # object: 需有 .embed(List[str]) -> np.ndarray
-        mgr: Any,                               # object: 需有 .get_relationships_vdb(dim), .persist_async()
-        provenance: Any,                        # object: 需有 .merge_prov(old, new)
+        embedder: Any,                          # object: must provide .embed(List[str]) -> np.ndarray
+        mgr: Any,                               # object: must provide .get_relationships_vdb(dim), .persist_async()
+        provenance: Any,                        # object: must provide .merge_prov(old, new)
         GLOBAL_CACHE: Dict[str, Any],           # object/state
         processed_rel_map: Dict[RelKeyST, Meta],
         processed_rel_full_map: Dict[RelKeySTD, Meta]
@@ -33,7 +34,7 @@ class RelationshipManager:
         self._processed = processed_rel_map
         self._processed_full = processed_rel_full_map
 
-    # ---- 只用 input2resolved 來對實體 ----
+    # ---- resolve entities through input2resolved only ----
     @staticmethod
     def _resolve_via_input2resolved(
         name: Optional[str],
@@ -42,7 +43,8 @@ class RelationshipManager:
         """Resolve an extracted endpoint name to its canonical entity metadata."""
         if not name or not input2resolved:
             return None
-        # 如果你的 input2resolved key 只放 name，可改成 for (in_name, _type) in input2resolved ...
+        # If input2resolved is ever keyed by name alone, switch this to
+        # for (in_name, _type) in input2resolved ...
         for (in_name, _), meta in input2resolved.items():
             if in_name == name:
                 return meta
@@ -51,9 +53,10 @@ class RelationshipManager:
     @staticmethod
     def _check_mappings(relationships: Iterable[Any], input2resolved: Dict[KeyNameType, Meta] | None) -> set[str]:
         """
-        確保每個關係的 source/target 名稱，都能在 input2resolved 找到映射。
+        Ensure every relationship's source/target name has a mapping in
+        input2resolved.
         input2resolved keys: (input_name, input_type) -> meta
-        這裡只用 input_name 做精準比對。
+        Only input_name is compared here, and only exactly.
         """
         missing: set[str] = set()
         if not relationships:
@@ -69,7 +72,7 @@ class RelationshipManager:
 
     def upsert_from_extraction(
         self,
-        result: Any,                 # ExtractionResult (含 result.relationships)
+        result: Any,                 # ExtractionResult (carries result.relationships)
         provenance: Optional[dict] = None,
         input2resolved: Dict[KeyNameType, Meta] | None = None,
         *,
@@ -78,10 +81,10 @@ class RelationshipManager:
         sync_fn: Optional[Callable[[List[Meta]], int]] = None           # callable: List[Meta] -> int
     ) -> List[Meta]:
         """
-        先確認關係兩端的實體已對應到內部 ID
-        若已存在 → 合併描述/關鍵詞並更新
-        若不存在 → 新增關係並嵌入向量庫
-        最後回傳成功處理的關係 meta 列表。
+        First confirm both endpoints resolve to internal IDs.
+        Already present -> merge the description/keywords and update.
+        Not present -> add the relationship and embed it into the vector store.
+        Returns the meta list for the relationships processed successfully.
         """
         rels = getattr(result, "relationships", None)
         if not rels:
@@ -112,7 +115,7 @@ class RelationshipManager:
             key_st: RelKeyST = (sid, tid)
             key_std: RelKeySTD = (sid, tid, r.relationship_description or "")
 
-            # 去重（同 sid/tid/description）
+            # Deduplicate on (sid, tid, description)
             if key_std in self._processed_full:
                 continue
 
@@ -163,7 +166,7 @@ class RelationshipManager:
                 self._processed_full[key_std] = meta
 
         if texts:
-            vecs: np.ndarray = self._embedder.embed(texts)  # shape = (n, dim), 已 normalize
+            vecs: np.ndarray = self._embedder.embed(texts)  # shape = (n, dim), already normalized
             rel_vdb = self._mgr.get_relationships_vdb(vecs.shape[1])
             rel_vdb.add(vecs, metas)
             self._mgr.persist_async()

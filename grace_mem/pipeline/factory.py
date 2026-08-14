@@ -5,7 +5,7 @@ Factory for building the KG pipeline (retriever + ingestor).
 Importing this module is now side-effect-free. Call build_pipeline() to
 open connections and construct the pipeline objects.
 
-供上層 server.py 取用建構好的 retriever 與 ingestor 物件:
+Hands the constructed retriever and ingestor objects to server.py above it:
   from grace_mem.pipeline.factory import build_pipeline
   with build_pipeline() as runtime:
       retriever = runtime.retriever

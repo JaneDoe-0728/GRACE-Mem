@@ -214,7 +214,8 @@ _TEMPORAL_ANCHOR_TYPES = {"date", "time", "timespan"}
 
 class EntityManager:
     """
-    將輸入實體轉換為統一格式、尋找相似實體，將新增/更新的實體寫入向量庫與快取
+    Normalize incoming entities, look up similar ones, and write the added or
+    updated entities into the vector store and the cache.
     """
     def __init__(
         self,
@@ -237,8 +238,9 @@ class EntityManager:
     @staticmethod
     def _build_entity_repr(name: str, type_val: str, description: str) -> str:
         """
-        把 (name, type, desc) 組成能代表實體語義的文字，用於嵌入。
-        例：'Apple [type=Company] iPhone 製造商'
+        Compose (name, type, desc) into text that carries the entity's meaning,
+        for embedding.
+        Example: 'Apple [type=Company] iPhone manufacturer'
         """
         name = (name or "").strip()
         type_val = (type_val or "").strip()
@@ -387,7 +389,7 @@ class EntityManager:
             desc = normalized[i].get("entity_description", "") or ""
 
             # -------------------------------
-            # BM25 部分（先處理）   # MODIFIED
+            # BM25 branch (handled first)   # MODIFIED
             # -------------------------------
             bm25_list: List[Tuple[Dict[str, Any], float]] = []
             bm25_ids = set()
@@ -425,15 +427,15 @@ class EntityManager:
 
                         bm25_best[eid] = (score, idx)
 
-                    # 組合 (meta, score, from=bm25)
+                    # Assemble (meta, score, from=bm25)
                     for eid, (score, best_idx) in bm25_best.items():
                         meta_obj = dict(metas[best_idx])  # copy
-                        meta_obj["_source"] = "bm25"      # NEW: 標記來源
+                        meta_obj["_source"] = "bm25"      # NEW: tag the origin
                         bm25_list.append((meta_obj, score))
                         bm25_ids.add(eid)
 
             # -------------------------------
-            # Vector 搜尋（BM25 之後）
+            # Vector search (after BM25)
             # -------------------------------
             if _batch_vec_results is not None:
                 vec_hits = _batch_vec_results[search_pos] or []
@@ -461,12 +463,12 @@ class EntityManager:
                     continue
 
                 meta_obj = dict(meta)
-                meta_obj["_source"] = "vector"          # NEW: 標記來源
+                meta_obj["_source"] = "vector"          # NEW: tag the origin
                 vec_ids.add(eid)
                 vec_list.append((meta_obj, float(sim)))
 
             # -------------------------------
-            # 融合結果：BM25 → Vector
+            # Fuse the results: BM25 -> Vector
             # -------------------------------
             merged: List[Tuple[Dict[str, Any], float]] = []
             merged.extend(bm25_list)
@@ -478,10 +480,12 @@ class EntityManager:
     
     def apply_ops(self, ops_results: Dict[str, Any], provenance: Dict[str, Any] | None = None, *, request_id: str = "UNKNOWN") -> Tuple[Dict[KeyNameType, Meta], Dict[KeyNameType, Meta], Dict[str, int]]:
         """
-        - 讀取 ops_results['results'] 每筆 action
-        - ADD：建立新 meta + 嵌入 + 寫入 VDB + 更新 processed 快取
-        - UPDATE：以 target_existing_id 取出既有 meta，更新描述/證據，再寫回
-        回傳： (entity_idx, input2resolved, stats)
+        - read every action in ops_results['results']
+        - ADD: build a new meta, embed it, write it to the VDB, refresh the
+          processed cache
+        - UPDATE: fetch the existing meta by target_existing_id, update its
+          description/evidence, write it back
+        Returns: (entity_idx, input2resolved, stats)
         """
         ent_id2meta, _ = build_id_to_meta_maps(self._GLOBAL_CACHE)
         added = updated = 0

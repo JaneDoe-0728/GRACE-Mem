@@ -11,11 +11,11 @@ load_dotenv(_REPO_ROOT / ".env")
 
 class HFTextEmbedding:
     """
-    單一多語 embedding：BGE-M3
-    - 向量維度：1024
-    - 使用方式：
+    Single multilingual embedding model: BGE-M3
+    - vector dimension: 1024
+    - usage:
         embedder = HFTextEmbedding(device="cuda")
-        vecs = embedder.embed(["你好", "Hello"])
+        vecs = embedder.embed(["Bonjour", "Hello"])
     """
 
     MODEL_PATH = _REPO_ROOT / "models" / "embedding_models" / "qwen3-0.6b"
@@ -36,9 +36,9 @@ class HFTextEmbedding:
 
         path = str(self.MODEL_PATH)
         if os.path.isdir(path):
-            print(f"[HFTextEmbedding] 使用本地embeddding model：{path}  (device={device})")
+            print(f"[HFTextEmbedding] using local embedding model: {path}  (device={device})")
         else:
-            print(f"[HFTextEmbedding] 本地找不到 {path}，改用 HF Hub：BAAI/bge-m3  (device={device})")
+            print(f"[HFTextEmbedding] {path} not found locally, falling back to HF Hub: BAAI/bge-m3  (device={device})")
             path = "Qwen/Qwen3-Embedding-0.6B"
 
         self.device = device
@@ -65,7 +65,7 @@ class HFTextEmbedding:
             raise
 
     def embed(self, texts: Sequence[str]) -> np.ndarray:
-        """回傳 np.ndarray，shape=(n, dim)，已經 normalize"""
+        """Return an np.ndarray of shape (n, dim), already normalized."""
         if isinstance(texts, str):
             texts = [texts]
         vecs = self.model.encode(

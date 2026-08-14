@@ -103,8 +103,9 @@ class EntityRelationshipSearcher:
             elapsed_sec=timer_vec.sec(),
         )
 
-        # Ablation F:關閉 BM25 分支 — 實體 seeds 只留向量路徑。
-        # 環境變數慣例比照 KG_ABLATION_NO_GRAPH,預設關。
+        # Ablation F: close the BM25 branch -- entity seeds are left with the
+        # vector path alone.
+        # The env-var convention follows KG_ABLATION_NO_GRAPH: off by default.
         if os.getenv("KG_ABLATION_NO_BM25", "0").lower() not in ("0", "", "false"):
             _jlog("bm25_skipped_ablation", request_id, step="2.1")
             _jlog(

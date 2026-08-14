@@ -12,10 +12,10 @@ REL_FILE = CACHE_DIR / "relationships_cache.pkl"
 
 class CacheStore:
     """
-    提供實體/關係的快取管理：
-    - load()  ：從檔案載入快取內容（entities / relationships）
-    - save()  ：將目前快取寫入檔案（pickle 格式）
-    - clear() ：清空記憶體中的快取
+    Cache management for entities and relationships:
+    - load()  : read the cache contents (entities / relationships) from disk
+    - save()  : write the current cache to disk, pickle format
+    - clear() : drop the in-memory cache
 
     Updated to support custom cache directories (per-dataset).
     """

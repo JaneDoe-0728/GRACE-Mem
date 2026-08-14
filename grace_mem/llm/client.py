@@ -158,7 +158,7 @@ class LLMClient:
         resp.raise_for_status()
         return resp.json()
 
-    # <<< 非串流 (for llm_judge.py) >>>
+    # <<< non-streaming (for llm_judge.py) >>>
     def chat(self, messages: list[dict[str, Any]], temperature: float = 0.0, max_tokens: int = 512) -> _Namespace:
         """Send one non-streaming chat completion and return a namespace-shaped response."""
         t0 = time.perf_counter()
@@ -252,7 +252,7 @@ class LLMClient:
         return data["choices"][0]["message"]["content"], elapsed
 
     def generate_entity_ops(self, new_entities: list[dict], similar_map: dict) -> dict:
-        """Entity操作生成（委派給 EntityOpsProcessor）"""
+        """Generate entity operations, delegating to EntityOpsProcessor."""
         return self.entity_ops.process_batch(new_entities, similar_map)
     
     # def generate_entity_ops(self, new_entities: list[dict], similar_map: dict) -> dict:

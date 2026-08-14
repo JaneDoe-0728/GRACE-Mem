@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 class VDBManager:
     '''
-    集中管理向量資料庫與快取的單一入口（entities/relationships/summaries 的 ChromaDB 索引），並提供統一的非同步持久化與重置流程
+    The single entry point for the vector stores and the cache -- the ChromaDB
+    indexes for entities, relationships and summaries -- offering one shared
+    asynchronous persist and reset flow.
 
     All files (ChromaDB directories, cache, BM25) are stored in the artifacts directory.
     '''
@@ -51,13 +53,13 @@ class VDBManager:
         self._persist_error: Optional[Exception] = None
 
     def initialize(self) -> bool:
-        """回傳是否為全新初始化（true 表示檔案原本不存在）"""
+        """Report whether this was a fresh initialization (true when no files existed)."""
         ent_ok = self.ENT_CHROMA_DIR.exists()
         rel_ok = self.REL_CHROMA_DIR.exists()
         if ent_ok or rel_ok:
-            # vdb 會自己 load
+            # the vdb loads itself
             return False
-        # 全新：清空 cache
+        # Fresh start: clear the cache
         CacheStore.clear(self.cache)
         return True
 
@@ -95,7 +97,7 @@ class VDBManager:
 
     # ========== Persist / Reset ==========
     def persist_async(self) -> None:
-        """啟動背景執行緒，統一保存 entities/relationships VDB 與快取"""
+        """Start a background thread that persists the entity/relationship VDBs and the cache together."""
         def _task() -> None:
             """Persist every initialized index, metadata dump, and cache file."""
             try:
@@ -239,7 +241,7 @@ class VDBManager:
             raise first_error
 
     def reset_all(self, delete_files: bool = True) -> None:
-        """重置所有 VDB 與快取，並可選擇刪除檔案"""
+        """Reset every VDB and the cache, optionally deleting the files as well."""
         # Close clients before deleting files on disk.
         self.close()
 
@@ -275,6 +277,6 @@ def _resolve_art_dir() -> Path:
     working dirs (see grace_mem.storage.paths.resolve_artifacts_dir)."""
     return resolve_artifacts_dir(create=True)
 
-# 單例物件（所有地方都 import 這顆用）
+# Singleton: every call site imports this one instance
 ART_DIR = _resolve_art_dir()
 MGR = VDBManager(ART_DIR)

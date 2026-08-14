@@ -573,7 +573,7 @@ RETURN 1 AS ct"""
         self._ensure_open()
         raw = self._exec_graph_query(cypher, params or {}, readonly=True)
 
-        # 🔥 這三行最重要：直接看 raw 回傳
+        # These three lines matter most: inspect the raw return value directly
         recs = self._rows_as_dicts(raw)
         logger.debug("[_run_read] raw_type=%s len=%s parsed=%d", type(raw).__name__,
                      len(raw) if isinstance(raw, (list, tuple)) else None, len(recs))
@@ -713,7 +713,7 @@ RETURN 1 AS ct"""
         if not uri:
             raise RuntimeError("Missing cfg.uri (expected redis://... for FalkorDB).")
 
-        # 直接用 URL 連，避免 __init__ kwargs 不相容
+        # Connect straight from the URL, sidestepping incompatible __init__ kwargs
         return FalkorDB.from_url(uri)
 
     def _create_unique_constraint_node(self, label: str, props: List[str]) -> Any:
@@ -759,7 +759,7 @@ RETURN 1 AS ct"""
         return self._db.execute_command(*args)
 
 
-# --- factory by env (方便 server/main 使用) ---
+# --- factory by env (convenience for server/main) ---
 def graph_from_env(entity_label: str = "Entity", rel_type: str = "KG_REL") -> Graph:
     """
     Read env vars and build Graph object.

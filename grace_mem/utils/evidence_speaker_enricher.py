@@ -116,6 +116,8 @@ def _speaker_from_line(line: str, known_speakers: list[str]) -> tuple[Optional[s
         return speaker, colon_match.group(2).strip()
 
     for speaker in sorted(known_speakers, key=len, reverse=True):
+        # The fullwidth colon is corpus data, not prose: transcripts carry it as a
+        # speaker separator, so the class must keep matching it.  # allow-cjk
         match = re.match(rf"^\s*{re.escape(speaker)}(?:\s*[,!:：]|[\s]+)(?P<rest>.*)$", stripped, re.IGNORECASE)
         if match:
             return speaker, match.group("rest").strip()

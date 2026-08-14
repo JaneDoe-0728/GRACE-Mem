@@ -1,16 +1,19 @@
 # services/provenance.py
 class Provenance:
     """
-    負責追蹤與合併實體/關係的來源資訊 (provenance)，
-    主要處理事件記錄的格式統一與合併，方便後續追溯來源。
+    Tracks and merges the provenance of entities and relationships.
+    Mostly this is normalizing event records into one format and merging them,
+    so an origin can be traced back later.
     """
     @staticmethod
     def prov_to_events(prov: dict) -> list[dict]:
         """
-        將不同格式的 provenance 字典轉換為統一的事件列表：
-        - 支援 prov["events"] 已是列表的情況
-        - 或支援 summary_ids / session_id / message_id / dialogue_datetime 的簡單格式
-        - 輸出標準化事件：{ts, summary_id, session_id, message_id, dialogue_datetime}
+        Convert provenance dicts of varying shapes into one event list:
+        - handles prov["events"] already being a list
+        - handles the flat summary_ids / session_id / message_id /
+          dialogue_datetime form
+        - emits normalized events: {ts, summary_id, session_id, message_id,
+          dialogue_datetime}
         """
         if not prov: return []
         if isinstance(prov.get("events"), list):
@@ -52,10 +55,10 @@ class Provenance:
     @staticmethod
     def merge_prov(old: dict | None, new: dict | None, max_events: int = 50) -> dict:
         """
-        合併舊與新的 provenance：
-        - 去重（同 session_id/message_id/summary_id）
-        - 依照 ts 排序，僅保留最近 max_events 筆
-        - 輸出格式：{"events": [...]}，方便附加到 entity/relationship meta
+        Merge old and new provenance:
+        - deduplicate on (session_id, message_id, summary_id)
+        - sort by ts and keep only the most recent max_events entries
+        - emit {"events": [...]}, ready to attach to an entity/relationship meta
         """
         def _to_events(x: dict | None) -> list[dict]:
             """Convert one provenance blob into normalized events before merging."""

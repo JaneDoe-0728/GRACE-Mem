@@ -5,7 +5,8 @@ import pickle, threading
 
 class EntitiesBM25:
     """
-    同步維護 name/desc 兩個 BM25 索引 + 與 VDB 相同順序的 metas
+    Keeps the name and desc BM25 indexes in step with each other, plus a metas
+    list ordered identically to the VDB.
     """
     def __init__(self) -> None:
         """Initialize BM25 indexes for entity names, descriptions, and metadata."""
@@ -28,7 +29,7 @@ class EntitiesBM25:
 
     def build(self) -> None:
         """Rebuild both BM25 indexes from the currently stored token lists."""
-        # 初次初始化或大量重建時呼叫
+        # Called on first initialization, or on a bulk rebuild
         self._bm25_name = BM25Okapi(self._docs_name) if self._docs_name else BM25Okapi([[]])
         self._bm25_desc = BM25Okapi(self._docs_desc) if self._docs_desc else BM25Okapi([[]])
 
@@ -38,7 +39,8 @@ class EntitiesBM25:
             self._docs_name.append(tokens_name)
             self._docs_desc.append(tokens_desc)
             self._metas.append(meta)
-            # rank_bm25 沒有完美的增量 IDF；簡單做法：每次 add 後重建
+            # rank_bm25 has no clean incremental IDF; the simple answer is to
+            # rebuild after every add
             self.build()
 
     def get_scores(self, q_tokens: List[str]) -> tuple[list[float], list[float]]:
@@ -49,7 +51,7 @@ class EntitiesBM25:
         desc_scores = self._bm25_desc.get_scores(q_tokens)
         return name_scores, desc_scores
 
-    # ---- 持久化 ----
+    # ---- persistence ----
     def save(self, path: str) -> None:
         """Persist the BM25 token lists and metadata to disk."""
         with self._lock, open(path, "wb") as f:

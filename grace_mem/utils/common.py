@@ -20,9 +20,9 @@ _CONTEXT_LENGTH_ERROR_PATTERNS = (
     "prompt is too long",
 )
 
-# ---------- 檔案相關 ----------
+# ---------- file helpers ----------
 def file_exists(*paths: str | Path) -> bool:
-    """所有路徑都存在才回傳 True"""
+    """Return True only when every path exists."""
     return all(Path(p).exists() for p in paths)
 
 
@@ -68,12 +68,12 @@ def pickle_load(path: str | Path, default: Any = None) -> Any:
         return default
 
 def load_vdb_if_exists(vdb_obj: Any, index_path: str | Path, meta_path: str | Path) -> None:
-    """若 index+meta 均存在才呼叫 vdb.load()"""
+    """Call vdb.load() only when both the index and the meta file exist."""
     if file_exists(index_path, meta_path):
         vdb_obj.load()
         logger.info("Loaded VDB from %s / %s", index_path, meta_path)
 
-## id相關
+## id helpers
 
 def _slugify(text: str) -> str:
     """Convert an identifier fragment into a simple lowercase storage key."""
@@ -96,9 +96,9 @@ def _entity_key(name: str, etype: str) -> str:
     """Create the normalized cache key used for entity lookup and deduplication."""
     return f"{_norm_name(name)}::{etype.lower()}"
 
-## schema 相關
+## schema
 
-# === 資料模型 ===
+# === data models ===
 # class EntityType(str, Enum):
 #     person="person"; organization="organization"; location="location"; geo="geo"
 #     event="event"; animal="animal"; food="food"; product="product"
@@ -138,7 +138,7 @@ class KeywordExtractionResult(BaseModel):
     high_level_keywords: List[str] = []
     low_level_keywords: List[str] = []
 
-# === JSON Schema（給 response_format 用）===
+# === JSON Schema (consumed by response_format) ===
 SCHEMA = ExtractionResult.model_json_schema()
 _raw_kw_schema = KeywordExtractionResult.model_json_schema()
 # Force LLM to produce at least one keyword per list (prevents empty {} shortcut)
@@ -161,10 +161,10 @@ def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, co
         logger.warning("parse_delimited_extraction: Empty raw input")
         return ExtractionResult(entities=[], relationships=[])
 
-    # 只保留 completion_token 前面的內容
+    # Keep only what precedes the completion token
     raw = raw.split(completion_token)[0]
 
-    # 用 record_delim 切成一條一條記錄
+    # Split into individual records on record_delim
     parts = [p.strip() for p in raw.split(record_delim)]
     ent_list, rel_list = [], []
 
@@ -174,7 +174,7 @@ def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, co
     def _clean(s: str) -> str:
         """Trim a raw extracted field and remove one pair of wrapping quotes."""
         s = (s or "").strip()
-        # 去掉外層成對的引號
+        # Drop one matched pair of surrounding quotes
         if len(s) >= 2 and ((s[0] == s[-1] == '"') or (s[0] == s[-1] == "'")):
             s = s[1:-1].strip()
         return s
@@ -185,23 +185,23 @@ def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, co
 
         line_stripped = line.strip()
 
-        # 支援舊格式：("entity"<|>...) / ("relationship"<|>...)
+        # Support the legacy format: ("entity"<|>...) / ("relationship"<|>...)
         if line_stripped.startswith("(") and line_stripped.endswith(")"):
             line_stripped = line_stripped[1:-1].strip()
 
-        # 用 tuple_delim 切欄位
+        # Split the line into fields on tuple_delim
         cols = [c.strip() for c in line_stripped.split(tuple_delim)]
         if not cols:
             continue
 
-        # 第一欄應該是 entity / relationship（可能有引號）
+        # The first column should be entity / relationship, possibly quoted
         kind = _clean(cols[0]).lower()
 
         # ---------------------
-        # 解析 Entity 記錄
+        # Parse an entity record
         # ---------------------
         if kind == "entity":
-            # 至少要有 4 欄：entity, name, type, desc
+            # Needs at least 4 columns: entity, name, type, desc
             if len(cols) < 4:
                 parsing_errors["entity_errors"].append({
                     "name": "MISSING",
@@ -213,7 +213,8 @@ def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, co
             name = _clean(cols[1])
             etype = _clean(cols[2])
 
-            # desc 可能本身包含 tuple_delim，保守作法：把第 3 欄之後都當成 description
+            # desc may itself contain tuple_delim; conservatively treat every
+            # column from index 3 onward as part of the description
             if len(cols) > 4:
                 desc_raw = tuple_delim.join(cols[3:])
             else:
@@ -256,10 +257,10 @@ def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, co
             continue
 
         # -------------------------
-        # 解析 Relationship 記錄
+        # Parse a relationship record
         # -------------------------
         if kind == "relationship":
-            # 至少要有 5 欄：relationship, src, tgt, desc, keywords
+            # Needs at least 5 columns: relationship, src, tgt, desc, keywords
             if len(cols) < 5:
                 parsing_errors["relationship_errors"].append({
                     "src": "MISSING",
@@ -271,7 +272,8 @@ def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, co
             src = _clean(cols[1])
             tgt = _clean(cols[2])
 
-            # 描述可能含 tuple_delim：用「最後一欄當 keywords，3~倒數第二欄 join 成 description」
+            # The description may contain tuple_delim, so pin the ends instead:
+            # last column is keywords, columns 3..-2 join back into description
             if len(cols) > 5:
                 rdesc_raw = tuple_delim.join(cols[3:-1])
             else:
@@ -297,7 +299,7 @@ def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, co
                 })
             continue
 
-        # 既不是 entity 也不是 relationship，當作 skipped line
+        # Neither entity nor relationship: record it as a skipped line
         if line.strip():
             parsing_errors["skipped_lines"].append(line[:100])
 
@@ -338,7 +340,7 @@ def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, co
 import re
 from typing import List, Set
 
-# 只清「尾端」的 generation artefacts，避免誤傷內容
+# Strip generation artefacts from the tail only, so real content is never damaged
 _TAIL_GARBAGE_PATTERNS = [
     r"<\|.*?\|>$",   # <|COMPLETE|> / <|...|>
     r"<\|.*?$",      # broken token like <|COMP...
@@ -399,13 +401,13 @@ def coerce_entity_type(etype_raw: str) -> EntityType:
     if not etype:
         raise ValueError("empty entity_type")
 
-    # 先試原本 enum 建構
+    # First try the plain enum constructor
     try:
         return EntityType(etype)
     except Exception:
         pass
 
-    # 再試 case-insensitive match on enum values
+    # Then try a case-insensitive match on the enum values
     etype_l = etype.lower()
     for m in EntityType:
         try:
@@ -414,7 +416,7 @@ def coerce_entity_type(etype_raw: str) -> EntityType:
         except Exception:
             continue
 
-    # 若你的 Enum 也可能用 name 表示（例如 EntityType.PERSON）
+    # The enum may also be addressed by member name (e.g. EntityType.PERSON)
     for m in EntityType:
         if str(m.name).lower() == etype_l:
             return m
@@ -530,10 +532,10 @@ def parse_entities_only(raw: str, tuple_delim: str, record_delim: str, completio
         logger.warning("parse_entities_only: Empty raw input")
         return []
 
-    # 防線 1：先切 completion token（record 外部）
+    # Guard 1: cut at the completion token first (it sits outside the records)
     raw = raw.split(completion_token)[0] if completion_token else raw
 
-    # 防線 2：按 record delimiter 切（並容忍空白）
+    # Guard 2: split on the record delimiter, tolerating blank runs
     parts = [p.strip() for p in (raw.split(record_delim) if record_delim else raw.splitlines()) if p and p.strip()]
 
     ent_list: List[Entity] = []
@@ -621,7 +623,7 @@ def parse_relationships_only(
         if kind != "relationship":
             continue
 
-        # 🔒 固定 5 欄語意：src, tgt, desc, keywords
+        # Fixed 5-column semantics: src, tgt, desc, keywords
         src = clean_field(cols[1], record_delim, completion_token)
         tgt = clean_field(cols[2], record_delim, completion_token)
 
@@ -668,8 +670,8 @@ def parse_relationships_only(
 
 def _parse_entity_ops_block(text: str) -> dict[str, list[dict[str, str | None]]]:
     """
-    解析 LLM 以 '||' 分隔、包在 ===BEGIN=== / ===END=== 的輸出。
-    每行格式：
+    Parse the LLM output: '||'-separated fields wrapped in ===BEGIN=== / ===END===.
+    Line format:
     input_name||input_type||action||target_existing_id_or_NULL||canonical_name||canonical_type||merged_description
     """
     m = re.search(r"===BEGIN===\s*(.*?)\s*===END===", text, flags=re.S)
@@ -680,7 +682,7 @@ def _parse_entity_ops_block(text: str) -> dict[str, list[dict[str, str | None]]]
     for ln in lines:
         parts = ln.split("||")
         if len(parts) < 7:
-            # 跳過格式不完整的行
+            # Skip lines whose field count is incomplete
             continue
         input_name, input_type, action, target_id, cname, ctype, mdesc = parts[:7]
         results.append({
@@ -694,13 +696,14 @@ def _parse_entity_ops_block(text: str) -> dict[str, list[dict[str, str | None]]]
         })
     return {"results": results}
 
-## BM25斷詞
+## BM25 tokenization
 
-# 盡量用 NLTK 的 word_tokenize；若缺資源或安裝問題，就 fallback 到 regex
+# Prefer NLTK's word_tokenize; fall back to a regex if the resources or the
+# install are missing
 import nltk
 from nltk import word_tokenize, pos_tag
 
-# 可自行擴增
+# Extend as needed
 EN_STOPWORDS = {
     "the","a","an","in","on","at","for","to","from","of",
     "and","or","but","with","without","is","are","was","were",
@@ -750,7 +753,8 @@ def tokenize_en(text: str) -> list[str]:
     try:
         tags = pos_tag(toks)
     except Exception:
-        # Fallback：沒 POS tagger 時全保留 toks（但你有 nltk，基本不會發生）
+        # Fallback: with no POS tagger, keep every token (nltk is installed here,
+        # so this is effectively unreachable)
         return toks
 
     KEEP_TAGS = {"NN", "NNS", "NNP", "NNPS", "JJ", "JJR", "JJS", "FW"}
@@ -758,7 +762,7 @@ def tokenize_en(text: str) -> list[str]:
     filtered = []
 
     for token, tag in tags:
-        # ✅ 日期直接保留（不進 POS / stopword / length 規則）
+        # Dates are kept verbatim, bypassing the POS, stopword and length rules
         if is_date_token(token):
             filtered.append(token)
             continue
@@ -777,7 +781,7 @@ def tokenize_en(text: str) -> list[str]:
             continue
 
         # Fallback for unknown proper nouns / foreign words
-        # 1) 全字母 & 長度>=3 & 非停用詞 → 保留
+        # 1) all-alphabetic & length >= 3 & not a stopword -> keep
         if token.isalpha():
             filtered.append(token)
             continue

@@ -16,8 +16,8 @@ class GraphConfig:
 
 class Graph:
     """
-    封裝 Neo4j 的操作
-            """
+    Wrapper around the Neo4j operations.
+    """
     def __init__(self, cfg: GraphConfig) -> None:
         """Store the Neo4j connection settings and lazy driver handle."""
         self.cfg = cfg
@@ -38,8 +38,8 @@ class Graph:
     
     def reconnect(self) -> "Graph":
         """
-        強制丟掉舊 driver，重新建立連線
-        （給你在 snapshot 之後、或遇到 defunct connection 時呼叫）
+        Drop the old driver and establish a fresh connection.
+        Call this after a snapshot, or when a connection has gone defunct.
         """
         try:
             if self._driver:
@@ -49,7 +49,7 @@ class Graph:
         self._driver = None
         return self.open()
 
-    # 讓你可以 with Graph(cfg) as g:
+    # Enables: with Graph(cfg) as g:
     def __enter__(self) -> "Graph":
         """Enter a context-managed graph session wrapper."""
         return self.open()
@@ -71,10 +71,11 @@ class Graph:
     # ---------- upsert ----------
     def sync_entities(self, entity_idx: Dict) -> int:
         """
-        將一批實體同步進 Neo4j  
-        - 新的 entity → 建立  
-        - 已存在 → 更新屬性（保留舊 description，僅在有新內容時覆蓋）
-        回傳成功處理的筆數
+        Sync a batch of entities into Neo4j.
+        - new entity -> create
+        - already present -> update properties (the old description is kept and
+          overwritten only when new content is supplied)
+        Returns the number of records processed successfully.
         """
         if not entity_idx: return 0
         now_iso = datetime.utcnow().isoformat()
@@ -116,10 +117,10 @@ class Graph:
 
     def sync_relationships(self, relationship_metas: List[Dict]) -> int:
         """
-        將一批關係 (relationships) 同步進 Neo4j  
-        - 新的關係 → 建立  
-        - 已存在 → 更新屬性  
-        回傳成功處理的筆數
+        Sync a batch of relationships into Neo4j.
+        - new relationship -> create
+        - already present -> update properties
+        Returns the number of records processed successfully.
         """
         if not relationship_metas: return 0
         now_iso = datetime.utcnow().isoformat()
@@ -169,9 +170,10 @@ class Graph:
     # ---------- queries ----------
     def get_node_subgraph(self, entity_ids: List[str]) -> Dict[str, Dict]:
         """
-        查詢一批 entity 的子圖  
-        - 找出指定 id 的節點  
-        - 把它的 neighbors（關聯的節點 + 關係資訊）一起返回
+        Query the subgraph around a batch of entities.
+        - locate the nodes with the given ids
+        - return them together with their neighbours (the linked nodes plus the
+          relationship details)
         """
         if not entity_ids: return {}
         query = f"""
@@ -217,9 +219,9 @@ class Graph:
 
     def get_edge_subgraph(self, rel_ids: List[str]) -> List[Dict]:
         """
-        查詢一批 relationship 的子圖  
-        - 輸入 rel_ids  
-        - 返回關係本身與 source/target 節點資訊
+        Query the subgraph around a batch of relationships.
+        - takes rel_ids
+        - returns the relationships themselves plus their source/target nodes
         """
         if not rel_ids: return []
         query = f"""
@@ -248,18 +250,18 @@ class Graph:
     # ---------- admin ----------
     def clear_all(self) -> None:
         """
-        清空整個圖。  
-        如果遇到 ServiceUnavailable（例如 container 剛重啟，連線壞掉），
-        會重連一次再試。
+        Wipe the entire graph.
+        On ServiceUnavailable -- e.g. the container has just restarted and the
+        connection is broken -- reconnect once and retry.
         """
         last_exc = None
-        for _ in range(2):  # 最多試兩次
+        for _ in range(2):  # two attempts at most
             try:
                 self._run_write("MATCH (n) DETACH DELETE n", {})
                 return
             except ServiceUnavailable as e:
                 last_exc = e
-                # 連線已經 defunct，重連再試一次
+                # The connection is defunct; reconnect and try once more
                 self.reconnect()
         raise RuntimeError("Failed to clear_all after reconnect") from last_exc
 
@@ -290,11 +292,11 @@ class Graph:
         if self._driver is None:
             self.open()
 
-# --- factory by env (方便 server/main 使用) ---
+# --- factory by env (convenience for server/main) ---
 def graph_from_env(entity_label: str = "Entity", rel_type: str = "KG_REL") -> Graph:
     """
-    從環境變數 (NEO4J_URI, USERNAME, PASSWORD) 讀取設定，  
-    建立 Graph 物件
+    Read the settings from the environment (NEO4J_URI, NEO4J_USERNAME,
+    NEO4J_PASSWORD) and build a Graph object.
     """
     uri = os.environ.get("NEO4J_URI")
     user = os.environ.get("NEO4J_USERNAME")

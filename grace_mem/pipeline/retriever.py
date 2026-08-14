@@ -1652,8 +1652,9 @@ class Retriever:
 
         # 4b) Temporal containment boost: surface coarse-grained entities whose
         # stored range contains the parsed query date (MONTH/WEEK/SEASON/YEAR).
-        # Ablation H:KG_ABLATION_NO_TEMPORAL_BOOST=1 → 跳過此重排序。
-        # 註:LoCoMo 不傳 query_time,本段結構上不執行,H 僅對 LongMem 有意義。
+        # Ablation H: KG_ABLATION_NO_TEMPORAL_BOOST=1 -> skip this reranking.
+        # Note: LoCoMo passes no query_time, so this block is structurally dead
+        # there; H only means anything for LongMem.
         if _env_flag_enabled("KG_ABLATION_NO_TEMPORAL_BOOST"):
             _jlog(
                 "ablation_no_temporal_boost_applied",
@@ -2271,10 +2272,12 @@ class Retriever:
             #     )
 
             # 1) Extract keywords
-            # Ablation L:KG_ABLATION_NO_KEYWORDS=1 → 跳過 LLM keyword 抽取。
-            # 下游自然退化:BM25 無輸入不跑(實體只剩 query 向量路徑)、
-            # relation vector search 對空 keywords 回 {}(edge subgraph 空);
-            # 關係候選仍由 node subgraph 鄰邊供應(local_rel_set),不會歸零。
+            # Ablation L: KG_ABLATION_NO_KEYWORDS=1 -> skip LLM keyword extraction.
+            # Downstream degrades on its own: BM25 has no input so it does not run
+            # (entities are left with the query-vector path only), and relation
+            # vector search returns {} for empty keywords (empty edge subgraph).
+            # Relationship candidates still arrive via the node subgraph's incident
+            # edges (local_rel_set), so the pool never drops to zero.
             if _env_flag_enabled("KG_ABLATION_NO_KEYWORDS"):
                 _jlog("ablation_no_keywords_applied", request_id, step="1")
                 kw = KeywordExtractionResult(high_level_keywords=[], low_level_keywords=[])
@@ -2333,9 +2336,10 @@ class Retriever:
             else:
                 _jlog("adaptive_research_skipped", request_id, step="2b", reason="disabled")
 
-            # 2.9b) Ablation J:KG_ABLATION_NO_KG_TEXT=1 → 只拔 context 的實體/關係
-            # 文字區塊;ctx_entities/ctx_rels 保留(evidence prov 通道不受影響),
-            # 答題模型只看 Evidence 區塊。
+            # 2.9b) Ablation J: KG_ABLATION_NO_KG_TEXT=1 -> remove only the entity/
+            # relationship text blocks from the context. ctx_entities/ctx_rels are
+            # kept (the evidence provenance channel is untouched), so the answering
+            # model sees the Evidence block alone.
             if _env_flag_enabled("KG_ABLATION_NO_KG_TEXT"):
                 _jlog(
                     "ablation_no_kg_text_applied",
@@ -2345,9 +2349,11 @@ class Retriever:
                 )
                 ctx_text = ""
 
-            # 2.9) Ablation B2(no-KG baseline):丟棄整個圖通道——evidence 候選池
-            # 只剩 direct vector 直搜,context 也不含實體/關係文字區塊。
-            # 環境變數慣例比照 KG_NARROWING_ENABLED / USE_GREP_AGENT,預設關。
+            # 2.9) Ablation B2 (no-KG baseline): drop the graph channel entirely --
+            # the evidence pool is left with direct vector search alone, and the
+            # context carries no entity/relationship text blocks either.
+            # The env-var convention follows KG_NARROWING_ENABLED / USE_GREP_AGENT:
+            # off by default.
             if _env_flag_enabled("KG_ABLATION_NO_GRAPH"):
                 _jlog(
                     "ablation_no_graph_applied",
@@ -2378,8 +2384,9 @@ class Retriever:
                 rrf_k=self.cfg.summary_rrf_k,
                 enable_mmr_redundancy=self.cfg.summary_enable_mmr_redundancy,
             )
-            # Ablation A:KG_ABLATION_NO_DIRECT_VECTOR=1 → 直搜通道由 config 關成
-            # topn=0(add_direct 直接 no-op);此處只留下煙霧測試可驗的訊號。
+            # Ablation A: KG_ABLATION_NO_DIRECT_VECTOR=1 -> config closes the direct
+            # search channel down to topn=0 (add_direct becomes a no-op); all that is
+            # left here is a signal the smoke test can assert on.
             if _env_flag_enabled("KG_ABLATION_NO_DIRECT_VECTOR"):
                 _jlog(
                     "ablation_no_direct_vector_applied",
