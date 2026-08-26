@@ -151,7 +151,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-root", help=argparse.SUPPRESS)
     parser.add_argument("--conv-id", help=argparse.SUPPRESS)
     parser.add_argument("--up-to-session", type=int, default=None, help=argparse.SUPPRESS)
-    parser.add_argument("--skip-graph-restore", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
@@ -274,6 +273,4 @@ def build_worker_command(*, args, config: RunConfig, plan: SamplePlan) -> list[s
         cmd.extend(["--dataset-json", str(args.dataset_json)])
     else:
         cmd.extend(["--dataset-json", str(config.dataset_json_path)])
-    if plan.skip_graph_restore:
-        cmd.append("--skip-graph-restore")
     return cmd

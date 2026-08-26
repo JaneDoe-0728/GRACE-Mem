@@ -331,7 +331,6 @@ def maybe_aggregate_run(
     dataset: str,
     run_root: Path,
     no_judge: bool,
-    judge_dir: Optional[Path],
     include_adversarial: bool,
 ) -> Optional[AggregateResult]:
     """Aggregate a finished run, if there is anything to aggregate.

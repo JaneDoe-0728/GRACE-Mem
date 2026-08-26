@@ -3,8 +3,7 @@
 Almost everything is frozen. A run's configuration is written into its metadata
 and used to decide what to skip on resume, so a value that could change
 mid-flight would make the recorded config disagree with what actually ran.
-`RunState` and `RunRuntime` are the exceptions -- they exist precisely to
-accumulate as samples complete.
+`RunRuntime` is the mutable exception used while samples complete.
 
 The distinction worth holding onto: `RunConfig` is what the user asked for,
 `SamplePlan` is what one sample will therefore do, and `RunRuntime` is what has
@@ -13,9 +12,9 @@ happened so far.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -82,12 +81,11 @@ class WorkerPaths:
     check for existing artifacts and skip a completed sample on resume.
 
     Attributes:
-        sample_dir: None for datasets that write flat rather than per-sample;
-            see `DatasetStrategy.uses_run_dirs`.
+        sample_dir: Directory containing this sample's artifacts and outputs.
     """
 
     sample_index: int
-    sample_dir: Path | None
+    sample_dir: Path
     eval_csv: Path
     judge_csv: Path
     stats_json: Path
@@ -95,19 +93,10 @@ class WorkerPaths:
 
 @dataclass(frozen=True)
 class SamplePlan:
-    """What one sample is going to do, decided before the worker starts.
-
-    Attributes:
-        skip_graph_restore: Reuse the graph left by the previous sample instead
-            of rebuilding it. Only valid when that sample used the same
-            conversation and succeeded -- restoring is the expensive part of a
-            run, and skipping it wrongly evaluates against someone else's KG.
-    """
+    """One sample index paired with the paths its worker should use."""
 
     sample_index: int
     worker_paths: WorkerPaths
-    skip_graph_restore: bool
-    conv_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -121,57 +110,6 @@ class AggregateResult:
     output_json: Path
     merged_csv: Path | None = None
 
-
-@dataclass(frozen=True)
-class PreviousSampleState:
-    """What the previously executed sample did, used to plan the next one.
-
-    Only meaningful in a sequential run. `success` gates graph reuse: a failed
-    sample may have left the graph half-built, so the next one must rebuild
-    rather than inherit it.
-    """
-
-    conv_id: str | None = None
-    success: bool = False
-
-
-@dataclass(frozen=True)
-class PlusSampleContext:
-    """Sample identity for the "plus" datasets, which index by conversation.
-
-    Those variants can place several samples on one conversation, so the sample
-    index alone no longer identifies the underlying data and conv_id has to be
-    tracked alongside it.
-    """
-
-    sample_index: int
-    conv_id: str | None
-
-
-@dataclass
-class RunState:
-    """Mutable carry-over between samples in a sequential run.
-
-    Deliberately holds only the immediately preceding sample. Planning never
-    looks further back than one step, and keeping the whole history here would
-    invite decisions that quietly depend on it.
-    """
-
-    previous: PreviousSampleState = field(default_factory=PreviousSampleState)
-
-    def update(self, *, conv_id: str | None, success: bool) -> None:
-        """Record the sample that just finished.
-
-        A failed sample stores `conv_id=None`, which is what prevents the next
-        sample from reusing its graph: planning compares conv_ids, and None
-        matches nothing.
-        """
-        self.previous = PreviousSampleState(
-            conv_id=conv_id if success else None,
-            success=success,
-        )
-
-
 @dataclass
 class RunRuntime:
     """Everything a run accumulates while executing.
@@ -184,25 +122,3 @@ class RunRuntime:
     config: RunConfig
     run_summary_json: Path
     per_sample_stats: dict[str, dict]
-    run_state: RunState = field(default_factory=RunState)
-    all_samples_plus: list[Any] | None = None
-
-
-@dataclass(frozen=True)
-class DatasetStrategy:
-    """Per-dataset behaviour switches for the shared run loop.
-
-    LoCoMo and the "plus" variants differ in bookkeeping but not in pipeline,
-    so the differences are data here rather than branches scattered through the
-    runner -- adding a dataset means adding a strategy, not editing the loop.
-
-    Attributes:
-        uses_run_dirs: Write per-sample subdirectories instead of flat output.
-        sync_logs_after_worker: Copy worker logs into the run directory once
-            the worker exits.
-        track_plus_context: Maintain `PlusSampleContext` across samples.
-    """
-
-    uses_run_dirs: bool
-    sync_logs_after_worker: bool
-    track_plus_context: bool

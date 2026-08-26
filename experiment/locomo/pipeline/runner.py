@@ -34,24 +34,9 @@ from experiment.common.reproducibility import (
 from experiment.common.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.locomo.utils.io import ensure_dir
 from experiment.locomo.utils.log import log_event
-from experiment.locomo.models import RunConfig, RunRuntime
-from experiment.locomo.pipeline.decision import (
-    _current_context,
-    _judge_dir_for_aggregate,
-    _next_context,
-    _select_strategy,
-    _update_run_state,
-    build_sample_plan,
-    should_skip_refresh,
-)
+from experiment.locomo.models import RunConfig, RunRuntime, SamplePlan
 from experiment.locomo.analysis.aggregate import maybe_aggregate_run
-from experiment.locomo.helpers.run_hooks import (
-    _after_worker,
-    _log_success,
-    _record_sample_outputs,
-    _refresh_system,
-    _worker_paths_for_sample,
-)
+from experiment.locomo.helpers.run_hooks import _refresh_system, _worker_paths_for_sample
 from experiment.locomo.artifacts.snapshot import _snapshot_builder
 from experiment.locomo.pipeline.worker import run_worker
 
@@ -109,7 +94,6 @@ def _build_runtime(args) -> RunRuntime:
     """Assemble the run's config, paths, and mutable state from parsed arguments."""
     from experiment.locomo.helpers.dataset import (
         default_output_variant_dir,
-        load_raw_samples,
         normalize_dataset_name,
         resolve_dataset_path,
     )
@@ -163,12 +147,10 @@ def _build_runtime(args) -> RunRuntime:
         sessions_jsonl_path=sessions_jsonl_path,
         selected_stages=selected_stages,
     )
-    all_samples_plus = load_raw_samples(dataset_json_path) if dataset == "locomo-plus" else None
     return RunRuntime(
         config=config,
         run_summary_json=run_root / "correctness_summary.json",
         per_sample_stats={},
-        all_samples_plus=all_samples_plus,
     )
 
 
@@ -188,7 +170,6 @@ def run_orchestrator(args) -> None:
 
     runtime = _build_runtime(args)
     config = runtime.config
-    strategy = _select_strategy(config.dataset)
     is_stateless_mode = getattr(args, "retrieval_mode", "") in _STATELESS_RETRIEVAL_MODES
     selected_stages = set(
         resolve_stages(
@@ -201,17 +182,14 @@ def run_orchestrator(args) -> None:
     should_aggregate = "judge" in selected_stages
 
     if run_sample_stages:
-        for position, sample_index in enumerate(config.sample_ids):
+        for sample_index in config.sample_ids:
             print(f"\n{'='*60}")
             print(f"=== SAMPLE {sample_index} ===")
             print(f"{'='*60}")
 
-            sample_plan = build_sample_plan(
-                dataset=config.dataset,
+            sample_plan = SamplePlan(
                 sample_index=sample_index,
-                worker_paths=_worker_paths_for_sample(runtime, sample_index, strategy),
-                run_state=runtime.run_state,
-                all_samples_plus=runtime.all_samples_plus,
+                worker_paths=_worker_paths_for_sample(runtime, sample_index),
             )
             cmd = build_worker_command(args=args, config=config, plan=sample_plan)
 
@@ -220,28 +198,14 @@ def run_orchestrator(args) -> None:
                 "Launching worker",
                 sample=sample_index,
                 dataset=config.dataset,
-                skip_graph_restore=sample_plan.skip_graph_restore,
                 stages=sorted(selected_stages),
             )
             result = subprocess.run(cmd)
             success = result.returncode == 0
             if not success:
                 log_event("ERROR", "Worker exited with non-zero status", sample=sample_index, exit_code=result.returncode)
-            else:
-                _record_sample_outputs(runtime, args, sample_plan.worker_paths, strategy)
-            _after_worker(runtime, strategy)
-
             if not success:
                 log_event("CONTINUE", "Skipping failed sample", sample=sample_index)
-            else:
-                _log_success(runtime, args, sample_plan, strategy)
-
-            next_sample_index = config.sample_ids[position + 1] if position + 1 < len(config.sample_ids) else None
-            next_skip_refresh = should_skip_refresh(
-                current=_current_context(sample_plan, strategy),
-                next_sample=_next_context(runtime, next_sample_index, strategy),
-                current_success=success,
-            )
 
             if is_stateless_mode:
                 log_event(
@@ -250,16 +214,8 @@ def run_orchestrator(args) -> None:
                     sample=sample_index,
                     retrieval_mode=getattr(args, "retrieval_mode", ""),
                 )
-            elif next_skip_refresh:
-                log_event(
-                    "SKIP REFRESH",
-                    "Next sample can reuse current graph state",
-                    conv_id=sample_plan.conv_id,
-                )
             else:
                 _refresh_system(sleep_seconds=config.post_refresh_sleep)
-
-            _update_run_state(runtime, sample_plan, success, strategy)
     else:
         log_event("STAGE", "Skipping sample workers", stages=sorted(selected_stages))
 
@@ -268,7 +224,6 @@ def run_orchestrator(args) -> None:
             dataset=config.dataset,
             run_root=config.run_root,
             no_judge=config.no_judge,
-            judge_dir=_judge_dir_for_aggregate(runtime, strategy),
             include_adversarial=config.include_adversarial,
         )
     if run_sample_stages:
