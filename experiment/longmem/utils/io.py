@@ -15,7 +15,6 @@ import csv
 import fcntl
 import json
 import os
-import shutil
 import tempfile
 from datetime import datetime
 from contextlib import contextmanager
@@ -30,46 +29,8 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
-def remove_tree(path: Path, *, missing_ok: bool = True) -> None:
-    if path.exists():
-        shutil.rmtree(path)
-    elif not missing_ok:
-        raise FileNotFoundError(path)
-
-
-def remove_file(path: Path, *, missing_ok: bool = True) -> None:
-    if path.exists():
-        path.unlink()
-    elif not missing_ok:
-        raise FileNotFoundError(path)
-
-
-def move_file(src: Path, dst: Path, *, ensure_parent: bool = True) -> Path:
-    if ensure_parent:
-        ensure_dir(dst.parent)
-    return Path(shutil.move(str(src), str(dst)))
-
-
 def glob_sorted(folder: Path, pattern: str) -> list[Path]:
     return sorted(folder.glob(pattern))
-
-
-def latest_glob_match(folder: Path, pattern: str) -> Path | None:
-    matches = glob_sorted(folder, pattern)
-    return matches[-1] if matches else None
-
-
-def read_text_file(path: Path, *, encoding: str = "utf-8", default: str | None = None) -> str | None:
-    try:
-        return path.read_text(encoding=encoding)
-    except Exception:
-        return default
-
-
-def write_text_file(path: Path, text: str, *, ensure_parent: bool = True, encoding: str = "utf-8") -> None:
-    if ensure_parent:
-        ensure_dir(path.parent)
-    path.write_text(text, encoding=encoding)
 
 
 def read_json_file(path: Path, *, default: Any = None) -> Any:
