@@ -1,0 +1,39 @@
+
+digraph G {
+    graph [label="experiment.locomo · internal packages",labelloc="t",fontsize=20,fontname="Helvetica",pad=0.3,nodesep=0.45,ranksep=0.8,bgcolor="#fbfbfc"];
+    edge [color="#6b7280",arrowsize=0.75,penwidth=1.1];
+    concentrate = true;
+
+    rankdir = LR;
+    node [style=filled,fillcolor="#ffffff",fontcolor="#000000",fontname=Helvetica,fontsize=10];
+
+    experiment_locomo_analysis [fillcolor="#a13535",fontcolor="#ffffff",label="locomo\.\nanalysis"];
+    experiment_locomo_artifacts [fillcolor="#9d4343",fontcolor="#ffffff",label="locomo\.\nartifacts"];
+    experiment_locomo_cli [fillcolor="#ac4949",fontcolor="#ffffff",label="locomo.cli"];
+    experiment_locomo_helpers [fillcolor="blue",fontcolor="white",label="locomo.helpers",shape="box"];
+    experiment_locomo_models [fillcolor="#db2f2f",fontcolor="#ffffff",label="locomo.models"];
+    experiment_locomo_pipeline [fillcolor="#793434",fontcolor="#ffffff",label="locomo\.\npipeline"];
+    experiment_locomo_prompts [fillcolor="blue",fontcolor="white",label="locomo.prompts",shape="box"];
+    experiment_locomo_stages [fillcolor="#b42d2d",fontcolor="#ffffff",label="locomo.stages"];
+    experiment_locomo_utils [fillcolor="#e90c0c",fontcolor="#ffffff",label="locomo.utils"];
+    experiment_locomo_pipeline -> experiment_locomo_analysis [fillcolor="#793434",weight="2"];
+    experiment_locomo_pipeline -> experiment_locomo_artifacts [fillcolor="#793434",weight="2"];
+    experiment_locomo_pipeline -> experiment_locomo_cli [fillcolor="#793434",weight="2"];
+    experiment_locomo_analysis -> experiment_locomo_helpers [fillcolor="#a13535",weight="2"];
+    experiment_locomo_artifacts -> experiment_locomo_helpers [fillcolor="#9d4343",weight="2"];
+    experiment_locomo_pipeline -> experiment_locomo_helpers [fillcolor="#793434",weight="2"];
+    experiment_locomo_prompts -> experiment_locomo_helpers [fillcolor="blue",weight="2"];
+    experiment_locomo_stages -> experiment_locomo_helpers [fillcolor="#b42d2d",weight="2"];
+    experiment_locomo_analysis -> experiment_locomo_models [fillcolor="#a13535",weight="2"];
+    experiment_locomo_cli -> experiment_locomo_models [fillcolor="#ac4949",weight="2"];
+    experiment_locomo_helpers -> experiment_locomo_models [fillcolor="blue",weight="2"];
+    experiment_locomo_pipeline -> experiment_locomo_models [fillcolor="#793434",weight="2"];
+    experiment_locomo_helpers -> experiment_locomo_prompts [fillcolor="blue",weight="2"];
+    experiment_locomo_artifacts -> experiment_locomo_stages [fillcolor="#9d4343",weight="2"];
+    experiment_locomo_pipeline -> experiment_locomo_stages [fillcolor="#793434",weight="2"];
+    experiment_locomo_analysis -> experiment_locomo_utils [fillcolor="#a13535",weight="2"];
+    experiment_locomo_artifacts -> experiment_locomo_utils [fillcolor="#9d4343",weight="2"];
+    experiment_locomo_helpers -> experiment_locomo_utils [fillcolor="blue",weight="2"];
+    experiment_locomo_pipeline -> experiment_locomo_utils [fillcolor="#793434",weight="2"];
+    experiment_locomo_stages -> experiment_locomo_utils [fillcolor="#b42d2d",weight="2"];
+}

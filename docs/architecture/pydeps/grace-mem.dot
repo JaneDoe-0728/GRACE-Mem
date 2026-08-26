@@ -1,0 +1,32 @@
+
+digraph G {
+    graph [label="grace_mem · core packages",labelloc="t",fontsize=20,fontname="Helvetica",pad=0.3,nodesep=0.45,ranksep=0.8,bgcolor="#fbfbfc"];
+    edge [color="#6b7280",arrowsize=0.75,penwidth=1.1];
+    concentrate = true;
+
+    rankdir = LR;
+    node [style=filled,fillcolor="#ffffff",fontcolor="#000000",fontname=Helvetica,fontsize=10];
+
+    grace_mem_embeddings [fillcolor="#b65353",fontcolor="#ffffff",label="embeddings"];
+    grace_mem_graph [fillcolor="#ac4949",fontcolor="#ffffff",label="graph"];
+    grace_mem_llm [fillcolor="blue",fontcolor="white",label="llm",shape="box"];
+    grace_mem_pipeline [fillcolor="#883a3a",fontcolor="#ffffff",label="pipeline"];
+    grace_mem_runtime [fillcolor="#b83d3d",fontcolor="#ffffff",label="runtime"];
+    grace_mem_services [fillcolor="blue",fontcolor="white",label="services",shape="box"];
+    grace_mem_storage [fillcolor="#b42d2d",fontcolor="#ffffff",label="storage"];
+    grace_mem_utils [fillcolor="#e90c0c",fontcolor="#ffffff",label="utils"];
+    grace_mem_storage -> grace_mem_embeddings [fillcolor="#b42d2d"];
+    grace_mem_pipeline -> grace_mem_graph [fillcolor="#883a3a"];
+    grace_mem_pipeline -> grace_mem_llm [fillcolor="#883a3a"];
+    grace_mem_services -> grace_mem_llm [fillcolor="blue"];
+    grace_mem_llm -> grace_mem_runtime [fillcolor="blue"];
+    grace_mem_llm -> grace_mem_services [fillcolor="blue"];
+    grace_mem_pipeline -> grace_mem_services [fillcolor="#883a3a"];
+    grace_mem_pipeline -> grace_mem_storage [fillcolor="#883a3a"];
+    grace_mem_services -> grace_mem_storage [fillcolor="blue"];
+    grace_mem_graph -> grace_mem_utils [fillcolor="#ac4949"];
+    grace_mem_llm -> grace_mem_utils [fillcolor="blue"];
+    grace_mem_pipeline -> grace_mem_utils [fillcolor="#883a3a"];
+    grace_mem_services -> grace_mem_utils [fillcolor="blue"];
+    grace_mem_storage -> grace_mem_utils [fillcolor="#b42d2d"];
+}

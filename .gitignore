@@ -33,6 +33,11 @@ grace_mem/artifacts
 *.log
 *.jsonl
 *.json
+# ...except the generated dependency graph, which is the diff target that shows
+# when the architecture moved.  The per-view layout files stay ignored: they are
+# just the handoff to drawio-skill's autolayout.py.
+!docs/architecture/deps.json
+docs/architecture/deps.layout.*.json
 .codex/
 experiment/sample
 experiment/old longmem result

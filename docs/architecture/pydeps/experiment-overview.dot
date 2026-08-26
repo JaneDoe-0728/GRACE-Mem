@@ -1,0 +1,26 @@
+
+digraph G {
+    graph [label="experiment · package overview",labelloc="t",fontsize=20,fontname="Helvetica",pad=0.3,nodesep=0.45,ranksep=0.8,bgcolor="#fbfbfc"];
+    edge [color="#6b7280",arrowsize=0.75,penwidth=1.1];
+    concentrate = true;
+
+    rankdir = LR;
+    node [style=filled,fillcolor="#ffffff",fontcolor="#000000",fontname=Helvetica,fontsize=10];
+
+    experiment_agent_filter [fillcolor="blue",fontcolor="white",label="agent_filter",shape="box"];
+    experiment_common [fillcolor="blue",fontcolor="white",label="common",shape="box"];
+    experiment_experiment_config [fillcolor="#ce3b3b",fontcolor="#ffffff",label="experiment_config"];
+    experiment_locomo [fillcolor="blue",fontcolor="white",label="locomo",shape="box"];
+    experiment_longmem [fillcolor="blue",fontcolor="white",label="longmem",shape="box"];
+    experiment_common -> experiment_agent_filter [fillcolor="blue"];
+    experiment_longmem -> experiment_agent_filter [fillcolor="blue"];
+    experiment_agent_filter -> experiment_common [fillcolor="blue"];
+    experiment_locomo -> experiment_common [fillcolor="blue"];
+    experiment_longmem -> experiment_common [fillcolor="blue"];
+    experiment_agent_filter -> experiment_experiment_config [fillcolor="blue"];
+    experiment_locomo -> experiment_experiment_config [fillcolor="blue"];
+    experiment_longmem -> experiment_experiment_config [fillcolor="blue"];
+    experiment_common -> experiment_locomo [fillcolor="blue"];
+    experiment_agent_filter -> experiment_longmem [fillcolor="blue"];
+    experiment_common -> experiment_longmem [fillcolor="blue"];
+}
