@@ -184,7 +184,6 @@ def run_orchestrator(args) -> None:
     "successfully" with fewer samples than requested, which is why the summary
     records per-sample outcomes rather than only the aggregate.
     """
-    from experiment.locomo.helpers.dataset import is_cognitive_item
     from experiment.locomo.cli import build_worker_command, resolve_stages
 
     runtime = _build_runtime(args)
@@ -213,7 +212,6 @@ def run_orchestrator(args) -> None:
                 worker_paths=_worker_paths_for_sample(runtime, sample_index, strategy),
                 run_state=runtime.run_state,
                 all_samples_plus=runtime.all_samples_plus,
-                is_cognitive_item=is_cognitive_item,
             )
             cmd = build_worker_command(args=args, config=config, plan=sample_plan)
 
@@ -241,7 +239,7 @@ def run_orchestrator(args) -> None:
             next_sample_index = config.sample_ids[position + 1] if position + 1 < len(config.sample_ids) else None
             next_skip_refresh = should_skip_refresh(
                 current=_current_context(sample_plan, strategy),
-                next_sample=_next_context(runtime, next_sample_index, is_cognitive_item, strategy),
+                next_sample=_next_context(runtime, next_sample_index, strategy),
                 current_success=success,
             )
 

@@ -12,7 +12,6 @@ questions conflates "retrieved the wrong thing" with "correctly found nothing";
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
@@ -34,16 +33,12 @@ CATEGORY_LABELS = {
     3: "Open-domain",
     4: "Single-hop",
     5: "Adversarial",
-    6: "Cognitive",
     "multi-hop": "Multi-hop",
     "temporal": "Temporal",
     "open-domain": "Open-domain",
     "single-hop": "Single-hop",
     "adversarial": "Adversarial",
-    "cognitive": "Cognitive",
 }
-
-TURN_RE = re.compile(r'^(?P<speaker>.+?) said, (?P<body>.+)$')
 
 
 def normalize_dataset_name(dataset: str | None) -> str:
@@ -188,114 +183,16 @@ def load_qa_items(path: str | Path, *, sample_index: int, include_adversarial: b
         if include_adversarial:
             return items
         return [item for item in items if not is_adversarial_item(item)]
-    if {"input_prompt", "trigger", "answer"} <= set(sample.keys()):
-        item = normalize_qa_item(sample)
-        if include_adversarial or not is_adversarial_item(item):
-            return [item]
-        return []
     raise ValueError(
         "Dataset sample is missing a supported QA schema. "
         f"Available keys: {', '.join(sorted(sample.keys()))}"
     )
 
 
-def _parse_turn(line: str) -> Dict[str, Any] | None:
-    """Parse one "Speaker: text" dialogue line, or None if it is not one.
-
-    Returning None rather than raising lets the caller skip blank lines and
-    headers while parsing a transcript, without pre-filtering it.
-    """
-    text = line.strip()
-    if not text:
-        return None
-    match = TURN_RE.match(text)
-    if not match:
-        return {"speaker": "", "text": text}
-    speaker = match.group("speaker").strip()
-    body = match.group("body").strip()
-    caption = ""
-    shared_marker = '" and shared a '
-    if shared_marker in body:
-        body, caption = body.rsplit(shared_marker, 1)
-        caption = caption.strip().rstrip(".")
-    if body.startswith('"') and body.endswith('"'):
-        body = body[1:-1]
-    return {
-        "speaker": speaker,
-        "text": body.strip(),
-        "blip_caption": caption,
-    }
-
-
-def build_conversation_from_input_prompt(prompt: str) -> Dict[str, Any]:
-    """Recover a structured conversation from a flattened prompt string.
-
-    Some dataset variants ship the conversation already rendered into the prompt
-    rather than as structured sessions. Parsing it back is what lets those
-    variants use the same ingestion path as the rest, instead of a second one
-    that would have to be kept in step with it.
-
-    Best-effort: lines that do not parse as turns are skipped, so a malformed
-    prompt yields a shorter conversation rather than an exception.
-    """
-    conversation: Dict[str, Any] = {}
-    speakers: List[str] = []
-    segments = prompt.split("\n\nDATE: ")
-    normalized_segments = []
-    for idx, segment in enumerate(segments):
-        if idx == 0 and segment.startswith("DATE: "):
-            normalized_segments.append(segment[len("DATE: "):])
-        elif idx > 0:
-            normalized_segments.append(segment)
-
-    for session_idx, segment in enumerate(normalized_segments, start=1):
-        if "\nCONVERSATION:\n" not in segment:
-            continue
-        date_time, block = segment.split("\nCONVERSATION:\n", 1)
-        block = block.split("\n\nQuestion:", 1)[0].strip()
-        turns: List[Dict[str, Any]] = []
-        for turn_idx, raw_line in enumerate(block.splitlines(), start=1):
-            parsed = _parse_turn(raw_line)
-            if not parsed:
-                continue
-            speaker = parsed.get("speaker", "")
-            if speaker and speaker not in speakers:
-                speakers.append(speaker)
-            parsed["dia_id"] = f"D{session_idx}:{turn_idx}"
-            turns.append(parsed)
-        conversation[f"session_{session_idx}_date_time"] = date_time.strip()
-        conversation[f"session_{session_idx}"] = turns
-
-    conversation["speaker_a"] = speakers[0] if speakers else None
-    conversation["speaker_b"] = speakers[1] if len(speakers) > 1 else None
-    if not any(key.startswith("session_") and not key.endswith("_date_time") for key in conversation):
-        block = prompt.split("\n\nQuestion:", 1)[0].strip()
-        turns: List[Dict[str, Any]] = []
-        for turn_idx, raw_line in enumerate(block.splitlines(), start=1):
-            parsed = _parse_turn(raw_line)
-            if not parsed:
-                continue
-            speaker = parsed.get("speaker", "")
-            if speaker and speaker not in speakers:
-                speakers.append(speaker)
-            parsed["dia_id"] = f"D1:{turn_idx}"
-            turns.append(parsed)
-        if turns:
-            conversation["session_1_date_time"] = None
-            conversation["session_1"] = turns
-            conversation["speaker_a"] = speakers[0] if speakers else None
-            conversation["speaker_b"] = speakers[1] if len(speakers) > 1 else None
-        else:
-            raise ValueError("Could not parse any conversation turns from locomo-plus input_prompt")
-    return conversation
-
-
 def get_sample_conversation(sample: Dict[str, Any]) -> Dict[str, Any]:
-    """Return one sample's conversation, whichever shape the variant stores it in."""
+    """Return one standard LoCoMo sample's structured conversation."""
     if "conversation" in sample and isinstance(sample["conversation"], dict):
         return sample["conversation"]
-    if "input_prompt" in sample:
-        return build_conversation_from_input_prompt(str(sample["input_prompt"]))
     raise ValueError(
         "Dataset sample is missing a supported conversation object. "
         f"Available top-level keys: {', '.join(sorted(sample.keys()))}"
@@ -366,79 +263,6 @@ def build_session_records_for_conv(
     return _session_records_from_conv_dict(conv_id, conv)
 
 
-def build_session_records_for_conv_dict(
-    conv_id: str,
-    conv: Dict[str, Any],
-) -> List[Dict[str, Any]]:
-    """Build session records from an already-parsed conversation dict.
-
-    Used for cognitive instances where the conversation comes from parsing
-    input_prompt rather than from locomo10.json.
-    Returns a list sorted by session_id.
-    """
-    return _session_records_from_conv_dict(conv_id, conv)
-
-
-def extract_injected_session_record(
-    conv_id: str,
-    input_prompt: str,
-    injected_session_id: int,
-    source_session_records: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """Build a session record for the injected content of a cognitive item.
-
-    Cognitive input_prompts have no DATE headers — all sessions are concatenated
-    as a flat dialogue.  We count the turns already covered by snapshots
-    (sessions 1..injected_session_id-1) and treat everything beyond that boundary
-    as the injected session at ``injected_session_id``.
-    """
-    # Count dialogue turns covered by the snapshot (sessions before injection point)
-    original_turn_count = sum(
-        len(r["dialogue"])
-        for r in source_session_records
-        if r["session_id"] < injected_session_id
-    )
-
-    # Parse every speaker turn from the flat input_prompt
-    all_turns: List[Dict[str, Any]] = []
-    for line in input_prompt.splitlines():
-        parsed = _parse_turn(line)
-        if parsed and (parsed.get("speaker") or parsed.get("text")):
-            all_turns.append(parsed)
-
-    injected_turns = all_turns[original_turn_count:]
-    if not injected_turns:
-        raise ValueError(
-            f"conv_id={conv_id!r}: no injected turns found after "
-            f"{original_turn_count} original turns "
-            f"(injected_session_id={injected_session_id})"
-        )
-
-    # Derive speakers from source records
-    speakers: List[str] = []
-    for r in source_session_records:
-        for s in (r.get("speaker_a"), r.get("speaker_b")):
-            if s and s not in speakers:
-                speakers.append(s)
-
-    dialogue = []
-    for i, t in enumerate(injected_turns, start=1):
-        spk = t.get("speaker", "")
-        txt = t.get("text", "")
-        cap = t.get("blip_caption", "")
-        suffix = f" (Image: {cap})" if cap else ""
-        if txt or cap:
-            dialogue.append(f"{spk}: {txt}{suffix}" if spk else txt + suffix)
-
-    return {
-        "session_id": injected_session_id,
-        "date_time": None,
-        "speaker_a": speakers[0] if speakers else None,
-        "speaker_b": speakers[1] if len(speakers) > 1 else None,
-        "dialogue": dialogue,
-    }
-
-
 def _session_records_from_conv_dict(
     conv_id: str,
     conv: Dict[str, Any],
@@ -475,28 +299,6 @@ def _session_records_from_conv_dict(
     return sorted(records, key=lambda r: r["session_id"])
 
 
-def classify_locomo_plus_items(
-    path: str | Path,
-) -> Dict[str, List[int]]:
-    """Return {conv_id: [sample_index, ...]} for all items in a locomo-plus QA JSON.
-
-    Also returns a mapping of sample_index -> is_cognitive for ordering purposes.
-    """
-    samples = load_raw_samples(path)
-    result: Dict[str, List[int]] = {}
-    for idx, sample in enumerate(samples):
-        conv_id = sample.get("conversation_id")
-        if conv_id is None:
-            continue
-        result.setdefault(str(conv_id), []).append(idx)
-    return result
-
-
-def is_cognitive_item(sample: Dict[str, Any]) -> bool:
-    cat = str(sample.get("category", "")).strip().lower()
-    return cat in ("cognitive", "6")
-
-
 def find_evidence_turns_from_sample(sample: Dict[str, Any], question: str) -> List[str]:
     """Resolve a question's evidence ids to the turns they name."""
     normalized = [normalize_qa_item(item) for item in load_qa_items_from_sample(sample)]
@@ -511,6 +313,4 @@ def load_qa_items_from_sample(sample: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Normalize an already-loaded sample's questions, without re-reading the file."""
     if "qa" in sample and isinstance(sample["qa"], list):
         return [item for item in sample["qa"] if isinstance(item, dict)]
-    if {"input_prompt", "trigger", "answer"} <= set(sample.keys()):
-        return [sample]
     return []

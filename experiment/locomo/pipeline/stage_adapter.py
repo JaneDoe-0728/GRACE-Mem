@@ -85,35 +85,6 @@ def run_ingest_stage_for_locomo(
     )
 
 
-def run_ingest_stage_for_records(
-    *,
-    ingest_module: Any,
-    ingestor: Any,
-    records: Sequence[dict[str, Any]],
-    conv_id: str,
-    prev_k: int,
-    entity_sim_topk: int,
-    entity_sim_threshold: float,
-    chunk_turns: int,
-) -> dict[str, Any]:
-    """Ingest pre-built session records, bypassing dataset loading.
-
-    The entry point for replays and for datasets whose records were assembled
-    elsewhere, so those paths share the ingestion code rather than duplicating
-    it against a different loader.
-    """
-    df = ingest_module.session_records_to_df(
-        list(records), conv_id=conv_id, chunk_turns=chunk_turns
-    )
-    return ingest_module.ingest_by_session_one_turn(
-        ingestor,
-        df,
-        prev_k=prev_k,
-        entity_sim_topk=entity_sim_topk,
-        entity_sim_threshold=entity_sim_threshold,
-    )
-
-
 def build_eval_rows(
     *,
     qa_eval_module: Any,

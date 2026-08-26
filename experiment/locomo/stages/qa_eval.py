@@ -497,7 +497,7 @@ def gold_summary_answer(item: dict) -> dict:
     """Answer using only gold session summaries — no KG retrieval (ablation mode).
 
     Session IDs are parsed from D{N}: patterns in the evidence list (locomo style).
-    When no D-patterns are found (locomo-plus), all available summaries are concatenated.
+    When evidence has no D-patterns, all available summaries are concatenated.
     """
     evidence_list = item.get("evidence", [])
     session_ids: set[int] = set()
@@ -518,7 +518,7 @@ def gold_summary_answer(item: dict) -> dict:
         if len(summaries) > 1:
             warnings.append("multi_gold_session_summary_concat")
     else:
-        # locomo-plus: evidence is raw text with no D{N}: markers — use all summaries.
+        # Unstructured evidence has no D{N}: markers, so use all summaries.
         all_texts = [_gold_session_summaries[k] for k in sorted(_gold_session_summaries) if _gold_session_summaries.get(k)]
         if all_texts:
             summaries = all_texts
@@ -598,7 +598,7 @@ def gold_raw_text_answer(item: dict) -> dict:
     """Answer using only gold session raw conversation turns — no KG retrieval (ablation mode).
 
     Session IDs are parsed from D{N}: patterns in the evidence list (locomo style).
-    When no D-patterns are found (locomo-plus), all available session texts are concatenated.
+    When evidence has no D-patterns, all available session texts are concatenated.
     """
     evidence_list = item.get("evidence", [])
     session_ids: set[int] = set()
@@ -620,7 +620,7 @@ def gold_raw_text_answer(item: dict) -> dict:
         if len(texts) > 1:
             warnings.append("multi_gold_session_raw_text_concat")
     else:
-        # locomo-plus: no D{N}: markers — use all sessions.
+        # Unstructured evidence has no D{N}: markers, so use all sessions.
         all_keys = sorted(k for k in _gold_session_raw_texts if not k.endswith("_date_time"))
         for key in all_keys:
             turns = _gold_session_raw_texts.get(key, [])

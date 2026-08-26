@@ -42,9 +42,7 @@ from experiment.locomo.helpers.dataset import (
     resolve_dataset_path,
 )
 from experiment.locomo.helpers.llm import (
-    build_judge_plus_messages,
     build_judge_standard_messages,
-    build_open_domain_plus_messages,
     build_open_domain_standard_messages,
     llm_post,
 )
@@ -65,7 +63,6 @@ CATEGORY_MAP = {
     3: "Open-domain",
     4: "Single-hop",
     5: "Adversarial",
-    6: "Cognitive",
 }
 
 def compute_correctness_stats(df: pd.DataFrame, *, exclude_adversarial: bool = True) -> dict:
@@ -170,28 +167,12 @@ def judge_single(
     Score a single question: the judge returns CORRECT/WRONG as JSON, which we map
     to 1/0.
     """
-    if mode == "open-domain" and dataset == "locomo-plus":
-        messages = build_open_domain_plus_messages(
-            label=category_to_label(category),
-            category=category,
-            gold=gold,
-            pred=gen,
-            evidence=evidence,
-        )
-    elif mode == "open-domain":
+    if mode == "open-domain":
         messages = build_open_domain_standard_messages(
             question=question,
             gold=gold,
             gen=gen,
             evidence_turns=evidence,
-        )
-    elif dataset == "locomo-plus":
-        messages = build_judge_plus_messages(
-            label=category_to_label(category),
-            category=category,
-            gold=gold,
-            pred=gen,
-            evidence=evidence,
         )
     else:
         gold_hint = _normalize_temporal_gold(gold)
@@ -302,25 +283,6 @@ def load_category_map(dataset_json_path: str, sample_index: int) -> dict:
     return q_to_cat
 
 
-def _load_all_category_map(dataset_json: str) -> dict[str, str]:
-    """Load question -> category across every sample in the dataset.
-
-    Used when a row's sample is unknown, which happens with older outputs. Can
-    match an identically worded question in another sample; acceptable, since
-    this only affects the reporting breakdown, not the verdict.
-    """
-    samples = load_raw_samples(dataset_json)
-    q_to_cat: dict[str, str] = {}
-    for sample_index in range(len(samples)):
-        try:
-            qa_items = load_qa_items(dataset_json, sample_index=sample_index)
-        except Exception:
-            continue
-        for item in qa_items:
-            question = str(item.get("question", "")).strip()
-            if question:
-                q_to_cat[question] = str(item.get("category", "")).strip()
-    return q_to_cat
 
 
 def _build_dia_index(conversation: dict) -> dict:
@@ -556,13 +518,7 @@ def llm_as_judge_open_domain(
     df = pd.read_csv(input_csv)
     locomo_data = load_raw_samples(dataset_json)
 
-    # locomo-plus merged CSVs normally carry category and evidence text already.
     has_category_col = "category" in df.columns
-    q_to_cat = (
-        {}
-        if dataset != "locomo-plus" or has_category_col
-        else _load_all_category_map(dataset_json)
-    )
     has_evidence_col = "gold_evidence_source" in df.columns
 
     q_col = next((c for c in df.columns if c.lower() == "question"), None)
@@ -598,7 +554,7 @@ def llm_as_judge_open_domain(
         if has_category_col:
             category = str(row.get("category", "")).strip() or None
         else:
-            category = q_to_cat.get(q)
+            category = None
         print(f"Judging row {i}: {q[:50]}...")
         val = judge_single(
             q,

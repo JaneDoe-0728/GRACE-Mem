@@ -66,14 +66,12 @@ def _current_context(
     return PlusSampleContext(
         sample_index=plan.sample_index,
         conv_id=plan.conv_id,
-        is_cognitive=plan.is_cognitive,
     )
 
 
 def _next_context(
     runtime: RunRuntime,
     next_sample_index: int | None,
-    is_cognitive_item,
     strategy: DatasetStrategy,
 ) -> PlusSampleContext | None:
     """Describe the sample that will run next, for the refresh decision.
@@ -87,7 +85,6 @@ def _next_context(
     return sample_context_for_index(
         next_sample_index,
         runtime.all_samples_plus,
-        is_cognitive_item=is_cognitive_item,
     )
 
 
@@ -106,7 +103,6 @@ def _update_run_state(
         return
     runtime.run_state.update(
         conv_id=plan.conv_id,
-        is_cognitive=plan.is_cognitive,
         success=success,
     )
 
@@ -125,8 +121,6 @@ def _judge_dir_for_aggregate(runtime: RunRuntime, strategy: DatasetStrategy) -> 
 def sample_context_for_index(
     sample_index: int,
     all_samples_plus: list[Any],
-    *,
-    is_cognitive_item,
 ) -> PlusSampleContext | None:
     """Build the context for a sample by index, or None if the index is past the end.
 
@@ -139,7 +133,6 @@ def sample_context_for_index(
     return PlusSampleContext(
         sample_index=sample_index,
         conv_id=str(sample.get("conversation_id", "")).strip() or None,
-        is_cognitive=is_cognitive_item(sample),
     )
 
 
@@ -155,18 +148,14 @@ def should_skip_graph_restore(
     invalidate a run, since a wrong reuse evaluates against another
     conversation's knowledge graph and still produces plausible answers.
 
-    Every one of the five conditions is load-bearing. Both samples must be
-    non-cognitive (the cognitive path mutates the graph, so its leftovers are
-    not reusable), they must name the same non-null conversation, and the
-    previous sample must have succeeded -- a failed one may have left the graph
-    partially built.
+    Both samples must name the same non-null conversation, and the previous
+    sample must have succeeded -- a failed one may have left the graph partially
+    built.
     """
     if current is None:
         return False
     return (
-        not current.is_cognitive
-        and not previous.was_cognitive
-        and current.conv_id is not None
+        current.conv_id is not None
         and current.conv_id == previous.conv_id
         and previous.success
     )
@@ -188,9 +177,7 @@ def should_skip_refresh(
     if current is None or next_sample is None or not current_success:
         return False
     return (
-        not current.is_cognitive
-        and not next_sample.is_cognitive
-        and current.conv_id is not None
+        current.conv_id is not None
         and current.conv_id == next_sample.conv_id
     )
 
@@ -202,7 +189,6 @@ def build_sample_plan(
     worker_paths: WorkerPaths,
     run_state: RunState,
     all_samples_plus: list[Any] | None,
-    is_cognitive_item,
 ) -> SamplePlan:
     """Decide everything about one sample before its worker is launched.
 
@@ -216,7 +202,6 @@ def build_sample_plan(
         current_plus = sample_context_for_index(
             sample_index,
             all_samples_plus,
-            is_cognitive_item=is_cognitive_item,
         )
     return SamplePlan(
         sample_index=sample_index,
@@ -226,5 +211,4 @@ def build_sample_plan(
             previous=run_state.previous,
         ),
         conv_id=current_plus.conv_id if current_plus else None,
-        is_cognitive=current_plus.is_cognitive if current_plus else True,
     )

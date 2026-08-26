@@ -10,9 +10,8 @@ seeded, retry unseeded if the backend rejects it, log the transition once --
 because a judge that silently stopped being deterministic would move scores
 between runs for reasons unrelated to the change under test.
 
-The `build_*_messages` builders exist per (task, dataset variant) pair because
-locomo-plus supplies extra context that changes the prompt's shape, not just
-its content.
+The `build_*_messages` builders keep the standard and open-domain grading
+rubrics explicit at their call sites.
 """
 
 import json
@@ -208,60 +207,11 @@ def llm_post_json(messages: list[dict], *, temperature: float = 0.1, max_tokens:
                 time.sleep(1.0 * attempt)
     raise RuntimeError("llm_post_json failed after retries") from last_error
 
-
-def normalize_prompt_category(label: str, category: str | None) -> str:
-    """Map a question's category onto the prompt template that should grade it.
-
-    Categories have been labelled differently across dataset revisions, and an
-    unrecognised label must not silently select the wrong rubric -- a temporal
-    question graded by the open-domain prompt is scored on the wrong criterion.
-    """
-    normalized = str(category or "").strip()
-    if normalized.lower() == "common-sense":
-        return "common-sense"
-    label_map = {
-        "Multi-hop": "multi-hop",
-        "Single-hop": "single-hop",
-        "Temporal": "temporal",
-        "Adversarial": "adversarial",
-        "Cognitive": "Cognitive",
-        "Open-domain": "default",
-        "Unknown": "default",
-    }
-    return label_map.get(
-        label,
-        normalized if normalized in judge_prompts.PROMPT_TEMPLATES else "default",
-    )
-
-
 def build_messages(*, system_prompt: str, user_prompt: str) -> list[dict[str, str]]:
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-
-
-def build_plus_messages(
-    *,
-    label: str,
-    category: str | None,
-    gold: str,
-    pred: str,
-    evidence: str,
-) -> list[dict[str, str]]:
-    """Build messages for the locomo-plus variant, which supplies extra context.
-
-    Separate from `build_messages` because the extra context changes the
-    prompt's structure, not just its content -- one builder with a conditional
-    would have to keep both shapes correct in one place.
-    """
-    template_key = normalize_prompt_category(label, category)
-    template = judge_prompts.PROMPT_TEMPLATES.get(template_key, judge_prompts.PROMPT_TEMPLATES["default"])
-    return build_messages(
-        system_prompt=judge_prompts.SYSTEM_PROMPT_PLUS,
-        user_prompt=template.format(gold=gold, pred=pred, evidence=evidence),
-    )
-
 
 def build_judge_standard_messages(*, question: str, gold: str, gen: str) -> list[dict[str, str]]:
     """Build the judge prompt for standard LoCoMo questions."""
@@ -273,25 +223,6 @@ def build_judge_standard_messages(*, question: str, gold: str, gen: str) -> list
             response=gen,
         ),
     )
-
-
-def build_judge_plus_messages(
-    *,
-    label: str,
-    category: str | None,
-    gold: str,
-    pred: str,
-    evidence: str,
-) -> list[dict[str, str]]:
-    """Build the judge prompt for locomo-plus questions."""
-    return build_plus_messages(
-        label=label,
-        category=category,
-        gold=gold,
-        pred=pred,
-        evidence=evidence,
-    )
-
 
 def build_open_domain_standard_messages(
     *,
@@ -314,22 +245,4 @@ def build_open_domain_standard_messages(
             response=gen,
             evidence_turns=evidence_turns,
         ),
-    )
-
-
-def build_open_domain_plus_messages(
-    *,
-    label: str,
-    category: str | None,
-    gold: str,
-    pred: str,
-    evidence: str,
-) -> list[dict[str, str]]:
-    """Build the open-domain judge prompt for locomo-plus questions."""
-    return build_plus_messages(
-        label=label,
-        category=category,
-        gold=gold,
-        pred=pred,
-        evidence=evidence,
     )

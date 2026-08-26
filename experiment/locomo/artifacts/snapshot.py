@@ -32,7 +32,6 @@ from typing import List, Optional
 from experiment.locomo.helpers.dataset import (
     build_session_records_for_conv,
     index_source_conversations,
-    is_cognitive_item,
     resolve_dataset_path,
 )
 from experiment.locomo.utils.graph import (
@@ -173,62 +172,6 @@ def restore_graph(run_root: Path, conv_id: str, session_id: int, graph) -> None:
     src = snapshot_dir(run_root, conv_id, session_id)
     export_path = src / GRAPH_EXPORT_FILE
     restore_graph_from_export_file(graph, export_path)
-
-
-# ---------------------------------------------------------------------------
-# locomo-plus snapshot builder (entry point called by cli.py dispatcher)
-# ---------------------------------------------------------------------------
-
-def _resolve_conv_id_and_sessions(
-    sample_index: int,
-    qa_item: dict,
-    source_json_path: "Path",
-) -> tuple:
-    """Validate conversation_id and injected_session_id; load source session records.
-
-    Returns (conv_id, injected_session_id_or_None, source_session_records, is_cognitive).
-    Raises ValueError on validation failure.
-    """
-    conv_id = qa_item.get("conversation_id")
-    if not conv_id:
-        raise ValueError(
-            f"sample_index={sample_index}: 'conversation_id' is missing or null. "
-            "Update the locomo-plus dataset to include conversation_id for each item."
-        )
-    conv_id = str(conv_id).strip()
-
-    is_cognitive = is_cognitive_item(qa_item)
-    injected_session_id: Optional[int] = None
-
-    if is_cognitive:
-        raw_inj = qa_item.get("injected_session_id")
-        if raw_inj is None:
-            raise ValueError(
-                f"sample_index={sample_index}: category=Cognitive but 'injected_session_id' is missing."
-            )
-        try:
-            injected_session_id = int(raw_inj)
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"sample_index={sample_index}: 'injected_session_id' must be an integer, "
-                f"got {raw_inj!r}"
-            )
-        if injected_session_id < 1:
-            raise ValueError(
-                f"sample_index={sample_index}: 'injected_session_id' must be >= 1, "
-                f"got {injected_session_id}"
-            )
-
-    source_convs = index_source_conversations(source_json_path)
-    if conv_id not in source_convs:
-        available = sorted(source_convs.keys())[:10]
-        raise ValueError(
-            f"sample_index={sample_index}: conversation_id={conv_id!r} not found in "
-            f"{source_json_path}. Available (first 10): {available}"
-        )
-
-    session_records = build_session_records_for_conv(conv_id, source_convs[conv_id])
-    return conv_id, injected_session_id, session_records, is_cognitive
 
 
 def _snapshot_builder(args) -> None:

@@ -102,15 +102,12 @@ class SamplePlan:
             of rebuilding it. Only valid when that sample used the same
             conversation and succeeded -- restoring is the expensive part of a
             run, and skipping it wrongly evaluates against someone else's KG.
-        is_cognitive: Whether this sample is scored on the cognitive question
-            set, which selects the judge rubric.
     """
 
     sample_index: int
     worker_paths: WorkerPaths
     skip_graph_restore: bool
     conv_id: str | None = None
-    is_cognitive: bool = True
 
 
 @dataclass(frozen=True)
@@ -135,7 +132,6 @@ class PreviousSampleState:
     """
 
     conv_id: str | None = None
-    was_cognitive: bool = True
     success: bool = False
 
 
@@ -150,7 +146,6 @@ class PlusSampleContext:
 
     sample_index: int
     conv_id: str | None
-    is_cognitive: bool
 
 
 @dataclass
@@ -164,7 +159,7 @@ class RunState:
 
     previous: PreviousSampleState = field(default_factory=PreviousSampleState)
 
-    def update(self, *, conv_id: str | None, is_cognitive: bool, success: bool) -> None:
+    def update(self, *, conv_id: str | None, success: bool) -> None:
         """Record the sample that just finished.
 
         A failed sample stores `conv_id=None`, which is what prevents the next
@@ -173,7 +168,6 @@ class RunState:
         """
         self.previous = PreviousSampleState(
             conv_id=conv_id if success else None,
-            was_cognitive=is_cognitive,
             success=success,
         )
 

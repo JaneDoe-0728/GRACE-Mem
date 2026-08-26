@@ -12,7 +12,6 @@ without raising -- the failure appears only as unexplained low accuracy.
 """
 
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
@@ -24,9 +23,6 @@ from experiment.locomo.utils.graph import (
     write_graph_export,
 )
 from experiment.locomo.utils.log import log_event
-
-PIPELINE_MODULE = "experiment.locomo.pipeline.runner"
-
 
 def ensure_worker_repo_path() -> None:
     repo_root = Path(__file__).resolve().parent.parent.parent.parent
@@ -129,40 +125,3 @@ def validate_and_export_graph(graph, *, sample_index: int) -> None:
         relationships=len(graph_data["relationships"]),
         path=export_path,
     )
-
-
-def invoke_snapshot_builder(*, args, conv_id: str, max_session_id: int, run_root: Path) -> None:
-    """Spawn the snapshot builder for one conversation, up to a session bound.
-
-    A subprocess for the same reason samples are: it builds a graph and loads
-    models, and doing that in the parent would leave that state behind for every
-    subsequent sample.
-    """
-    snap_cmd = [
-        sys.executable,
-        "-m",
-        PIPELINE_MODULE,
-        "--build-snapshots",
-        "--conv-id",
-        conv_id,
-        "--up-to-session",
-        str(max_session_id),
-        "--run-root",
-        str(run_root),
-        "--prev-k",
-        str(args.prev_k),
-        "--entity-sim-topk",
-        str(args.entity_sim_topk),
-        "--entity-sim-threshold",
-        str(args.entity_sim_threshold),
-        "--chunk-turns",
-        str(args.chunk_turns),
-    ]
-    if args.source_json:
-        snap_cmd.extend(["--source-json", str(args.source_json)])
-
-    result = subprocess.run(snap_cmd)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"On-demand snapshot builder failed for conv={conv_id} (exit {result.returncode})"
-        )
