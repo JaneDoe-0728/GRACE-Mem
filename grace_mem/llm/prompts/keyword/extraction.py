@@ -9,7 +9,7 @@ what the question is asking, fusion would rank the disagreement rather than
 the answer.
 """
 
-keyword_extraction_PROMPT = """
+KEYWORD_EXTRACTION_PROMPT = """
 You extract retrieval keywords for memory QA.
 Return JSON only with exactly two keys:
 - "high_level_keywords": abstract intent or reasoning type

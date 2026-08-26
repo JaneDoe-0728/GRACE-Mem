@@ -481,11 +481,11 @@ def scrub(piece: str) -> str:
         return ""
     s = str(piece)
     import re
-    _TAG_RE = re.compile(r"<\|\s*[^>|]+\|>")
-    _END_TOKENS = ("<|end|>", "<|stop|>", "<|im_end|>")
-    s = _TAG_RE.sub("", s)
+    _tag_re = re.compile(r"<\|\s*[^>|]+\|>")
+    _end_tokens = ("<|end|>", "<|stop|>", "<|im_end|>")
+    s = _tag_re.sub("", s)
     s = s.replace("<think>", "").replace("</think>", "")
-    for t in _END_TOKENS:
+    for t in _end_tokens:
         s = s.replace(t, "")
     toks = s.strip()
     if toks in {"analysis", "final", "message"}:

@@ -7,7 +7,7 @@ from typing import Any, Optional, Dict, List, Tuple
 from dataclasses import dataclass
 import numpy as np
 
-from grace_mem.llm.prompts.keyword.extraction import keyword_extraction_PROMPT
+from grace_mem.llm.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
 from grace_mem.llm.prompts.hyde_prompting import HYDE_SYSTEM, HYDE_USER
 from grace_mem.utils.common import KeywordExtractionResult
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
@@ -815,7 +815,7 @@ class Retriever:
         guidance_section = ""
         if retrieval_guidance:
             guidance_section = f"\nRetrieval guidance:\n{retrieval_guidance}\n"
-        keyword_prompt = keyword_extraction_PROMPT.format(
+        keyword_prompt = KEYWORD_EXTRACTION_PROMPT.format(
             query=question, guidance_section=guidance_section
         )
         last_error = ""
@@ -1751,7 +1751,7 @@ class Retriever:
 
         ent_id2meta, rel_id2meta = build_id_to_meta_maps(self.cache)
 
-        TEMPORAL_TYPES = {"Date", "Event", "Activity"}
+        temporal_types = {"Date", "Event", "Activity"}
         if entities:
             lines.append("=== Entities ===")
             for ent in entities:
@@ -1762,7 +1762,7 @@ class Retriever:
                 meta = ent_id2meta.get(eid, {}) or {}
                 prov = meta.get("prov") or {}
                 dt_str, _ = TemporalRelevanceCalculator.get_newest_dialogue_datetime(prov, request_id)
-                temporal_tag = f" [mentioned_at:{dt_str}]" if dt_str and ent_type in TEMPORAL_TYPES else ""
+                temporal_tag = f" [mentioned_at:{dt_str}]" if dt_str and ent_type in temporal_types else ""
                 temporal_meta = meta.get("temporal") or {}
                 temporal_suffix = ""
                 if temporal_meta:
@@ -1792,7 +1792,7 @@ class Retriever:
                 rprov = rmeta.get("prov") or {}
                 rdt_str, _ = TemporalRelevanceCalculator.get_newest_dialogue_datetime(rprov, request_id)
                 rtype = rmeta.get("type", "")
-                temporal_tag = f" [mentioned_at:{rdt_str}]" if rdt_str and rtype in TEMPORAL_TYPES else ""
+                temporal_tag = f" [mentioned_at:{rdt_str}]" if rdt_str and rtype in temporal_types else ""
                 lines.append(f"- {src_name} -> {tgt_name}: {rel_desc}{temporal_tag}")
 
         result = "\n".join(lines) if lines else ""

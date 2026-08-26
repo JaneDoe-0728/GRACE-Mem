@@ -1,6 +1,6 @@
 """
 Keyword extraction prompts for hybrid retrieval.
 """
-from .extraction import keyword_extraction_PROMPT
+from .extraction import KEYWORD_EXTRACTION_PROMPT
 
-__all__ = ["keyword_extraction_PROMPT"]
+__all__ = ["KEYWORD_EXTRACTION_PROMPT"]

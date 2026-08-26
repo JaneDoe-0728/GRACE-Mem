@@ -625,7 +625,7 @@ class MultiDatasetProcessor:
             embedder=self.embedder,
             mgr=self.current_mgr,
             provenance=Provenance,
-            GLOBAL_CACHE=self.current_mgr.cache,
+            global_cache=self.current_mgr.cache,
             processed_ent_map=self.current_mgr.cache["entities"],
             processed_ent_full_map=self.current_mgr.cache["entities_full"],
         )
@@ -634,7 +634,7 @@ class MultiDatasetProcessor:
             embedder=self.embedder,
             mgr=self.current_mgr,
             provenance=Provenance,
-            GLOBAL_CACHE=self.current_mgr.cache,
+            global_cache=self.current_mgr.cache,
             processed_rel_map=self.current_mgr.cache["relationships"],
             processed_rel_full_map=self.current_mgr.cache["relationships_full"],
         )

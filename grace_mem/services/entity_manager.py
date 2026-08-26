@@ -315,7 +315,7 @@ class EntityManager:
         embedder: Any,
         mgr: Any,
         provenance: Any,
-        GLOBAL_CACHE: Dict[str, Any],
+        global_cache: Dict[str, Any],
         processed_ent_map: Dict[str, Meta],
         processed_ent_full_map: Dict[KeyNameTypeDesc, Meta],
     ) -> None:
@@ -323,7 +323,7 @@ class EntityManager:
         self._embedder = embedder
         self._mgr = mgr
         self._prov = provenance
-        self._GLOBAL_CACHE = GLOBAL_CACHE
+        self._global_cache = global_cache
         self._processed = processed_ent_map
         self._processed_full = processed_ent_full_map
 
@@ -387,7 +387,7 @@ class EntityManager:
 
         direct_sources = [
             self._processed.get(key),
-            self._GLOBAL_CACHE.get("entities", {}).get(key),
+            self._global_cache.get("entities", {}).get(key),
         ]
         for meta in direct_sources:
             if not isinstance(meta, dict):
@@ -403,7 +403,7 @@ class EntityManager:
         if candidates:
             return candidates
 
-        for meta in self._GLOBAL_CACHE.get("entities", {}).values():
+        for meta in self._global_cache.get("entities", {}).values():
             if not isinstance(meta, dict):
                 continue
             if _entity_key(meta.get("name", ""), meta.get("type", "")) != key:
@@ -579,7 +579,7 @@ class EntityManager:
           description/evidence, write it back
         Returns: (entity_idx, input2resolved, stats)
         """
-        ent_id2meta, _ = build_id_to_meta_maps(self._GLOBAL_CACHE)
+        ent_id2meta, _ = build_id_to_meta_maps(self._global_cache)
         added = updated = 0
         texts: List[str] = []
         metas: List[Meta] = []

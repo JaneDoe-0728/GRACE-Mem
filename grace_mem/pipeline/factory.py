@@ -90,7 +90,7 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
     from grace_mem.embeddings import embedder
     from grace_mem.services import EntityManager, RelationshipManager, Provenance
 
-    GLOBAL_CACHE = MGR.cache
+    global_cache = MGR.cache
     llm = LLMClient()
     graph = None
     try:
@@ -99,18 +99,18 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
             embedder=embedder,
             mgr=MGR,
             provenance=Provenance,
-            GLOBAL_CACHE=GLOBAL_CACHE,
-            processed_ent_map=GLOBAL_CACHE["entities"],
-            processed_ent_full_map=GLOBAL_CACHE["entities_full"],
+            global_cache=global_cache,
+            processed_ent_map=global_cache["entities"],
+            processed_ent_full_map=global_cache["entities_full"],
         )
 
         rel = RelationshipManager(
             embedder=embedder,
             mgr=MGR,
             provenance=Provenance,
-            GLOBAL_CACHE=GLOBAL_CACHE,
-            processed_rel_map=GLOBAL_CACHE["relationships"],
-            processed_rel_full_map=GLOBAL_CACHE["relationships_full"],
+            global_cache=global_cache,
+            processed_rel_map=global_cache["relationships"],
+            processed_rel_full_map=global_cache["relationships_full"],
         )
 
         retriever = Retriever(
@@ -118,7 +118,7 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
             graph=graph,
             mgr=MGR,
             embed=embedder.embed,
-            cache=GLOBAL_CACHE,
+            cache=global_cache,
             config=retriever_config,
         )
         ingestor = Ingestor(

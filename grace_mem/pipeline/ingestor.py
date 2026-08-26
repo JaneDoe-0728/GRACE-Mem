@@ -144,11 +144,11 @@ def _repair_temporal_entities(
     Returns:
         The repaired (entities, relationships). Inputs are not mutated.
     """
-    _TEMPORAL_TYPES = (EntityType.Date, EntityType.Time, EntityType.Timespan)
+    _temporal_types = (EntityType.Date, EntityType.Time, EntityType.Timespan)
     # A whole name that is a bracket marker: "[TIMESPAN: the weekend before 2023-07-15]"
-    _BRACKET_RE = re.compile(r'^\[(?:DATE|TIMESPAN|TIME):\s*(.*?)\]$', re.IGNORECASE)
+    _bracket_re = re.compile(r'^\[(?:DATE|TIMESPAN|TIME):\s*(.*?)\]$', re.IGNORECASE)
     # The same markers embedded mid-string, which is how they show up in Event names.
-    _EMBEDDED_BRACKET_RE = re.compile(r'\s*\[(?:DATE|TIMESPAN|TIME):[^\]]*\]', re.IGNORECASE)
+    _embedded_bracket_re = re.compile(r'\s*\[(?:DATE|TIMESPAN|TIME):[^\]]*\]', re.IGNORECASE)
 
     hint_lookup: dict[str, dict] = {h["original"].lower(): h for h in temporal_hints}
     # Reverse index, resolved value -> hint. Needed because the model sometimes
@@ -275,11 +275,11 @@ def _repair_temporal_entities(
             desc, _ = rewrite_temporal_text(desc, tctx)
         name_lower = name.lower().strip()
 
-        if etype in _TEMPORAL_TYPES:
+        if etype in _temporal_types:
             original_name = name
 
             # Fix 1: strip bracket marker syntax like [TIMESPAN: 2022] → 2022
-            _bracket = _BRACKET_RE.match(name.strip())
+            _bracket = _bracket_re.match(name.strip())
             if _bracket:
                 name = _bracket.group(1).strip()
                 name_lower = name.lower()
@@ -328,7 +328,7 @@ def _repair_temporal_entities(
         elif etype == EntityType.Event:
             new_name = name
             # strip embedded bracket markers (e.g. "pottery workshop[TIMESPAN: 2022]")
-            new_name = _EMBEDDED_BRACKET_RE.sub("", new_name).strip(" ,.-")
+            new_name = _embedded_bracket_re.sub("", new_name).strip(" ,.-")
             for original_phrase, hint in hint_lookup.items():
                 pattern = re.compile(re.escape(original_phrase), re.IGNORECASE)
                 if pattern.search(new_name):
@@ -372,7 +372,7 @@ def _repair_temporal_entities(
 
     # Fix 4: fallback hard-inject for hints whose markers list was empty (or whose
     # resolved name wasn't captured by Fix 3).  Uses granularity to pick entity type.
-    _GRANULARITY_TO_ETYPE: dict[str, EntityType] = {
+    _granularity_to_etype: dict[str, EntityType] = {
         "day": EntityType.Date,
         "time": EntityType.Time,
     }
@@ -384,7 +384,7 @@ def _repair_temporal_entities(
         if candidate.lower() in _covered_names_lower:
             continue
         granularity = (hint.get("granularity") or "").lower()
-        etype = _GRANULARITY_TO_ETYPE.get(granularity, EntityType.Timespan)
+        etype = _granularity_to_etype.get(granularity, EntityType.Timespan)
         # skip if normalized_time present but granularity says day — time wins
         if hint.get("normalized_time") and etype == EntityType.Date:
             etype = EntityType.Time

@@ -19,8 +19,8 @@ class Compressor:
     def _get_compressor(self) -> Any:
         """Create the llmlingua compressor on first use and then reuse it."""
         if self._prompt_compressor is None:
-            from llmlingua import PromptCompressor as _PC
-            self._prompt_compressor = _PC(
+            from llmlingua import PromptCompressor as _PromptCompressor
+            self._prompt_compressor = _PromptCompressor(
                 model_name="microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank",
                 use_llmlingua2=True,
             )

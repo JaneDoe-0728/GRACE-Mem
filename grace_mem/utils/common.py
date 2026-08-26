@@ -871,7 +871,7 @@ def tokenize_en(text: str) -> list[str]:
         # so this is effectively unreachable)
         return toks
 
-    KEEP_TAGS = {"NN", "NNS", "NNP", "NNPS", "JJ", "JJR", "JJS", "FW"}
+    keep_tags = {"NN", "NNS", "NNP", "NNPS", "JJ", "JJR", "JJS", "FW"}
 
     filtered = []
 
@@ -890,7 +890,7 @@ def tokenize_en(text: str) -> list[str]:
             continue
 
         # POS-based filtering
-        if tag in KEEP_TAGS:
+        if tag in keep_tags:
             filtered.append(token)
             continue
 

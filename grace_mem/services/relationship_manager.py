@@ -45,7 +45,7 @@ class RelationshipManager:
         embedder: Any,                          # must provide .embed(List[str]) -> np.ndarray
         mgr: Any,                               # must provide .get_relationships_vdb(dim), .persist_async()
         provenance: Any,                        # must provide .merge_prov(old, new)
-        GLOBAL_CACHE: Dict[str, Any],
+        global_cache: Dict[str, Any],
         processed_rel_map: Dict[RelKeyST, Meta],
         processed_rel_full_map: Dict[RelKeySTD, Meta]
     ) -> None:
@@ -59,7 +59,7 @@ class RelationshipManager:
         self._embedder = embedder
         self._mgr = mgr
         self._prov = provenance
-        self._GLOBAL_CACHE = GLOBAL_CACHE
+        self._global_cache = global_cache
         self._processed = processed_rel_map
         self._processed_full = processed_rel_full_map
 

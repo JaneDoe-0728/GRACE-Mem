@@ -20,7 +20,7 @@ from .extraction import (
 )
 
 # Keyword extraction
-from .keyword import keyword_extraction_PROMPT
+from .keyword import KEYWORD_EXTRACTION_PROMPT
 
 # Adaptive retrieval
 from .adaptive import (
@@ -43,7 +43,7 @@ __all__ = [
     "relationship_extraction_only",
 
     # Keyword
-    "keyword_extraction_PROMPT",
+    "KEYWORD_EXTRACTION_PROMPT",
 
     # Adaptive retrieval
     "ADAPTIVE_REWRITE_SYSTEM",

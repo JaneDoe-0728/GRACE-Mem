@@ -852,7 +852,7 @@ def refine_context(
 
         final_raw = _run_loop(max_calls)
 
-        _SALVAGE_MSGS = [
+        _salvage_msgs = [
             "STOP searching. Reply NOW with only one line listing the selected evidence "
             "sids, copied EXACTLY from this list (or ones you found via GREP):\n{seeds}\n"
             "FINAL <sid> <sid> ...",
@@ -864,7 +864,7 @@ def refine_context(
             """Force closure: attach the candidate sid list for the model to copy
             from, then extract the sids."""
             messages.append({"role": "user", "content":
-                _SALVAGE_MSGS[min(attempt, 1)].format(seeds=" ".join(seed))})
+                _salvage_msgs[min(attempt, 1)].format(seeds=" ".join(seed))})
             _t0 = time.perf_counter()
             resp = llm.chat(messages=messages, temperature=0.0, max_tokens=512)
             diag = _resp_diag(resp)

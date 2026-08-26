@@ -46,27 +46,27 @@ class SubgraphPageRank:
         ent_set = set(entity_ids)
 
         # Build adjacency matrix (undirected)
-        A = np.zeros((n, n), dtype=np.float32)
+        adjacency = np.zeros((n, n), dtype=np.float32)
         for src_id, _rel_id, tgt_id in subgraph_edges:
             i = idx.get(src_id)
             j = idx.get(tgt_id)
             if i is None or j is None or src_id not in ent_set or tgt_id not in ent_set:
                 continue
-            A[i, j] += 1.0
-            A[j, i] += 1.0
+            adjacency[i, j] += 1.0
+            adjacency[j, i] += 1.0
 
         # Normalize adjacency
         if inverse_degree_weight:
             # Symmetric normalization: D^{-1/2} A D^{-1/2}
-            deg = A.sum(axis=1)
+            deg = adjacency.sum(axis=1)
             with np.errstate(divide="ignore", invalid="ignore"):
                 inv_sqrt_deg = np.where(deg > 0, 1.0 / np.sqrt(deg), 0.0)
-            A_norm = (A * inv_sqrt_deg[:, None]) * inv_sqrt_deg[None, :]
+            normalized_adjacency = (adjacency * inv_sqrt_deg[:, None]) * inv_sqrt_deg[None, :]
         else:
             # Row-stochastic: each row sums to 1 (or 0 for isolated nodes)
-            row_sums = A.sum(axis=1, keepdims=True)
+            row_sums = adjacency.sum(axis=1, keepdims=True)
             row_sums[row_sums == 0] = 1.0
-            A_norm = A / row_sums
+            normalized_adjacency = adjacency / row_sums
 
         # Personalization vector from upstream scores
         raw = np.array(
@@ -75,10 +75,10 @@ class SubgraphPageRank:
         total = raw.sum()
         p = raw / total if total > 0 else np.ones(n, dtype=np.float32) / n
 
-        # Iterative PPR: pr = alpha * A_norm^T @ pr + (1 - alpha) * p
+        # Iterative PPR: pr = alpha * normalized_adjacency^T @ pr + (1 - alpha) * p
         pr = p.copy()
         for _ in range(100):
-            pr_new = alpha * A_norm.T @ pr + (1.0 - alpha) * p
+            pr_new = alpha * normalized_adjacency.T @ pr + (1.0 - alpha) * p
             if np.linalg.norm(pr_new - pr, ord=1) < 1e-6:
                 pr = pr_new
                 break

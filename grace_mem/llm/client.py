@@ -43,7 +43,7 @@ class _Namespace:
             setattr(self, k, _Namespace(v) if isinstance(v, dict) else
                     [_Namespace(i) if isinstance(i, dict) else i for i in v] if isinstance(v, list) else v)
 
-def _DictResponse(data: dict[str, Any]) -> "_Namespace":
+def _dict_response(data: dict[str, Any]) -> "_Namespace":
     """Wrap a raw response dict in the lightweight namespace adapter."""
     return _Namespace(data)
 
@@ -53,7 +53,7 @@ class LLMClient:
     Holds two transports on purpose: an OpenAI SDK client for streaming (it
     handles SSE framing and usage chunks) and plain `requests` for the
     non-streaming calls, where the SDK's response objects would have to be
-    unwrapped back into dicts anyway. `_DictResponse` bridges the difference so
+    unwrapped back into dicts anyway. `_dict_response` bridges the difference so
     callers see the same `resp.choices[0].message.content` shape either way.
 
     Not thread-safe: the seed-state log set is mutated without a lock. Give
@@ -252,7 +252,7 @@ class LLMClient:
         usage = data.get("usage", {})
         if usage:
             token_tracker.record("chat", usage["prompt_tokens"], usage["completion_tokens"], time.perf_counter() - t0)
-        return _DictResponse(data)
+        return _dict_response(data)
 
     def generate_llm_extract(self, prompt: str, max_tokens: int = 3000, temperature: float = 0) -> tuple[str, float]:
         """Run the extraction model and return the raw text plus latency."""
