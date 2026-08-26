@@ -51,27 +51,6 @@ def _resolve_arg(
     return cli_value if cli_value not in (None, "") else default
 
 
-def discover_dataset_configs(
-    *,
-    folder_path: str,
-    file_pattern: str,
-    ingest_params: dict,
-    retrieval_params: dict,
-) -> list[DatasetConfig]:
-    """Build the per-dataset configs a batch run will execute."""
-    datasets: list[DatasetConfig] = []
-    for csv_file in discover_csv_datasets(folder_path, file_pattern):
-        datasets.append(
-            DatasetConfig.from_params(
-                name=Path(csv_file).stem,
-                csv_path=str(csv_file),
-                ingest_params=ingest_params,
-                retrieval_params=retrieval_params,
-            )
-        )
-    return datasets
-
-
 def _write_run_metadata(
     metadata_path: Path,
     *,

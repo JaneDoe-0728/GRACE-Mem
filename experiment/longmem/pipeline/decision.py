@@ -19,9 +19,6 @@ from collections import defaultdict
 from pathlib import Path
 
 
-TERMINAL_STAGES = {"qa_complete"}
-
-
 def should_treat_output_as_complete(output_path: Path) -> bool:
     """Whether an existing output means this dataset can be skipped.
 
@@ -44,25 +41,6 @@ def should_reset_legacy_skipped_stage(checkpoint: dict) -> bool:
     return checkpoint.get("stage") == "skipped_by_watchdog"
 
 
-def next_resume_stage(*, processed_count: int, checkpoint_every_n_sessions: int) -> str:
-    """Decide where an interrupted ingest resumes: mid-ingest, or from scratch.
-
-    Ingest is only checkpointed every N sessions, so a crash between
-    checkpoints leaves sessions ingested but unrecorded. Resuming mid-ingest is
-    only safe when the processed count lands exactly on a checkpoint boundary;
-    otherwise the graph holds writes the checkpoint does not know about, and
-    continuing would ingest them a second time.
-
-    Returns:
-        "ingest_in_progress" to resume, "new" to restart the dataset.
-    """
-    if checkpoint_every_n_sessions <= 0:
-        return "ingest_in_progress"
-    if processed_count % checkpoint_every_n_sessions == 0:
-        return "ingest_in_progress"
-    return "new"
-
-
 def retrieval_context_needs_rerun(context: str) -> bool:
     """Whether a stored retrieval context is unusable and must be recomputed.
 
@@ -75,10 +53,6 @@ def retrieval_context_needs_rerun(context: str) -> bool:
     """
     value = str(context or "").strip()
     return value in ("", "nan") or "(no KG context)" in value
-
-
-def checkpoint_is_terminal(checkpoint: dict) -> bool:
-    return checkpoint.get("stage") in TERMINAL_STAGES
 
 
 def read_child_manifest(manifest_path: str | Path) -> list[tuple[str, str]]:

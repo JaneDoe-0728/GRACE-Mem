@@ -39,7 +39,6 @@ from grace_mem.utils.logger_config import make_module_jlog
 from experiment.longmem.pipeline import decision
 from experiment.longmem.pipeline.aggregate import update_all_answers_csv
 from experiment.longmem.helpers.checkpoints import (
-    checkpoint_path as shared_checkpoint_path,
     load_checkpoint as shared_load_checkpoint,
     save_checkpoint as shared_save_checkpoint,
 )
@@ -793,9 +792,6 @@ class MultiDatasetProcessor:
         if cleanup_error is not None:
             raise cleanup_error
 
-    def _checkpoint_path(self, config: DatasetConfig) -> Path:
-        return shared_checkpoint_path(self.base_output_dir, config)
-
     def _output_path(self, config: DatasetConfig) -> Path:
         if config.output_path is None:
             return self.base_output_dir / f"{config.name}.csv"
@@ -834,13 +830,7 @@ class MultiDatasetProcessor:
         total_sessions: Optional[int] = None,
         stage: str = "ingest_in_progress",
     ):
-        """Persist ingest progress so an interrupted dataset resumes mid-way.
-
-        Written every N sessions rather than every session -- see
-        `decision.next_resume_stage`, which will only resume from a checkpoint
-        boundary, since between boundaries the graph holds writes the checkpoint
-        does not know about.
-        """
+        """Persist ingest progress so an interrupted dataset can resume."""
         shared_save_checkpoint(
             self.base_output_dir,
             config,

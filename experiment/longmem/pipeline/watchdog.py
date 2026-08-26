@@ -8,7 +8,6 @@ Usage:
 """
 
 import argparse
-import csv
 import logging
 import os
 import subprocess
@@ -46,7 +45,6 @@ from experiment.longmem.utils.io import (
 )
 
 
-DEFAULT_DATA_ROOT = _LONGMEM_ROOT / "script_data"
 DEFAULT_OUTPUT_BASE = _LONGMEM_ROOT / "output"
 BATCH_MODULE = "experiment.longmem.pipeline.batch"
 
@@ -225,34 +223,6 @@ def count_same_progress_stuck_events(
     return count
 
 
-def ordered_session_ids(csv_path: Path) -> list[str]:
-    """Return a dataset's session ids in conversation order.
-
-    Numeric where possible, so session 10 follows 9 rather than 1. Ingestion is
-    sequential and provenance is positional, so lexical order would place turns
-    in the graph in an order the conversation never had.
-    """
-    seen: list[str] = []
-    with open(csv_path, encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        if not reader.fieldnames or "session_id" not in reader.fieldnames:
-            raise ValueError(f"CSV missing session_id column: {csv_path}")
-        for row in reader:
-            sid = str(row.get("session_id", "")).strip()
-            if not sid:
-                continue
-            if not seen or seen[-1] != sid:
-                seen.append(sid)
-    return seen
-
-
-def next_session_to_skip(csv_path: Path, processed_count: int) -> str | None:
-    session_ids = ordered_session_ids(csv_path)
-    if processed_count < 0 or processed_count >= len(session_ids):
-        return None
-    return session_ids[processed_count]
-
-
 def mark_stuck_datasets_as_skipped(
     data_folder: Path,
     output_root: Path,
@@ -356,11 +326,6 @@ def mark_stuck_datasets_as_skipped(
     return skipped
 
 
-def count_completion(data_folder: Path, output_root: Path, pattern: str) -> tuple[int, int]:
-    """Returns (completed, total)."""
-    return count_completion_selected(data_folder, output_root, pattern, dataset_selector=None)
-
-
 def count_completion_selected(
     data_folder: Path,
     output_root: Path,
@@ -410,17 +375,6 @@ def count_completion_child(
             if dataset_complete(output_dir, csv.stem):
                 completed += 1
     return completed, total
-
-
-def all_datasets_complete(
-    data_folder: Path,
-    output_root: Path,
-    pattern: str,
-    dataset_selector: str | None = None,
-) -> bool:
-    """Whether every selected dataset has usable output -- the run's stop condition."""
-    completed, total = count_completion_selected(data_folder, output_root, pattern, dataset_selector)
-    return total > 0 and completed >= total
 
 
 def mark_stuck_child_datasets_as_skipped(

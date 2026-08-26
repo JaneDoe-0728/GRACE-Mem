@@ -24,7 +24,6 @@ from experiment.longmem.pipeline.aggregate import update_all_answers_csv, update
 from experiment.longmem.helpers.args import add_data_args, add_rerun_args, add_run_args, resolve_stages
 from experiment.longmem.helpers.datasets import get_question_info, select_dataset_names
 from experiment.longmem.helpers.rerun_support import (
-    failed_datasets,
     retrieval_datasets,
     retrieval_datasets_from_artifacts,
     resolve_artifact_dir,

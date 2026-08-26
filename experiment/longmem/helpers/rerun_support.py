@@ -47,20 +47,6 @@ def resolve_artifact_dir(root: Path, dataset_name: str) -> Path | None:
     return None
 
 
-def failed_datasets(output_dir: Path, specified: list[str] | None) -> list[str]:
-    """List datasets a previous run did not complete successfully."""
-    if specified:
-        return specified
-
-    progress_path = output_dir / "progress.csv"
-    if not progress_path.exists():
-        raise FileNotFoundError(f"progress.csv not found: {progress_path}")
-
-    df = read_csv_frame(progress_path, dtype=str)
-    failed = df[df["correctness"].astype(str).str.strip() == "0"]
-    return list(failed["dataset"].astype(str).str.strip())
-
-
 def retrieval_datasets(
     output_dir: Path,
     specified: list[str] | None,
