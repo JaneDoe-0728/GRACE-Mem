@@ -931,10 +931,6 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:
                 logger.error("Failed to resolve dataset selector: %s", exc)
                 return 2
-    if not script.exists():
-        logger.error("Script not found: %s", script)
-        return 2
-
     logger.info("data_root    : %s", data_root)
     logger.info("child        : %s", args.child)
     logger.info("child_file   : %s", child_file if args.child else "(disabled)")
@@ -942,7 +938,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("data_folder  : %s", data_folder if not args.child else "(manifest-driven)")
     logger.info("run_tag      : %s", run_tag)
     logger.info("output_root  : %s", output_root)
-    logger.info("script       : %s", script)
+    logger.info("batch_module : %s", BATCH_MODULE)
     logger.info("no_judge     : %s", args.no_judge)
     logger.info("stages       : %s", ",".join(selected_stages))
     logger.info("dataset_id   : %s", dataset_selector or "(all)")
