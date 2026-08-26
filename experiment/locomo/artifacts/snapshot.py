@@ -114,6 +114,13 @@ def snapshot_exists(sample_dir: str | Path, session_id: int) -> bool:
     return snapshot_dir(sample_dir, session_id).is_dir()
 
 
+def clear_working_artifacts() -> None:
+    """Create an empty working store before the storage singleton is imported."""
+    if ARTIFACTS_SRC.exists():
+        shutil.rmtree(ARTIFACTS_SRC)
+    ARTIFACTS_SRC.mkdir(parents=True, exist_ok=True)
+
+
 def _payload_manifest(base_dir: Path) -> dict[str, str]:
     return {
         path.relative_to(base_dir).as_posix(): _sha256_file(path)

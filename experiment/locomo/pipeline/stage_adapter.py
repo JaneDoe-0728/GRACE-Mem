@@ -49,40 +49,6 @@ def configure_retriever(retriever: Any, *, adaptive: bool, tau: float) -> None:
     )
 
 
-def run_ingest_stage_for_locomo(
-    *,
-    ingest_module: Any,
-    ingestor: Any,
-    dataset_json: str | Path,
-    sessions_jsonl: str | Path | None,
-    sample_index: int,
-    prev_k: int,
-    entity_sim_topk: int,
-    entity_sim_threshold: float,
-    chunk_turns: int,
-) -> dict[str, Any]:
-    """Ingest one LoCoMo sample's sessions into the knowledge graph."""
-    sessions = ingest_module.load_sessions(
-        sessions_jsonl=sessions_jsonl,
-        dataset_json=dataset_json,
-    )
-    df = ingest_module.sessions_to_one_turn_df(
-        sessions,
-        make_session_uid=True,
-        sample_filter=sample_index,
-        chunk_turns=chunk_turns,
-    )
-    if df.empty:
-        raise RuntimeError(f"No sessions found for sample_index={sample_index}")
-    return ingest_module.ingest_by_session_one_turn(
-        ingestor,
-        df,
-        prev_k=prev_k,
-        entity_sim_topk=entity_sim_topk,
-        entity_sim_threshold=entity_sim_threshold,
-    )
-
-
 def build_eval_rows(
     *,
     qa_eval_module: Any,

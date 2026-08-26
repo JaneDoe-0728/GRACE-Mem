@@ -254,6 +254,11 @@ session chunks, answers that sample's questions, runs the judge, and writes its
 artifacts/logs below `sample_<id>/`. Process isolation prevents graph and model
 state from leaking between samples.
 
+After each session is durably ingested, the worker writes a validated snapshot.
+Re-running the same `--run-tag` automatically restores the highest consecutive
+session snapshot and continues with the next session. Resume fails explicitly
+if the dataset or ingest settings changed, or if a snapshot is damaged.
+
 Default output:
 
 ```text
@@ -261,6 +266,7 @@ experiment/locomo/output/
   standard/<run-tag>/
     sample_<id>/
       artifacts/
+      snapshots/session_<session-id>/
       logs/
       *_eval*.csv
       *_judge*.csv

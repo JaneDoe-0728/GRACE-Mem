@@ -43,7 +43,6 @@ from experiment.locomo.utils.error_analysis import (
 from experiment.locomo.pipeline.stage_adapter import (
     build_eval_rows,
     configure_retriever,
-    run_ingest_stage_for_locomo,
     run_judge_stage,
     skipped_judge_stats,
 )
@@ -84,6 +83,72 @@ _INGESTOR_CONFIG = {
     "similar_entity_top_k": _INGEST_PARAMS.get("entity_sim_topk", 3),
     "entity_sim_threshold": _INGEST_PARAMS.get("entity_sim_threshold", 0.6),
 }
+
+
+def _sample_session_records(
+    sessions: list[dict], *, sample_index: int
+) -> list[dict]:
+    """Return one sample's sessions in ingest order, rejecting ambiguous IDs."""
+    records = [
+        record
+        for record in sessions
+        if int(record.get("sample_index", -1)) == sample_index
+    ]
+    records.sort(key=lambda record: int(record["session_id"]))
+    session_ids = [int(record["session_id"]) for record in records]
+    if not records:
+        raise RuntimeError(f"No sessions found for sample_index={sample_index}")
+    if len(session_ids) != len(set(session_ids)):
+        raise RuntimeError(
+            f"Duplicate session ids found for sample_index={sample_index}: {session_ids}"
+        )
+    return records
+
+
+def _ingest_remaining_sessions(
+    *,
+    records: list[dict],
+    resume_from: int,
+    ingest_module,
+    ingestor,
+    prev_k: int,
+    entity_sim_topk: int,
+    entity_sim_threshold: float,
+    chunk_turns: int,
+    flush_persist,
+    save_after_session,
+) -> dict:
+    """Ingest and checkpoint sessions strictly after ``resume_from``.
+
+    ``flush_persist`` and ``save_after_session`` are explicit boundaries: if
+    session N raises, snapshots through N-1 remain usable and N is retried on
+    the next worker invocation.
+    """
+    report: dict = {}
+    for record in records:
+        session_id = int(record["session_id"])
+        if session_id <= resume_from:
+            continue
+
+        frame = ingest_module.sessions_to_one_turn_df(
+            [record],
+            make_session_uid=True,
+            sample_filter=int(record["sample_index"]),
+            chunk_turns=chunk_turns,
+        )
+        if not frame.empty:
+            report.update(
+                ingest_module.ingest_by_session_one_turn(
+                    ingestor,
+                    frame,
+                    prev_k=prev_k,
+                    entity_sim_topk=entity_sim_topk,
+                    entity_sim_threshold=entity_sim_threshold,
+                )
+            )
+        flush_persist()
+        save_after_session(session_id)
+    return report
 
 
 def _configure_sample_pretty_trace_log(*, run_root: Path, sample_index: int) -> Path:
@@ -726,7 +791,7 @@ def _run_locomo_replay_summary_fact_from_run(args) -> None:
 
 
 def run_locomo_worker(args) -> None:
-    """Original locomo worker: ingest all sessions -> eval -> judge."""
+    """Run standard LoCoMo with resumable session-by-session ingestion."""
     if getattr(args, "retrieval_mode", "") == "gold_summary_only":
         _run_locomo_gold_summary_only(args)
         return
@@ -743,8 +808,16 @@ def run_locomo_worker(args) -> None:
     import pandas as pd
 
     from grace_mem.llm import token_tracker
-    from experiment.locomo.stages import judge
-    from experiment.locomo.helpers.dataset import resolve_dataset_path
+    from experiment.locomo.stages import ingest, judge
+    from experiment.locomo.helpers.dataset import load_raw_samples, resolve_dataset_path
+    from experiment.locomo.artifacts.snapshot import (
+        build_snapshot_compatibility,
+        clear_working_artifacts,
+        highest_existing_snapshot,
+        load_snapshot_files_only,
+        restore_graph,
+        save_snapshot,
+    )
 
     dataset = "locomo"
     dataset_json = resolve_dataset_path(
@@ -763,6 +836,68 @@ def run_locomo_worker(args) -> None:
     run_qa = "qa_eval" in selected_stages
     run_judge = "judge" in selected_stages and not args.no_judge
     artifact_dir = None if run_ingest else _resolve_existing_artifact_dir(args, run_root=run_root)
+    resume_from = 0
+    session_records: list[dict] = []
+    snapshot_compatibility: dict = {}
+
+    if run_ingest:
+        sessions_jsonl_path = resolve_dataset_path(
+            kind="sessions_jsonl",
+            explicit_path=args.sessions_jsonl,
+            required=False,
+        )
+        sessions_source_path = sessions_jsonl_path or dataset_json
+        sessions = ingest.load_sessions(
+            sessions_jsonl=sessions_jsonl_path,
+            dataset_json=dataset_json,
+        )
+        session_records = _sample_session_records(
+            sessions,
+            sample_index=sample_index,
+        )
+        samples = load_raw_samples(dataset_json)
+        if sample_index < 0 or sample_index >= len(samples):
+            raise ValueError(
+                f"sample_index out of range: {sample_index} "
+                f"(available: 0-{len(samples) - 1})"
+            )
+        sample_id = str(samples[sample_index].get("sample_id", f"sample-{sample_index}"))
+        snapshot_compatibility = build_snapshot_compatibility(
+            sample_index=sample_index,
+            sample_id=sample_id,
+            dataset_json_path=dataset_json,
+            session_source_path=sessions_source_path,
+            ingest_config={
+                "chunk_turns": int(args.chunk_turns),
+                "prev_k": int(args.prev_k),
+                "entity_sim_topk": int(args.entity_sim_topk),
+                "entity_sim_threshold": float(args.entity_sim_threshold),
+                "ingestor_config": dict(_INGESTOR_CONFIG),
+                "llm_model": os.environ.get("MODEL_NAME"),
+                "embedding_model": "Qwen/Qwen3-Embedding-0.6B",
+                "session_uid": "sample_index__session_id",
+            },
+        )
+        session_ids = [int(record["session_id"]) for record in session_records]
+        resume_from = highest_existing_snapshot(
+            sample_dir,
+            session_ids,
+            expected_compatibility=snapshot_compatibility,
+        )
+        if resume_from:
+            load_snapshot_files_only(
+                sample_dir,
+                resume_from,
+                expected_compatibility=snapshot_compatibility,
+            )
+            log_event(
+                "SNAPSHOT",
+                "Loaded session checkpoint",
+                sample=sample_index,
+                session=resume_from,
+            )
+        else:
+            clear_working_artifacts()
 
     if run_qa and artifact_dir is None and not run_ingest:
         raise FileNotFoundError(
@@ -779,7 +914,7 @@ def run_locomo_worker(args) -> None:
             reload_mgr_state_from_artifacts(MGR)
 
         from grace_mem.pipeline.factory import build_pipeline
-        from experiment.locomo.stages import ingest, qa_eval
+        from experiment.locomo.stages import qa_eval
 
         pipeline = build_pipeline(retriever_config=RERANKER_PARAMS, ingestor_config=_INGESTOR_CONFIG)
         retriever = pipeline.retriever
@@ -797,16 +932,33 @@ def run_locomo_worker(args) -> None:
                     stage="ingest",
                     log_path=token_log_path,
                 )
-                run_ingest_stage_for_locomo(
+                if resume_from:
+                    restore_graph(
+                        sample_dir,
+                        resume_from,
+                        graph,
+                        expected_compatibility=snapshot_compatibility,
+                    )
+                else:
+                    graph.clear_all()
+                    graph.init_schema()
+
+                _ingest_remaining_sessions(
+                    records=session_records,
+                    resume_from=resume_from,
                     ingest_module=ingest,
                     ingestor=ingestor,
-                    dataset_json=dataset_json,
-                    sessions_jsonl=args.sessions_jsonl,
-                    sample_index=sample_index,
                     prev_k=args.prev_k,
                     entity_sim_topk=args.entity_sim_topk,
                     entity_sim_threshold=args.entity_sim_threshold,
                     chunk_turns=args.chunk_turns,
+                    flush_persist=MGR.flush_persist,
+                    save_after_session=lambda session_id: save_snapshot(
+                        sample_dir,
+                        session_id,
+                        graph,
+                        compatibility=snapshot_compatibility,
+                    ),
                 )
                 MGR.flush_persist()
             else:
