@@ -1681,7 +1681,6 @@ class Retriever:
             )
         elif query_time:
             try:
-                from datetime import date as _date
                 _qdt = parse_query_time(query_time)
                 if _qdt is not None:
                     _qdate = _qdt.date()

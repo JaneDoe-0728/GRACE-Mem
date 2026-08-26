@@ -14,7 +14,6 @@ The `build_*_messages` builders keep the standard and open-domain grading
 rubrics explicit at their call sites.
 """
 
-import json
 import os
 import sys
 import time
@@ -181,31 +180,6 @@ def llm_post(
         return last_content, last_meta
     return last_content
 
-
-def llm_post_json(messages: list[dict], *, temperature: float = 0.1, max_tokens: int = 2048, retries: int = 3) -> dict:
-    """Like llm_post but enforces JSON object output via response_format."""
-    last_error: Exception | None = None
-    for attempt in range(1, max(1, retries) + 1):
-        try:
-            payload = _chat_completion(
-                messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format={"type": "json_object"},
-                timeout=180,
-            )
-            content, meta = _extract_completion_text(payload)
-            if not content.strip():
-                raise RuntimeError(
-                    f"LLM returned empty JSON content (finish_reason={meta.get('finish_reason')!r})"
-                )
-            return json.loads(content)
-        except Exception as exc:
-            last_error = exc
-            print(f"[llm_post_json] attempt={attempt}/{retries} failed: {exc!r}", file=sys.stderr)
-            if attempt < max(1, retries):
-                time.sleep(1.0 * attempt)
-    raise RuntimeError("llm_post_json failed after retries") from last_error
 
 def build_messages(*, system_prompt: str, user_prompt: str) -> list[dict[str, str]]:
     return [

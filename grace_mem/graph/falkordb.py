@@ -45,7 +45,6 @@ except Exception as e:  # pragma: no cover
     ) from e
 
 try:
-    import redis
     from redis.exceptions import ConnectionError as RedisConnectionError
 except Exception as e:  # pragma: no cover
     raise RuntimeError(
@@ -138,7 +137,7 @@ class Graph:
         """Enter a context-managed FalkorDB wrapper."""
         return self.open()
 
-    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+    def __exit__(self, exc_type: Any, exc: Any, _tb: Any) -> None:
         """Close the FalkorDB connection when leaving a context manager block."""
         self.close()
 

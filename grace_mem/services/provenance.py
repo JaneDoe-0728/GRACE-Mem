@@ -86,7 +86,7 @@ class Provenance:
         return evs
 
     @staticmethod
-    def merge_prov(old: dict | None, new: dict | None, max_events: int = 50) -> dict:
+    def merge_prov(old: dict | None, new: dict | None) -> dict:
         """Merge two provenance blobs, deduplicating on origin.
 
         Called whenever an entity is seen again in a later turn, so the merged
@@ -97,19 +97,9 @@ class Provenance:
         Args:
             old: Existing provenance, or None for a first sighting.
             new: Incoming provenance.
-            max_events: Currently ignored -- see the note below.
-
         Returns:
             `{"events": [...]}` sorted by ts, ready to attach to an entity or
             relationship meta.
-
-        Note:
-            The `max_events` cap is not enforced. Truncation was disabled
-            because dropping the oldest events silently broke evidence lookup
-            for long-lived entities: the retrieved fact still pointed at a
-            session that provenance no longer listed. The parameter is kept so
-            call sites do not have to change if a bounded policy returns, but
-            merged provenance currently grows without limit.
         """
         def _to_events(x: dict | None) -> list[dict]:
             """Convert one provenance blob into normalized events before merging."""

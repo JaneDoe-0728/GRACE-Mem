@@ -55,7 +55,7 @@ except Exception as e:
         "Failed to import GRACE-Mem modules. Ensure PYTHONPATH includes your project root. Original error: %r" % (e,)
     )
 
-from experiment.locomo.helpers.llm import llm_post, llm_post_json
+from experiment.locomo.helpers.llm import llm_post
 from experiment.locomo.utils.error_analysis import append_analysis_record, compact_json, derive_drop_reasons
 from experiment.locomo.utils.io import EVAL_COLUMNS
 
