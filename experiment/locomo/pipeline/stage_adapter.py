@@ -53,7 +53,6 @@ def run_ingest_stage_for_locomo(
     *,
     ingest_module: Any,
     ingestor: Any,
-    dataset: str,
     dataset_json: str | Path,
     sessions_jsonl: str | Path | None,
     sample_index: int,
@@ -64,7 +63,6 @@ def run_ingest_stage_for_locomo(
 ) -> dict[str, Any]:
     """Ingest one LoCoMo sample's sessions into the knowledge graph."""
     sessions = ingest_module.load_sessions(
-        dataset=dataset,
         sessions_jsonl=sessions_jsonl,
         dataset_json=dataset_json,
     )
@@ -105,7 +103,6 @@ def run_judge_stage(
     output_csv: str | Path,
     sample_index: int | None,
     dataset_json: str | Path,
-    dataset: str,
     exclude_adversarial: bool,
 ) -> dict[str, Any]:
     """Judge a sample's evaluation rows and return the accuracy statistics."""
@@ -114,6 +111,5 @@ def run_judge_stage(
         output_csv=str(output_csv),
         sample_index=sample_index,
         dataset_json=str(dataset_json),
-        dataset=dataset,
         exclude_adversarial=exclude_adversarial,
     )

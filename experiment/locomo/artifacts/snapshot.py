@@ -185,7 +185,6 @@ def _snapshot_builder(args) -> None:
     up_to_session: Optional[int] = args.up_to_session  # None → all sessions
 
     source_json = resolve_dataset_path(
-        dataset="locomo",
         kind="qa_json",
         explicit_path=args.source_json,
     )

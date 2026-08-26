@@ -401,10 +401,10 @@ def _run_locomo_gold_summary_only(args) -> None:
 
     from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
-    from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.helpers.dataset import resolve_dataset_path
 
-    dataset = normalize_dataset_name(args.dataset)
-    dataset_json = resolve_dataset_path(dataset=dataset, kind="qa_json", explicit_path=args.dataset_json)
+    dataset = "locomo"
+    dataset_json = resolve_dataset_path(kind="qa_json", explicit_path=args.dataset_json)
     sample_index = args.sample_index
     eval_csv = Path(args.eval_csv)
     judge_csv = Path(args.judge_csv)
@@ -462,7 +462,6 @@ def _run_locomo_gold_summary_only(args) -> None:
             output_csv=judge_csv,
             sample_index=sample_index,
             dataset_json=dataset_json,
-            dataset=dataset,
             exclude_adversarial=not args.adv,
         )
         write_stats_json(args.stats_json, stats or {})
@@ -485,10 +484,10 @@ def _run_locomo_gold_raw_text_only(args) -> None:
 
     from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
-    from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.helpers.dataset import resolve_dataset_path
 
-    dataset = normalize_dataset_name(args.dataset)
-    dataset_json = resolve_dataset_path(dataset=dataset, kind="qa_json", explicit_path=args.dataset_json)
+    dataset = "locomo"
+    dataset_json = resolve_dataset_path(kind="qa_json", explicit_path=args.dataset_json)
     sample_index = args.sample_index
     eval_csv = Path(args.eval_csv)
     judge_csv = Path(args.judge_csv)
@@ -540,7 +539,6 @@ def _run_locomo_gold_raw_text_only(args) -> None:
             output_csv=judge_csv,
             sample_index=sample_index,
             dataset_json=dataset_json,
-            dataset=dataset,
             exclude_adversarial=not args.adv,
         )
         write_stats_json(args.stats_json, stats or {})
@@ -563,13 +561,13 @@ def _run_locomo_replay_summary_raw_text_from_run(args) -> None:
 
     from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
-    from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.helpers.dataset import resolve_dataset_path
 
     if not args.replay_run_dir:
         raise ValueError("--replay-run-dir is required for replay_summary_raw_text_from_run mode")
 
-    dataset = normalize_dataset_name(args.dataset)
-    dataset_json = resolve_dataset_path(dataset=dataset, kind="qa_json", explicit_path=args.dataset_json)
+    dataset = "locomo"
+    dataset_json = resolve_dataset_path(kind="qa_json", explicit_path=args.dataset_json)
     sample_index = args.sample_index
     eval_csv = Path(args.eval_csv)
     judge_csv = Path(args.judge_csv)
@@ -631,7 +629,6 @@ def _run_locomo_replay_summary_raw_text_from_run(args) -> None:
             output_csv=judge_csv,
             sample_index=sample_index,
             dataset_json=dataset_json,
-            dataset=dataset,
             exclude_adversarial=not args.adv,
         )
         write_stats_json(args.stats_json, stats or {})
@@ -654,13 +651,13 @@ def _run_locomo_replay_summary_fact_from_run(args) -> None:
 
     from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge, qa_eval
-    from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.helpers.dataset import resolve_dataset_path
 
     if not args.replay_run_dir:
         raise ValueError("--replay-run-dir is required for replay_summary_fact_from_run mode")
 
-    dataset = normalize_dataset_name(args.dataset)
-    dataset_json = resolve_dataset_path(dataset=dataset, kind="qa_json", explicit_path=args.dataset_json)
+    dataset = "locomo"
+    dataset_json = resolve_dataset_path(kind="qa_json", explicit_path=args.dataset_json)
     sample_index = args.sample_index
     eval_csv = Path(args.eval_csv)
     judge_csv = Path(args.judge_csv)
@@ -712,7 +709,6 @@ def _run_locomo_replay_summary_fact_from_run(args) -> None:
             output_csv=judge_csv,
             sample_index=sample_index,
             dataset_json=dataset_json,
-            dataset=dataset,
             exclude_adversarial=not args.adv,
         )
         write_stats_json(args.stats_json, stats or {})
@@ -748,11 +744,10 @@ def run_locomo_worker(args) -> None:
 
     from grace_mem.llm import token_tracker
     from experiment.locomo.stages import judge
-    from experiment.locomo.helpers.dataset import normalize_dataset_name, resolve_dataset_path
+    from experiment.locomo.helpers.dataset import resolve_dataset_path
 
-    dataset = normalize_dataset_name(args.dataset)
+    dataset = "locomo"
     dataset_json = resolve_dataset_path(
-        dataset=dataset,
         kind="qa_json",
         explicit_path=args.dataset_json,
     )
@@ -805,7 +800,6 @@ def run_locomo_worker(args) -> None:
                 run_ingest_stage_for_locomo(
                     ingest_module=ingest,
                     ingestor=ingestor,
-                    dataset=dataset,
                     dataset_json=dataset_json,
                     sessions_jsonl=args.sessions_jsonl,
                     sample_index=sample_index,
@@ -892,7 +886,6 @@ def run_locomo_worker(args) -> None:
             output_csv=judge_csv,
             sample_index=sample_index,
             dataset_json=dataset_json,
-            dataset=dataset,
             exclude_adversarial=not args.adv,
         )
         write_stats_json(args.stats_json, stats or {})

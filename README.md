@@ -175,7 +175,6 @@ samples with:
 
 ```bash
 uv run python -m experiment.locomo.pipeline.runner \
-  --dataset locomo \
   --sample-ids 0-9 \
   --run-tag my-run
 ```

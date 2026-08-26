@@ -34,7 +34,7 @@ from experiment.common.reproducibility import (
 from experiment.common.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.locomo.utils.io import ensure_dir
 from experiment.locomo.utils.log import log_event
-from experiment.locomo.models import RunConfig, RunRuntime, SamplePlan
+from experiment.locomo.models import RunConfig, SamplePlan
 from experiment.locomo.analysis.aggregate import maybe_aggregate_run
 from experiment.locomo.helpers.run_hooks import _refresh_system, _worker_paths_for_sample
 from experiment.locomo.artifacts.snapshot import _snapshot_builder
@@ -69,7 +69,7 @@ def _write_run_metadata(
         "run_tag": run_root.name,
         "run_root": str(run_root.resolve()),
         "output_root": str(output_root.resolve()),
-        "dataset": getattr(args, "dataset", ""),
+        "dataset": "locomo",
         "retrieval_mode": getattr(args, "retrieval_mode", ""),
         "artifact_dir": str(Path(args.artifact_dir).resolve()) if getattr(args, "artifact_dir", None) else None,
         "replay_run_dir": str(Path(args.replay_run_dir).resolve()) if getattr(args, "replay_run_dir", None) else None,
@@ -90,11 +90,9 @@ def _write_run_metadata(
 # Runtime builder
 # ---------------------------------------------------------------------------
 
-def _build_runtime(args) -> RunRuntime:
-    """Assemble the run's config, paths, and mutable state from parsed arguments."""
+def _build_config(args) -> RunConfig:
+    """Resolve paths and build the immutable standard LoCoMo run config."""
     from experiment.locomo.helpers.dataset import (
-        default_output_variant_dir,
-        normalize_dataset_name,
         resolve_dataset_path,
     )
     from experiment.locomo.cli import parse_sample_ids, resolve_stages
@@ -107,12 +105,10 @@ def _build_runtime(args) -> RunRuntime:
     if not args.sample_ids:
         raise SystemExit("--sample-ids is required (e.g. 0,2,5-7)")
 
-    dataset = normalize_dataset_name(args.dataset)
     dataset_json_path = resolve_dataset_path(
-        dataset=dataset, kind="qa_json", explicit_path=args.dataset_json
+        kind="qa_json", explicit_path=args.dataset_json
     )
     sessions_jsonl_path = resolve_dataset_path(
-        dataset=dataset,
         kind="sessions_jsonl",
         explicit_path=args.sessions_jsonl,
         required=False,
@@ -126,13 +122,12 @@ def _build_runtime(args) -> RunRuntime:
     if output_root == default_output_base:
         ensure_dir(default_output_base)
         ensure_dir(default_output_base / "standard")
-        output_root = default_output_base / default_output_variant_dir(dataset)
+        output_root = default_output_base / "standard"
     else:
         ensure_dir(output_root)
     run_root = ensure_dir(output_root / args.run_tag)
     config = RunConfig.from_args(
         args=args,
-        dataset=dataset,
         dataset_json_path=dataset_json_path,
         sessions_jsonl_path=sessions_jsonl_path,
         run_root=run_root,
@@ -147,11 +142,7 @@ def _build_runtime(args) -> RunRuntime:
         sessions_jsonl_path=sessions_jsonl_path,
         selected_stages=selected_stages,
     )
-    return RunRuntime(
-        config=config,
-        run_summary_json=run_root / "correctness_summary.json",
-        per_sample_stats={},
-    )
+    return config
 
 
 # ---------------------------------------------------------------------------
@@ -168,8 +159,7 @@ def run_orchestrator(args) -> None:
     """
     from experiment.locomo.cli import build_worker_command, resolve_stages
 
-    runtime = _build_runtime(args)
-    config = runtime.config
+    config = _build_config(args)
     is_stateless_mode = getattr(args, "retrieval_mode", "") in _STATELESS_RETRIEVAL_MODES
     selected_stages = set(
         resolve_stages(
@@ -189,7 +179,7 @@ def run_orchestrator(args) -> None:
 
             sample_plan = SamplePlan(
                 sample_index=sample_index,
-                worker_paths=_worker_paths_for_sample(runtime, sample_index),
+                worker_paths=_worker_paths_for_sample(config, sample_index),
             )
             cmd = build_worker_command(args=args, config=config, plan=sample_plan)
 
@@ -197,7 +187,7 @@ def run_orchestrator(args) -> None:
                 "SUBPROCESS",
                 "Launching worker",
                 sample=sample_index,
-                dataset=config.dataset,
+                dataset="locomo",
                 stages=sorted(selected_stages),
             )
             result = subprocess.run(cmd)
@@ -221,7 +211,6 @@ def run_orchestrator(args) -> None:
 
     if should_aggregate:
         maybe_aggregate_run(
-            dataset=config.dataset,
             run_root=config.run_root,
             no_judge=config.no_judge,
             include_adversarial=config.include_adversarial,

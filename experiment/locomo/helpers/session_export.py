@@ -17,7 +17,6 @@ from experiment.locomo.helpers.dataset import (
     get_sample_conversation,
     get_sample_speakers,
     load_raw_samples,
-    normalize_dataset_name,
     resolve_dataset_path,
 )
 from experiment.locomo.utils.io import append_jsonl_record, append_text, ensure_dir, remove_if_exists
@@ -94,18 +93,15 @@ def convert(in_path: Path, out_jsonl: Path, out_txt: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Convert dataset JSON to by-session conversational records")
-    parser.add_argument("--dataset", choices=["locomo"], default="locomo")
-    parser.add_argument("-i", "--input", type=Path, default=None, help="Defaults are resolved from --dataset")
+    parser.add_argument("-i", "--input", type=Path, default=None, help="Defaults to locomo10.json")
     parser.add_argument("--out-jsonl", type=Path, default=None)
     parser.add_argument("--out-txt", type=Path, default=None)
     args = parser.parse_args()
 
     try:
-        dataset = normalize_dataset_name(args.dataset)
-        input_path = resolve_dataset_path(dataset=dataset, kind="qa_json", explicit_path=args.input)
-        output_stem = dataset.replace("-", "_")
-        out_jsonl = args.out_jsonl or (input_path.parent / f"{output_stem}_by_session.jsonl")
-        out_txt = args.out_txt or (input_path.parent / f"{output_stem}_by_session.txt")
+        input_path = resolve_dataset_path(kind="qa_json", explicit_path=args.input)
+        out_jsonl = args.out_jsonl or (input_path.parent / "locomo_by_session.jsonl")
+        out_txt = args.out_txt or (input_path.parent / "locomo_by_session.txt")
         convert(input_path, out_jsonl, out_txt)
     except Exception as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)

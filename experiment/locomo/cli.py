@@ -51,7 +51,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Conversational multisample ingest/eval/judge pipeline"
     )
-    parser.add_argument("--dataset", choices=["locomo"], default="locomo")
     parser.add_argument("--sessions-jsonl", default=None)
     parser.add_argument("--dataset-json", default=None)
     parser.add_argument(
@@ -226,8 +225,6 @@ def build_worker_command(*, args, config: RunConfig, plan: SamplePlan) -> list[s
         "--worker",
         "--sample-index",
         str(plan.sample_index),
-        "--dataset",
-        config.dataset,
         "--prev-k",
         str(args.prev_k),
         "--entity-sim-topk",

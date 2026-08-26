@@ -17,14 +17,11 @@ from typing import Any, Dict, Iterable, List
 
 from experiment.locomo.utils.io import load_json_records
 
-SUPPORTED_DATASETS = ("locomo",)
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 DATASET_FILE_CANDIDATES = {
-    "locomo": {
-        "qa_json": ("locomo10.json", "locomo.json"),
-        "sessions_jsonl": ("locomo_by_session.jsonl", "locomo_by_session_v2.jsonl"),
-    },
+    "qa_json": ("locomo10.json", "locomo.json"),
+    "sessions_jsonl": ("locomo_by_session.jsonl", "locomo_by_session_v2.jsonl"),
 }
 
 CATEGORY_LABELS = {
@@ -41,25 +38,8 @@ CATEGORY_LABELS = {
 }
 
 
-def normalize_dataset_name(dataset: str | None) -> str:
-    value = (dataset or "locomo").strip().lower()
-    if value not in SUPPORTED_DATASETS:
-        raise ValueError(f"Unsupported dataset {dataset!r}. Supported values: {', '.join(SUPPORTED_DATASETS)}")
-    return value
-
-
-def default_output_stem(dataset: str) -> str:
-    return normalize_dataset_name(dataset).replace("-", "_")
-
-
-def default_output_variant_dir(dataset: str) -> str:
-    normalize_dataset_name(dataset)
-    return "standard"
-
-
 def resolve_dataset_path(
     *,
-    dataset: str,
     kind: str,
     explicit_path: str | Path | None = None,
     data_dir: str | Path | None = None,
@@ -75,7 +55,6 @@ def resolve_dataset_path(
         FileNotFoundError: When no candidate exists -- failing here beats
             proceeding with an empty dataset and reporting zero accuracy.
     """
-    dataset = normalize_dataset_name(dataset)
     if explicit_path:
         path = Path(explicit_path)
         if required and not path.exists():
@@ -83,7 +62,7 @@ def resolve_dataset_path(
         return path if path.exists() or not required else None
 
     base_dir = Path(data_dir) if data_dir else DEFAULT_DATA_DIR
-    candidates = DATASET_FILE_CANDIDATES[dataset].get(kind, ())
+    candidates = DATASET_FILE_CANDIDATES.get(kind, ())
     for name in candidates:
         candidate = base_dir / name
         if candidate.exists():
@@ -92,7 +71,7 @@ def resolve_dataset_path(
     if required:
         pretty = ", ".join(str(base_dir / name) for name in candidates)
         raise FileNotFoundError(
-            f"Could not find a default {kind} file for dataset={dataset!r}. "
+            f"Could not find a default LoCoMo {kind} file. "
             f"Searched: {pretty}. Pass an explicit path instead."
         )
     return None

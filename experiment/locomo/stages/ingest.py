@@ -25,7 +25,7 @@ if __package__ in (None, ""):
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-from experiment.locomo.helpers.dataset import build_session_records_from_json, normalize_dataset_name, resolve_dataset_path
+from experiment.locomo.helpers.dataset import build_session_records_from_json, resolve_dataset_path
 from experiment.locomo.utils.io import load_jsonl_records
 from experiment.experiment_config import INGEST_PARAMS
 
@@ -68,13 +68,11 @@ def _iter_dialogue_chunks(dialogue: List[str], chunk_turns: Optional[int] = None
 
 def load_sessions(
     *,
-    dataset: str,
     sessions_jsonl: str | Path | None = None,
     dataset_json: str | Path | None = None,
 ) -> List[Dict[str, Any]]:
     """Load session records from JSONL or from the dataset JSON."""
     sessions_path = resolve_dataset_path(
-        dataset=dataset,
         kind="sessions_jsonl",
         explicit_path=sessions_jsonl,
         required=False,
@@ -83,7 +81,6 @@ def load_sessions(
         return load_jsonl_records(sessions_path)
 
     dataset_path = resolve_dataset_path(
-        dataset=dataset,
         kind="qa_json",
         explicit_path=dataset_json,
     )
@@ -230,7 +227,6 @@ class IngestStage:
         self,
         *,
         ingestor,
-        dataset: str,
         dataset_json=None,
         sessions_jsonl=None,
         sample_index: Optional[int] = None,
@@ -241,7 +237,6 @@ class IngestStage:
         chunk_turns: Optional[int] = None,
     ) -> None:
         self.ingestor = ingestor
-        self.dataset = dataset
         self.dataset_json = dataset_json
         self.sessions_jsonl = sessions_jsonl
         self.sample_index = sample_index
@@ -253,7 +248,6 @@ class IngestStage:
 
     def run(self) -> dict:
         sessions = load_sessions(
-            dataset=self.dataset,
             sessions_jsonl=self.sessions_jsonl,
             dataset_json=self.dataset_json,
         )
@@ -276,8 +270,7 @@ class IngestStage:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest by-session conversational JSONL into KG/VDB")
-    parser.add_argument("--dataset", choices=["locomo"], default="locomo")
-    parser.add_argument("--sessions-jsonl", default=None, help="Defaults are resolved from --dataset when available")
+    parser.add_argument("--sessions-jsonl", default=None, help="Defaults to the standard LoCoMo session file")
     parser.add_argument("--dataset-json", default=None, help="Fallback source used to derive sessions when JSONL is absent")
     parser.add_argument("--sample-index", type=int, default=3)
     parser.add_argument("--prev-k", type=int, default=PREV_K)
@@ -288,9 +281,7 @@ def main() -> None:
     parser.add_argument("--no-session-uid", action="store_true")
     args = parser.parse_args()
 
-    dataset = normalize_dataset_name(args.dataset)
     sessions = load_sessions(
-        dataset=dataset,
         sessions_jsonl=args.sessions_jsonl,
         dataset_json=args.dataset_json,
     )
@@ -303,7 +294,7 @@ def main() -> None:
     if df.empty:
         raise SystemExit(f"No sessions found for sample_index={args.sample_index}")
 
-    print(f"[INFO] dataset={dataset} sessions(lines)={len(sessions)}")
+    print(f"[INFO] dataset=locomo sessions(lines)={len(sessions)}")
     print(df[["session_id", "dialogue_datetime"]].head(10).to_string(index=False))
 
     from grace_mem.pipeline.factory import build_pipeline

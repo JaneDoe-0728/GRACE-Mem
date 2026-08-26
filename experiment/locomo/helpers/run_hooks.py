@@ -6,16 +6,16 @@ import subprocess
 import sys
 import time
 
-from experiment.locomo.models import RunRuntime, WorkerPaths
+from experiment.locomo.models import RunConfig, WorkerPaths
 from experiment.locomo.utils.io import ensure_dir
 from experiment.locomo.utils.log import log_event
 
 
-def _worker_paths_for_sample(runtime: RunRuntime, sample_index: int) -> WorkerPaths:
+def _worker_paths_for_sample(config: RunConfig, sample_index: int) -> WorkerPaths:
     """Compute the standard per-sample LoCoMo output paths."""
-    run_root = runtime.config.run_root
+    run_root = config.run_root
     sample_dir = ensure_dir(run_root / f"sample_{sample_index}")
-    eval_stem = f"sample{sample_index}_eval_{runtime.config.run_tag}"
+    eval_stem = f"sample{sample_index}_eval_{config.run_tag}"
     return WorkerPaths(
         sample_index=sample_index,
         sample_dir=sample_dir,

@@ -262,12 +262,6 @@ def _run_locomo(args: argparse.Namespace) -> None:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LoCoMo stats CLI")
-    parser.add_argument(
-        "--dataset",
-        choices=["locomo"],
-        required=True,
-        help="Select stats workflow to run",
-    )
     parser.add_argument("--root", help="locomo run root containing sample_* directories")
     parser.add_argument("--use-summaries", action="store_true", help="locomo only: use correctness_summary.json only")
     parser.add_argument("--output-json", help="locomo only: write aggregate json to this path")
@@ -328,7 +322,6 @@ def _aggregate_locomo_run(run_root: Path, *, include_adversarial: bool) -> Optio
 
 def maybe_aggregate_run(
     *,
-    dataset: str,
     run_root: Path,
     no_judge: bool,
     include_adversarial: bool,
@@ -342,5 +335,5 @@ def maybe_aggregate_run(
         log_event("AGGREGATE", "Skipped because judge phase was disabled")
         return None
 
-    log_event("AGGREGATE", "Building run-level correctness summary", dataset=dataset, run_root=run_root)
+    log_event("AGGREGATE", "Building run-level correctness summary", dataset="locomo", run_root=run_root)
     return _aggregate_locomo_run(run_root, include_adversarial=include_adversarial)

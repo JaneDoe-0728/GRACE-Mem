@@ -38,7 +38,6 @@ from experiment.locomo.helpers.dataset import (
     find_evidence_turns_from_sample,
     load_qa_items,
     load_raw_samples,
-    normalize_dataset_name,
     resolve_dataset_path,
 )
 from experiment.locomo.helpers.llm import (
@@ -158,7 +157,6 @@ def judge_single(
     gold: str,
     gen: str,
     *,
-    dataset: str,
     category: str | None = None,
     evidence: str = "",
     mode: str = "standard",
@@ -380,7 +378,6 @@ def llm_as_judge_singlemode(
     *,
     sample_index: int | None = None,
     dataset_json: str = LOCOMO_JSON,
-    dataset: str = "locomo",
     exclude_adversarial: bool = True,
 ):
     # Resume from existing output if present (incremental mode).
@@ -454,7 +451,6 @@ def llm_as_judge_singlemode(
                 q,
                 gold,
                 gen,
-                dataset=dataset,
                 category=row.get("category"),
                 evidence=str(row.get("gold_evidence_source", "")).strip(),
             )
@@ -507,7 +503,6 @@ def llm_as_judge_open_domain(
     output_csv=OUTPUT_CSV,
     *,
     dataset_json: str,
-    dataset: str,
 ):
     """Judge one open-domain answer, where gold is a reference rather than an oracle.
 
@@ -560,7 +555,6 @@ def llm_as_judge_open_domain(
             q,
             gold,
             gen,
-            dataset=dataset,
             category=category,
             evidence=evidence_turns,
             mode="open-domain",
@@ -589,7 +583,6 @@ class JudgeStage:
         input_csv,
         output_csv,
         dataset_json,
-        dataset: str,
         sample_index=None,
         exclude_adversarial: bool = True,
         mode: str = "standard",
@@ -597,7 +590,6 @@ class JudgeStage:
         self.input_csv = input_csv
         self.output_csv = output_csv
         self.dataset_json = dataset_json
-        self.dataset = dataset
         self.sample_index = sample_index
         self.exclude_adversarial = exclude_adversarial
         self.mode = mode
@@ -608,14 +600,12 @@ class JudgeStage:
                 input_csv=str(self.input_csv),
                 output_csv=str(self.output_csv),
                 dataset_json=str(self.dataset_json),
-                dataset=self.dataset,
             )
         return llm_as_judge_singlemode(
             input_csv=str(self.input_csv),
             output_csv=str(self.output_csv),
             sample_index=self.sample_index,
             dataset_json=str(self.dataset_json),
-            dataset=self.dataset,
             exclude_adversarial=self.exclude_adversarial,
         )
 
@@ -626,14 +616,11 @@ if __name__ == "__main__":
     parser.add_argument("--input-csv", default=None)
     parser.add_argument("--output-csv", default=None)
     parser.add_argument("--sample-index", type=int, default=None)
-    parser.add_argument("--dataset", choices=["locomo"], default="locomo")
-    parser.add_argument("--dataset-json", default=None, help="Defaults are resolved from --dataset")
+    parser.add_argument("--dataset-json", default=None, help="Defaults to locomo10.json")
     parser.add_argument("--adv", action="store_true", help="Include adversarial rows in summary stats")
     args = parser.parse_args()
 
-    dataset = normalize_dataset_name(args.dataset)
     dataset_json = resolve_dataset_path(
-        dataset=dataset,
         kind="qa_json",
         explicit_path=args.dataset_json,
     )
@@ -646,7 +633,6 @@ if __name__ == "__main__":
             input_csv=input_csv,
             output_csv=output_csv,
             dataset_json=str(dataset_json),
-            dataset=dataset,
         )
     else:
         llm_as_judge_singlemode(
@@ -654,6 +640,5 @@ if __name__ == "__main__":
             output_csv=output_csv,
             sample_index=args.sample_index,
             dataset_json=str(dataset_json),
-            dataset=dataset,
             exclude_adversarial=not args.adv,
         )

@@ -214,7 +214,6 @@ Full run:
 
 ```bash
 uv run python -m experiment.locomo.pipeline.runner \
-  --dataset locomo \
   --sample-ids 0-9 \
   --run-tag my-run
 ```
@@ -223,7 +222,6 @@ Reuse artifacts from an existing LoCoMo run:
 
 ```bash
 uv run python -m experiment.locomo.pipeline.runner \
-  --dataset locomo \
   --sample-ids 0-9 \
   --run-tag my-rerun \
   --artifact-dir experiment/locomo/output/standard/my-ingest-run
@@ -233,7 +231,6 @@ Run selected stages or include adversarial questions:
 
 ```bash
 uv run python -m experiment.locomo.pipeline.runner \
-  --dataset locomo \
   --sample-ids 0-3 \
   --run-tag my-run \
   --stage qa_eval judge \
@@ -244,7 +241,6 @@ uv run python -m experiment.locomo.pipeline.runner \
 
 | Option | Meaning |
 |---|---|
-| `--dataset locomo` | Select the LoCoMo dataset |
 | `--sample-ids` | Sample selector such as `0,2,5-7` |
 | `--chunk-turns` | Turns per ingest chunk; `0` keeps one whole-session summary |
 | `--artifact-dir` | Existing LoCoMo run root used instead of ingest |
@@ -262,7 +258,7 @@ Default output:
 
 ```text
 experiment/locomo/output/
-  standard/<run-tag>/        # --dataset locomo
+  standard/<run-tag>/
     sample_<id>/
       artifacts/
       logs/
@@ -276,7 +272,6 @@ Judged LoCoMo runs aggregate automatically. To rebuild aggregate output:
 
 ```bash
 uv run python -m experiment.locomo.analysis.aggregate \
-  --dataset locomo \
   --root experiment/locomo/output/standard/<run-tag>
 ```
 

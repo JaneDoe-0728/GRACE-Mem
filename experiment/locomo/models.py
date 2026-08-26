@@ -1,13 +1,7 @@
-"""Value types describing a LoCoMo run: its config, plan, and live state.
+"""Value types describing a standard LoCoMo run and its sample workers.
 
-Almost everything is frozen. A run's configuration is written into its metadata
-and used to decide what to skip on resume, so a value that could change
-mid-flight would make the recorded config disagree with what actually ran.
-`RunRuntime` is the mutable exception used while samples complete.
-
-The distinction worth holding onto: `RunConfig` is what the user asked for,
-`SamplePlan` is what one sample will therefore do, and `RunRuntime` is what has
-happened so far.
+The values are frozen because the run configuration is written into metadata;
+changing it while samples execute would make that record inaccurate.
 """
 
 from __future__ import annotations
@@ -32,7 +26,6 @@ class RunConfig:
             looks like a retrieval bug.
     """
 
-    dataset: str
     dataset_json_path: Path
     sessions_jsonl_path: Path | None
     run_root: Path
@@ -47,7 +40,6 @@ class RunConfig:
         cls,
         *,
         args,
-        dataset: str,
         dataset_json_path: Path,
         sessions_jsonl_path: Path | None,
         run_root: Path,
@@ -61,7 +53,6 @@ class RunConfig:
         whatever the type= said and several of these come through as strings.
         """
         return cls(
-            dataset=dataset,
             dataset_json_path=dataset_json_path,
             sessions_jsonl_path=sessions_jsonl_path,
             run_root=run_root,
@@ -109,16 +100,3 @@ class AggregateResult:
 
     output_json: Path
     merged_csv: Path | None = None
-
-@dataclass
-class RunRuntime:
-    """Everything a run accumulates while executing.
-
-    The mutable counterpart to `RunConfig`: config is what was asked for, this
-    is what has happened. `per_sample_stats` is filled in as workers finish and
-    is what the aggregate step reads.
-    """
-
-    config: RunConfig
-    run_summary_json: Path
-    per_sample_stats: dict[str, dict]

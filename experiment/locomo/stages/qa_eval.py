@@ -452,7 +452,7 @@ def _extract_facts_for_evidence(raw_text: str, date_time: str | None) -> list[st
     except Exception:
         return [raw_text]
 
-from experiment.locomo.helpers.dataset import default_output_stem, load_qa_items, normalize_dataset_name, resolve_dataset_path
+from experiment.locomo.helpers.dataset import load_qa_items, resolve_dataset_path
 
 try:
     from experiment.experiment_config import RETRIEVAL_PARAMS, RERANKER_PARAMS
@@ -1440,25 +1440,20 @@ class QAEvalStage:
 
 def main():
     parser = argparse.ArgumentParser(description="Run RAG evaluation for a conversational QA dataset sample")
-    parser.add_argument("--dataset", choices=["locomo"], default="locomo")
-    parser.add_argument("--dataset-json", default=None, help="Defaults are resolved from --dataset")
+    parser.add_argument("--dataset-json", default=None, help="Defaults to locomo10.json")
     parser.add_argument("--sample-index", type=int, default=3)
     parser.add_argument("--output-csv", default=None)
     parser.add_argument("--adv", action="store_true", help="Include adversarial questions")
     args = parser.parse_args()
 
-    dataset = normalize_dataset_name(args.dataset)
     dataset_json_path = resolve_dataset_path(
-        dataset=dataset,
         kind="qa_json",
         explicit_path=args.dataset_json,
     )
     if args.output_csv:
         output_csv = Path(args.output_csv)
-    elif dataset == "locomo":
-        output_csv = Path(__file__).resolve().parent / "data" / f"sample{args.sample_index}_eval.csv"
     else:
-        output_csv = Path(__file__).resolve().parent / "data" / f"{default_output_stem(dataset)}_sample{args.sample_index}_eval.csv"
+        output_csv = Path(__file__).resolve().parent / "data" / f"sample{args.sample_index}_eval.csv"
 
     # Standalone mode owns one pipeline runtime for retrieval and graph access.
     import experiment.locomo.stages.qa_eval as _self
