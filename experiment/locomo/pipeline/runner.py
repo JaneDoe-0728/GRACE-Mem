@@ -37,7 +37,6 @@ from experiment.locomo.utils.log import log_event
 from experiment.locomo.models import RunConfig, SamplePlan
 from experiment.locomo.analysis.aggregate import maybe_aggregate_run
 from experiment.locomo.helpers.run_hooks import _refresh_system, _worker_paths_for_sample
-from experiment.locomo.artifacts.snapshot import _snapshot_builder
 from experiment.locomo.pipeline.worker import run_worker
 
 
@@ -228,10 +227,6 @@ def dispatch_pipeline(args) -> None:
     One entry point serving both roles is what lets the orchestrator spawn
     children with `python -m` on this same module.
     """
-    if args.build_snapshots:
-        _snapshot_builder(args)
-        return
-
     if args.worker:
         run_worker(args)
         return

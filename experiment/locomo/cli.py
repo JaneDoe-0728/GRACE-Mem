@@ -53,12 +53,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--sessions-jsonl", default=None)
     parser.add_argument("--dataset-json", default=None)
-    parser.add_argument(
-        "--source-json",
-        default=None,
-        help="Optional source conversation JSON used by snapshot tooling. "
-        "Defaults to the standard LoCoMo dataset path.",
-    )
     parser.add_argument("--prev-k", type=int, default=INGEST_PARAMS.get("prev_k", 2))
     parser.add_argument("--entity-sim-topk", type=int, default=INGEST_PARAMS.get("entity_sim_topk", 4))
     parser.add_argument("--entity-sim-threshold", type=float, default=INGEST_PARAMS.get("entity_sim_threshold", 0.5))
@@ -142,14 +136,11 @@ def build_parser() -> argparse.ArgumentParser:
         "When omitted, summaries are read from the dataset JSON's session_summary field.",
     )
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--build-snapshots", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--sample-index", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--eval-csv", help=argparse.SUPPRESS)
     parser.add_argument("--judge-csv", help=argparse.SUPPRESS)
     parser.add_argument("--stats-json", help=argparse.SUPPRESS)
     parser.add_argument("--run-root", help=argparse.SUPPRESS)
-    parser.add_argument("--conv-id", help=argparse.SUPPRESS)
-    parser.add_argument("--up-to-session", type=int, default=None, help=argparse.SUPPRESS)
     return parser
 
 
@@ -260,8 +251,6 @@ def build_worker_command(*, args, config: RunConfig, plan: SamplePlan) -> list[s
         cmd.extend(["--replay-run-dir", str(args.replay_run_dir)])
     if getattr(args, "baseline_run_dir", None) is not None:
         cmd.extend(["--baseline-run-dir", str(args.baseline_run_dir)])
-    if args.source_json:
-        cmd.extend(["--source-json", str(args.source_json)])
     if args.sessions_jsonl is not None:
         cmd.extend(["--sessions-jsonl", str(args.sessions_jsonl)])
     elif config.sessions_jsonl_path is not None:

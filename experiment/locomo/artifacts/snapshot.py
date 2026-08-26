@@ -1,249 +1,337 @@
-"""Per-session ingest-state snapshots for locomo-plus.
+"""Validated, per-session snapshots for a standard LoCoMo sample.
 
-Snapshot layout under <run_root>:
-  artifacts/conv<conv_id>/session<sess_id>/
-    entities_chroma/
-    relationships_chroma/
-    summaries_chroma/
-    entities_bm25.pkl
-    entities_cache.pkl
-    relationships_cache.pkl
-    entities_meta.jsonl
-    relationships_meta.jsonl
-    summaries_meta.jsonl
-    graph_export.json    # JSON export of FalkorDB graph (entities + relationships)
-    snapshot_meta.json   # {conv_id, session_id, created_at}
+Each worker keeps snapshots inside its own sample directory::
 
-Usage contract:
-  - Call save_snapshot() AFTER MGR.flush_persist() to guarantee VDB files are on disk.
-  - Call load_snapshot_files_only() BEFORE importing grace_mem.pipeline.factory so that
-    the VDB is initialized from the snapshot state, not from an empty artifacts dir.
-  - After importing pipeline, call restore_graph() to reload the FalkorDB graph.
+    sample_<index>/snapshots/session_<id>/
+        <vector-store artifacts>
+        graph_export.json
+        snapshot_meta.json
+
+The metadata records the dataset and ingest settings that produced the state,
+plus a SHA-256 manifest for every payload file. A snapshot is never restored
+until its compatibility, manifest, graph export, and vector-store artifacts
+have all been validated.
+
+Call order is deliberate:
+
+* flush persistent storage, then :func:`save_snapshot`;
+* :func:`load_snapshot_files_only` before constructing the pipeline;
+* :func:`restore_graph` after the pipeline has opened its graph connection.
 """
+
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import shutil
-from datetime import datetime
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Mapping, Sequence
 
-from experiment.locomo.helpers.dataset import (
-    build_session_records_for_conv,
-    index_source_conversations,
-    resolve_dataset_path,
-)
 from experiment.locomo.utils.graph import (
     ARTIFACTS_SRC,
     GRAPH_EXPORT_FILE,
     SNAPSHOT_META_FILE,
     restore_graph_from_export_file,
+    validate_graph_export,
     validate_vdb_artifacts,
     write_graph_export,
 )
-from experiment.locomo.utils.log import log_event
+
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Path helpers
-# ---------------------------------------------------------------------------
-
-def snapshot_dir(run_root: Path, conv_id: str, session_id: int) -> Path:
-    return run_root / "artifacts" / f"{conv_id}" / f"session{session_id}"
+SNAPSHOT_FORMAT_VERSION = 1
+SNAPSHOTS_DIR = "snapshots"
 
 
-def snapshot_exists(run_root: Path, conv_id: str, session_id: int) -> bool:
-    return (snapshot_dir(run_root, conv_id, session_id) / SNAPSHOT_META_FILE).exists()
+class SnapshotError(RuntimeError):
+    """Base error for snapshot validation and restore failures."""
+
+
+class SnapshotCompatibilityError(SnapshotError):
+    """The snapshot was produced by a different dataset or ingest config."""
+
+
+class SnapshotCorruptionError(SnapshotError):
+    """The snapshot is missing files or its persisted bytes have changed."""
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def dataset_sha256(path: str | Path) -> str:
+    """Return a stable content fingerprint for a dataset/session source file."""
+    source = Path(path)
+    if not source.is_file():
+        raise FileNotFoundError(f"Snapshot source file not found: {source}")
+    return _sha256_file(source)
+
+
+def build_snapshot_compatibility(
+    *,
+    sample_index: int,
+    sample_id: str,
+    dataset_json_path: str | Path,
+    session_source_path: str | Path,
+    ingest_config: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the metadata subset that must match before a resume is allowed."""
+    try:
+        normalized_config = json.loads(
+            json.dumps(dict(ingest_config), ensure_ascii=False, sort_keys=True)
+        )
+    except (TypeError, ValueError) as exc:
+        raise TypeError("ingest_config must contain JSON-serializable values") from exc
+
+    return {
+        "dataset": "locomo",
+        "sample_index": int(sample_index),
+        "sample_id": str(sample_id),
+        "dataset_sha256": dataset_sha256(dataset_json_path),
+        "session_source_sha256": dataset_sha256(session_source_path),
+        "ingest_config": normalized_config,
+    }
+
+
+def snapshot_dir(sample_dir: str | Path, session_id: int) -> Path:
+    """Return the directory holding one session's persisted state."""
+    return Path(sample_dir) / SNAPSHOTS_DIR / f"session_{int(session_id)}"
+
+
+def snapshot_exists(sample_dir: str | Path, session_id: int) -> bool:
+    """Return whether any snapshot directory exists for ``session_id``.
+
+    Existence is intentionally weaker than validity. Call
+    :func:`validate_snapshot` before using the state.
+    """
+    return snapshot_dir(sample_dir, session_id).is_dir()
+
+
+def _payload_manifest(base_dir: Path) -> dict[str, str]:
+    return {
+        path.relative_to(base_dir).as_posix(): _sha256_file(path)
+        for path in sorted(base_dir.rglob("*"))
+        if path.is_file() and path.name != SNAPSHOT_META_FILE
+    }
+
+
+def _read_metadata(snapshot_path: Path) -> dict[str, Any]:
+    meta_path = snapshot_path / SNAPSHOT_META_FILE
+    if not meta_path.is_file():
+        raise SnapshotCorruptionError(f"Snapshot metadata missing: {meta_path}")
+    try:
+        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise SnapshotCorruptionError(
+            f"Snapshot metadata is unreadable: {meta_path}: {exc}"
+        ) from exc
+    if not isinstance(metadata, dict):
+        raise SnapshotCorruptionError(f"Snapshot metadata must be an object: {meta_path}")
+    return metadata
+
+
+def validate_snapshot(
+    sample_dir: str | Path,
+    session_id: int,
+    *,
+    expected_compatibility: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate one snapshot and return its metadata.
+
+    Compatibility failures are distinct from damaged files so callers can
+    explain whether the user changed settings or the checkpoint itself broke.
+    """
+    path = snapshot_dir(sample_dir, session_id)
+    if not path.is_dir():
+        raise FileNotFoundError(f"Snapshot not found: {path}")
+
+    metadata = _read_metadata(path)
+    if metadata.get("format_version") != SNAPSHOT_FORMAT_VERSION:
+        raise SnapshotCompatibilityError(
+            "Snapshot format mismatch: "
+            f"expected {SNAPSHOT_FORMAT_VERSION}, got {metadata.get('format_version')!r} "
+            f"at {path}"
+        )
+    if metadata.get("session_id") != int(session_id):
+        raise SnapshotCorruptionError(
+            f"Snapshot session mismatch at {path}: "
+            f"expected {session_id}, got {metadata.get('session_id')!r}"
+        )
+
+    for key, expected in (expected_compatibility or {}).items():
+        actual = metadata.get(key)
+        if actual != expected:
+            raise SnapshotCompatibilityError(
+                f"Snapshot setting mismatch for {key!r} at {path}: "
+                f"expected {expected!r}, got {actual!r}"
+            )
+
+    recorded_manifest = metadata.get("files")
+    if not isinstance(recorded_manifest, dict) or not recorded_manifest:
+        raise SnapshotCorruptionError(f"Snapshot file manifest missing or empty: {path}")
+    actual_manifest = _payload_manifest(path)
+    if actual_manifest != recorded_manifest:
+        missing = sorted(set(recorded_manifest) - set(actual_manifest))
+        unexpected = sorted(set(actual_manifest) - set(recorded_manifest))
+        changed = sorted(
+            name
+            for name in set(recorded_manifest) & set(actual_manifest)
+            if recorded_manifest[name] != actual_manifest[name]
+        )
+        raise SnapshotCorruptionError(
+            f"Snapshot file manifest mismatch at {path}: "
+            f"missing={missing}, unexpected={unexpected}, changed={changed}"
+        )
+
+    try:
+        validate_graph_export(path / GRAPH_EXPORT_FILE)
+        validate_vdb_artifacts(path)
+    except RuntimeError as exc:
+        raise SnapshotCorruptionError(f"Snapshot payload is invalid at {path}: {exc}") from exc
+    return metadata
 
 
 def highest_existing_snapshot(
-    run_root: Path, conv_id: str, session_ids: List[int]
+    sample_dir: str | Path,
+    session_ids: Sequence[int],
+    *,
+    expected_compatibility: Mapping[str, Any] | None = None,
 ) -> int:
-    """Return the highest session_id whose snapshot exists (contiguous from 1), or 0."""
+    """Return the highest valid snapshot in a contiguous session prefix.
+
+    A later snapshot after a gap is treated as corrupt state rather than being
+    silently ignored, since it cannot be reached by replaying from the prefix.
+    """
     highest = 0
-    for sid in sorted(session_ids):
-        if snapshot_exists(run_root, conv_id, sid):
-            highest = sid
-        else:
-            break
+    missing_seen = False
+    for session_id in sorted(set(int(value) for value in session_ids)):
+        if not snapshot_exists(sample_dir, session_id):
+            missing_seen = True
+            continue
+        if missing_seen:
+            raise SnapshotCorruptionError(
+                "Non-contiguous snapshots: found "
+                f"session {session_id} after an earlier gap in {Path(sample_dir) / SNAPSHOTS_DIR}"
+            )
+        validate_snapshot(
+            sample_dir,
+            session_id,
+            expected_compatibility=expected_compatibility,
+        )
+        highest = session_id
     return highest
 
 
-# ---------------------------------------------------------------------------
-# Save
-# ---------------------------------------------------------------------------
+def save_snapshot(
+    sample_dir: str | Path,
+    session_id: int,
+    graph: Any,
+    *,
+    compatibility: Mapping[str, Any],
+) -> Path:
+    """Atomically persist vector stores and the graph after one session."""
+    destination = snapshot_dir(sample_dir, session_id)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        raise FileExistsError(f"Refusing to overwrite existing snapshot: {destination}")
 
-def save_snapshot(run_root: Path, conv_id: str, session_id: int, graph) -> Path:
-    """Copy grace_mem/storage/artifacts + export FalkorDB graph to snapshot dir.
-
-    Call AFTER MGR.flush_persist() so all VDB files are on disk.
-    Writes to a tmp directory first and renames atomically to prevent half-written snapshots.
-    """
-    dst = snapshot_dir(run_root, conv_id, session_id)
-    tmp_dst = dst.parent / f".tmp_{dst.name}"
-
-    if tmp_dst.exists():
-        shutil.rmtree(tmp_dst)
-
+    temp_path = Path(
+        tempfile.mkdtemp(prefix=f".{destination.name}.", dir=destination.parent)
+    )
     try:
-        tmp_dst.mkdir(parents=True, exist_ok=True)
-
-        # 1) Copy VDB artifacts
         if ARTIFACTS_SRC.exists():
-            shutil.copytree(ARTIFACTS_SRC, tmp_dst, dirs_exist_ok=True)
+            shutil.copytree(
+                ARTIFACTS_SRC,
+                temp_path,
+                ignore=shutil.ignore_patterns(GRAPH_EXPORT_FILE, SNAPSHOT_META_FILE),
+                dirs_exist_ok=True,
+            )
+        validate_vdb_artifacts(temp_path)
 
-        # 2) Validate copied VDB files before writing graph export
-        validate_vdb_artifacts(tmp_dst)
-
-        # 3) Export FalkorDB graph as JSON; validate=True raises on invalid file
-        result = write_graph_export(tmp_dst / GRAPH_EXPORT_FILE, graph, validate=True)
+        result = write_graph_export(temp_path / GRAPH_EXPORT_FILE, graph, validate=True)
         if result is None:
-            raise RuntimeError(
-                f"Graph export returned None — FalkorDB unreachable or empty: "
-                f"conv_id={conv_id} session_id={session_id}"
+            raise SnapshotError(
+                f"Graph export failed for session {session_id}; FalkorDB may be unreachable"
             )
 
-        # 4) Write metadata
-        (tmp_dst / SNAPSHOT_META_FILE).write_text(
-            json.dumps(
-                {
-                    "conv_id": conv_id,
-                    "session_id": session_id,
-                    "created_at": datetime.now().isoformat(timespec="seconds"),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
+        metadata = {
+            **dict(compatibility),
+            "format_version": SNAPSHOT_FORMAT_VERSION,
+            "session_id": int(session_id),
+            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "files": _payload_manifest(temp_path),
+        }
+        (temp_path / SNAPSHOT_META_FILE).write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True),
             encoding="utf-8",
         )
-
-        # 5) Atomic rename — dst is only visible after all writes succeed
-        if dst.exists():
-            shutil.rmtree(dst)
-        tmp_dst.rename(dst)
-        return dst
+        temp_path.rename(destination)
+        return destination
     except Exception:
         logger.exception(
-            "Graph snapshot save failed: conv_id=%s session_id=%s dst=%s src=%s",
-            conv_id,
+            "Session snapshot save failed: session_id=%s destination=%s source=%s",
             session_id,
-            dst,
+            destination,
             ARTIFACTS_SRC,
         )
-        shutil.rmtree(tmp_dst, ignore_errors=True)
+        shutil.rmtree(temp_path, ignore_errors=True)
         raise
 
 
-# ---------------------------------------------------------------------------
-# Load (two-phase: files first, then graph)
-# ---------------------------------------------------------------------------
-
-def load_snapshot_files_only(run_root: Path, conv_id: str, session_id: int) -> None:
-    """Copy snapshot VDB files into grace_mem/storage/artifacts.
-
-    MUST be called before importing grace_mem.pipeline.factory (and therefore before
-    any VDB or ChromaDB clients are created), so the pipeline initializes from
-    the correct on-disk state.
-    """
-    src = snapshot_dir(run_root, conv_id, session_id)
-    if not (src / SNAPSHOT_META_FILE).exists():
-        raise FileNotFoundError(
-            f"Snapshot not found: conv_id={conv_id!r} session_id={session_id}. "
-            "Run the snapshot builder first."
-        )
-    if ARTIFACTS_SRC.exists():
-        shutil.rmtree(ARTIFACTS_SRC)
-    ARTIFACTS_SRC.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(
-        src,
-        ARTIFACTS_SRC,
-        ignore=shutil.ignore_patterns(GRAPH_EXPORT_FILE, SNAPSHOT_META_FILE),
-        dirs_exist_ok=True,
+def load_snapshot_files_only(
+    sample_dir: str | Path,
+    session_id: int,
+    *,
+    expected_compatibility: Mapping[str, Any] | None = None,
+) -> None:
+    """Validate and install snapshot files before pipeline construction."""
+    source = snapshot_dir(sample_dir, session_id)
+    validate_snapshot(
+        sample_dir,
+        session_id,
+        expected_compatibility=expected_compatibility,
     )
 
-
-def restore_graph(run_root: Path, conv_id: str, session_id: int, graph) -> None:
-    """Restore FalkorDB graph from the snapshot's JSON export.
-
-    Call AFTER importing pipeline (so the graph connection is open).
-    """
-    src = snapshot_dir(run_root, conv_id, session_id)
-    export_path = src / GRAPH_EXPORT_FILE
-    restore_graph_from_export_file(graph, export_path)
-
-
-def _snapshot_builder(args) -> None:
-    """Build per-session snapshots for one conversation.
-
-    Designed to run in a fresh subprocess. Resumes from the highest existing
-    snapshot so partial builds are not wasted.
-    """
-    run_root = Path(args.run_root)
-    conv_id: str = args.conv_id
-    up_to_session: Optional[int] = args.up_to_session  # None → all sessions
-
-    source_json = resolve_dataset_path(
-        kind="qa_json",
-        explicit_path=args.source_json,
+    ARTIFACTS_SRC.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = Path(
+        tempfile.mkdtemp(prefix=f".{ARTIFACTS_SRC.name}.restore.", dir=ARTIFACTS_SRC.parent)
     )
-    source_convs = index_source_conversations(source_json)
-    if conv_id not in source_convs:
-        raise SystemExit(f"[SNAP_BUILD] conversation_id={conv_id!r} not in {source_json}")
-
-    records = build_session_records_for_conv(conv_id, source_convs[conv_id])
-    all_session_ids = sorted(r["session_id"] for r in records)
-    target_ids = [s for s in all_session_ids if up_to_session is None or s <= up_to_session]
-
-    # Find highest contiguous existing snapshot so we can resume
-    resume_from = highest_existing_snapshot(run_root, conv_id, target_ids)
-
-    # Load VDB files from last existing snapshot BEFORE importing pipeline
-    if resume_from > 0:
-        log_event("SNAP_BUILD", "Resuming from existing snapshot", conv=conv_id, session=resume_from)
-        load_snapshot_files_only(run_root, conv_id, resume_from)
-
-    # Import pipeline now (VDB initialises from whatever is in ARTIFACTS_SRC)
-    from grace_mem.storage import MGR
-    from grace_mem.pipeline.factory import build_pipeline
-    from experiment.locomo.stages import ingest
-
-    runtime = build_pipeline()
-    graph = runtime.graph
     try:
-        if resume_from > 0:
-            restore_graph(run_root, conv_id, resume_from, graph)
-        else:
-            graph.clear_all()
-            graph.init_schema()
+        shutil.copytree(
+            source,
+            temp_path,
+            ignore=shutil.ignore_patterns(GRAPH_EXPORT_FILE, SNAPSHOT_META_FILE),
+            dirs_exist_ok=True,
+        )
+        if ARTIFACTS_SRC.exists():
+            shutil.rmtree(ARTIFACTS_SRC)
+        temp_path.rename(ARTIFACTS_SRC)
+    except Exception:
+        shutil.rmtree(temp_path, ignore_errors=True)
+        raise
 
-        # Ingest sessions that are missing snapshots
-        records_map = {r["session_id"]: r for r in records}
-        for sess_id in target_ids:
-            if sess_id <= resume_from:
-                continue  # already snapshotted
-            if sess_id not in records_map:
-                log_event("SNAP_BUILD][WARN", "Session not in source records; skipping", session=sess_id)
-                continue
 
-            log_event("SNAP_BUILD", "Ingesting session", conv=conv_id, session=sess_id)
-            # chunk_turns must match the run being snapshotted; a mismatch silently
-            # shifts every summary_id and the restored artifacts stop lining up.
-            df = ingest.session_records_to_df(
-                [records_map[sess_id]], conv_id=conv_id, chunk_turns=args.chunk_turns
-            )
-            ingest.ingest_by_session_one_turn(
-                runtime.ingestor,
-                df,
-                prev_k=args.prev_k,
-                entity_sim_topk=args.entity_sim_topk,
-                entity_sim_threshold=args.entity_sim_threshold,
-            )
-            MGR.flush_persist()
-            snap_path = save_snapshot(run_root, conv_id, sess_id, graph)
-            log_event("SNAP_BUILD", "Saved snapshot", path=snap_path)
-    finally:
-        runtime.close()
-
-    log_event("SNAP_BUILD", "Done", conv=conv_id, up_to=up_to_session)
+def restore_graph(
+    sample_dir: str | Path,
+    session_id: int,
+    graph: Any,
+    *,
+    expected_compatibility: Mapping[str, Any] | None = None,
+) -> None:
+    """Validate and restore the graph after pipeline construction."""
+    validate_snapshot(
+        sample_dir,
+        session_id,
+        expected_compatibility=expected_compatibility,
+    )
+    restore_graph_from_export_file(
+        graph,
+        snapshot_dir(sample_dir, session_id) / GRAPH_EXPORT_FILE,
+    )
