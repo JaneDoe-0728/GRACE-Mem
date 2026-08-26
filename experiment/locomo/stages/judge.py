@@ -670,7 +670,7 @@ if __name__ == "__main__":
     parser.add_argument("--input-csv", default=None)
     parser.add_argument("--output-csv", default=None)
     parser.add_argument("--sample-index", type=int, default=None)
-    parser.add_argument("--dataset", choices=["locomo", "locomo-plus"], default="locomo")
+    parser.add_argument("--dataset", choices=["locomo"], default="locomo")
     parser.add_argument("--dataset-json", default=None, help="Defaults are resolved from --dataset")
     parser.add_argument("--adv", action="store_true", help="Include adversarial rows in summary stats")
     args = parser.parse_args()

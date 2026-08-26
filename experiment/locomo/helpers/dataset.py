@@ -1,10 +1,8 @@
 """Load and normalize the LoCoMo datasets into the shapes the pipeline expects.
 
-The two supported variants -- "locomo" and "locomo-plus" -- ship with different
-filenames and slightly different question schemas, so paths are resolved by
-trying known candidates and question records are normalized to one form before
-anything downstream sees them. Everything past this module can then treat the
-variants identically.
+The official dataset has appeared under more than one filename, so paths are
+resolved by trying known candidates and question records are normalized before
+anything downstream sees them.
 
 Adversarial questions are handled explicitly rather than filtered at the edges.
 They are unanswerable by construction, so scoring them alongside ordinary
@@ -20,17 +18,13 @@ from typing import Any, Dict, Iterable, List
 
 from experiment.locomo.utils.io import load_json_records
 
-SUPPORTED_DATASETS = ("locomo", "locomo-plus")
+SUPPORTED_DATASETS = ("locomo",)
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 DATASET_FILE_CANDIDATES = {
     "locomo": {
         "qa_json": ("locomo10.json", "locomo.json"),
         "sessions_jsonl": ("locomo_by_session.jsonl", "locomo_by_session_v2.jsonl"),
-    },
-    "locomo-plus": {
-        "qa_json": ("unified_input_samples_v2.json", "locomo_plus.json", "locomo-plus.json"),
-        "sessions_jsonl": ("locomo_plus_by_session.jsonl", "locomo-plus_by_session.jsonl"),
     },
 }
 
@@ -64,12 +58,8 @@ def default_output_stem(dataset: str) -> str:
 
 
 def default_output_variant_dir(dataset: str) -> str:
-    dataset_name = normalize_dataset_name(dataset)
-    if dataset_name == "locomo":
-        return "standard"
-    if dataset_name == "locomo-plus":
-        return "plus"
-    return dataset_name.replace("-", "_")
+    normalize_dataset_name(dataset)
+    return "standard"
 
 
 def resolve_dataset_path(

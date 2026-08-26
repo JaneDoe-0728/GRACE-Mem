@@ -1440,7 +1440,7 @@ class QAEvalStage:
 
 def main():
     parser = argparse.ArgumentParser(description="Run RAG evaluation for a conversational QA dataset sample")
-    parser.add_argument("--dataset", choices=["locomo", "locomo-plus"], default="locomo")
+    parser.add_argument("--dataset", choices=["locomo"], default="locomo")
     parser.add_argument("--dataset-json", default=None, help="Defaults are resolved from --dataset")
     parser.add_argument("--sample-index", type=int, default=3)
     parser.add_argument("--output-csv", default=None)

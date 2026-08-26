@@ -142,7 +142,6 @@ def _build_runtime(args) -> RunRuntime:
     if output_root == default_output_base:
         ensure_dir(default_output_base)
         ensure_dir(default_output_base / "standard")
-        ensure_dir(default_output_base / "plus")
         output_root = default_output_base / default_output_variant_dir(dataset)
     else:
         ensure_dir(output_root)

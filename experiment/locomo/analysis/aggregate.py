@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Unified LoCoMo stats CLI.
-
-- ``--dataset locomo`` aggregates judge outputs from ``sample_*`` run folders.
-- ``--dataset locomo-plus`` merges flat eval CSVs from an ``eval/`` directory.
-"""
+"""Aggregate LoCoMo judge outputs from ``sample_*`` run folders."""
 
 from __future__ import annotations
 
@@ -35,13 +31,6 @@ def find_sample_dirs(root: Path) -> list[Path]:
     return sorted([path for path in root.iterdir() if path.is_dir() and path.name.startswith("sample_")])
 
 
-def find_numeric_csvs(dir_path: Path) -> list[Path]:
-    return sorted(
-        (path for path in dir_path.glob("*.csv") if path.stem.isdigit()),
-        key=lambda path: int(path.stem),
-    )
-
-
 def read_csvs(csv_files: Sequence[Path]) -> tuple[list[DataFrame], list[str]]:
     """Read several CSVs into one frame, skipping any that are missing or empty.
 
@@ -58,52 +47,6 @@ def read_csvs(csv_files: Sequence[Path]) -> tuple[list[DataFrame], list[str]]:
         except Exception as exc:
             errors.append(f"{csv_path.name}: {exc}")
     return frames, errors
-
-
-def load_dataset_items(dataset_json: Path) -> list[dict[str, Any]]:
-    """Load the dataset's questions, for joining categories onto judged rows."""
-    with dataset_json.open("r", encoding="utf-8") as fh:
-        data = json.load(fh)
-    if not isinstance(data, list):
-        raise SystemExit(f"Dataset JSON must be a list of items: {dataset_json}")
-    return [item for item in data if isinstance(item, dict)]
-
-
-def build_sample_lookup(items: list[dict[str, Any]]) -> dict[int, dict[str, str]]:
-    return {
-        index: {"category": str(item.get("category", ""))}
-        for index, item in enumerate(items)
-    }
-
-
-def merge_eval_csvs(
-    csv_files: Sequence[Path],
-    sample_lookup: dict[int, dict[str, str]],
-) -> tuple[DataFrame, list[str]]:
-    """Concatenate per-sample eval CSVs into one run-level table.
-
-    Rows are tagged with their sample index, since they lose their origin once
-    concatenated and per-sample breakdown is how a run-wide regression gets
-    localised.
-    """
-    pd = _require_pandas()
-    frames: list[DataFrame] = []
-    errors: list[str] = []
-    for csv_path in csv_files:
-        sample_id = int(csv_path.stem)
-        try:
-            df = pd.read_csv(csv_path)
-        except Exception as exc:
-            errors.append(f"{csv_path.name}: {exc}")
-            continue
-        df.insert(0, "sample_id", sample_id)
-        meta = sample_lookup.get(sample_id, {})
-        df["category"] = meta.get("category", "")
-        frames.append(df)
-
-    if not frames:
-        raise SystemExit("No readable CSV files were available to merge.")
-    return pd.concat(frames, ignore_index=True), errors
 
 
 def _latest_judge_csv(sample_dir: Path) -> Path | None:
@@ -317,43 +260,11 @@ def _run_locomo(args: argparse.Namespace) -> None:
         merged_df.to_csv(merged_csv, index=False)
 
 
-def _run_locomo_plus(args: argparse.Namespace) -> None:
-    """Aggregate a locomo-plus run, which stores results per run directory."""
-    if not args.eval_dir:
-        raise SystemExit("--eval-dir is required when --dataset=locomo-plus")
-    if not args.dataset_json:
-        raise SystemExit("--dataset-json is required when --dataset=locomo-plus")
-    if not args.output:
-        raise SystemExit("--output is required when --dataset=locomo-plus")
-
-    eval_dir = Path(args.eval_dir)
-    if not eval_dir.exists():
-        raise SystemExit(f"Eval directory not found: {eval_dir}")
-
-    csv_files = find_numeric_csvs(eval_dir)
-    if not csv_files:
-        raise SystemExit(f"No numeric CSV files found in {eval_dir}")
-
-    sample_lookup = build_sample_lookup(load_dataset_items(Path(args.dataset_json)))
-    merged, errors = merge_eval_csvs(csv_files, sample_lookup)
-    _print_skipped(errors)
-
-    output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    merged.to_csv(output, index=False, encoding="utf-8")
-
-    print(f"Merged {len(csv_files) - len(errors)} files -> {len(merged)} rows -> {output}")
-    print(f"Columns: {list(merged.columns)}")
-    if "category" in merged.columns:
-        print("\nCategory distribution:")
-        print(merged["category"].value_counts().to_string())
-
-
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LoCoMo stats CLI")
     parser.add_argument(
         "--dataset",
-        choices=["locomo", "locomo-plus"],
+        choices=["locomo"],
         required=True,
         help="Select stats workflow to run",
     )
@@ -373,18 +284,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         dest="exclude_adversarial",
         help="locomo only: include Adversarial category when computing overall averages",
     )
-    parser.add_argument("--eval-dir", help="locomo-plus only: directory containing numeric eval CSV files")
-    parser.add_argument("--dataset-json", help="locomo-plus only: unified input dataset JSON")
-    parser.add_argument("--output", help="locomo-plus only: output merged CSV path")
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
-    if args.dataset == "locomo":
-        _run_locomo(args)
-        return
-    _run_locomo_plus(args)
+    _run_locomo(args)
 
 
 if __name__ == "__main__":
@@ -421,33 +326,6 @@ def _aggregate_locomo_run(run_root: Path, *, include_adversarial: bool) -> Optio
     return AggregateResult(output_json=output_json, merged_csv=merged_csv if merged_csv.exists() else None)
 
 
-def _aggregate_locomo_plus_run(
-    run_root: Path,
-    judge_dir: Path,
-    *,
-    include_adversarial: bool,
-) -> Optional[AggregateResult]:
-    """Aggregate one locomo-plus run directory."""
-    judge_files = sorted(
-        (path for path in judge_dir.glob("*.csv") if path.stem.isdigit()),
-        key=lambda path: int(path.stem),
-    )
-    if not judge_files:
-        log_event("AGGREGATE][WARN", "No judge CSVs found", judge_dir=judge_dir)
-        return None
-
-    output, merged_df = aggregate_judge_csv_files(
-        judge_files,
-        root=run_root,
-        exclude_adversarial=not include_adversarial,
-    )
-    merged_csv = run_root / "_judge_merged.csv"
-    merged_df.to_csv(merged_csv, index=False)
-    output_json = run_root / "_correctness_aggregate.json"
-    output_json.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
-    return AggregateResult(output_json=output_json, merged_csv=merged_csv)
-
-
 def maybe_aggregate_run(
     *,
     dataset: str,
@@ -466,9 +344,4 @@ def maybe_aggregate_run(
         return None
 
     log_event("AGGREGATE", "Building run-level correctness summary", dataset=dataset, run_root=run_root)
-    if dataset == "locomo":
-        return _aggregate_locomo_run(run_root, include_adversarial=include_adversarial)
-    if judge_dir is None:
-        log_event("AGGREGATE][WARN", "Judge directory is missing; cannot aggregate locomo-plus run")
-        return None
-    return _aggregate_locomo_plus_run(run_root, judge_dir, include_adversarial=include_adversarial)
+    return _aggregate_locomo_run(run_root, include_adversarial=include_adversarial)

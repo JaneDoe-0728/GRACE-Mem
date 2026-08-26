@@ -51,14 +51,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Conversational multisample ingest/eval/judge pipeline"
     )
-    parser.add_argument("--dataset", choices=["locomo", "locomo-plus"], default="locomo")
+    parser.add_argument("--dataset", choices=["locomo"], default="locomo")
     parser.add_argument("--sessions-jsonl", default=None)
     parser.add_argument("--dataset-json", default=None)
     parser.add_argument(
         "--source-json",
         default=None,
-        help="Path to locomo10.json (source conversations for locomo-plus). "
-        "Defaults to the locomo qa_json candidate paths.",
+        help="Optional source conversation JSON used by snapshot tooling. "
+        "Defaults to the standard LoCoMo dataset path.",
     )
     parser.add_argument("--prev-k", type=int, default=INGEST_PARAMS.get("prev_k", 2))
     parser.add_argument("--entity-sim-topk", type=int, default=INGEST_PARAMS.get("entity_sim_topk", 4))
@@ -264,7 +264,7 @@ def build_worker_command(*, args, config: RunConfig, plan: SamplePlan) -> list[s
         cmd.extend(["--replay-run-dir", str(args.replay_run_dir)])
     if getattr(args, "baseline_run_dir", None) is not None:
         cmd.extend(["--baseline-run-dir", str(args.baseline_run_dir)])
-    if config.dataset == "locomo-plus" and args.source_json:
+    if args.source_json:
         cmd.extend(["--source-json", str(args.source_json)])
     if args.sessions_jsonl is not None:
         cmd.extend(["--sessions-jsonl", str(args.sessions_jsonl)])

@@ -83,10 +83,6 @@ conversation/QA file under `experiment/locomo/data/`:
 | `locomo10.json` | yes | Primary LoCoMo conversations and questions; `locomo.json` is also accepted |
 | `locomo_by_session.jsonl` | no | Session-oriented input; derived automatically when absent |
 
-For `--dataset locomo-plus`, the default filenames are
-`unified_input_samples_v2.json` and `locomo_plus_by_session.jsonl`. Override
-dataset paths with `--dataset-json` and `--sessions-jsonl`.
-
 ### LongMemEval
 
 The downloader retrieves the cleaned source linked by the
@@ -248,7 +244,7 @@ uv run python -m experiment.locomo.pipeline.runner \
 
 | Option | Meaning |
 |---|---|
-| `--dataset {locomo,locomo-plus}` | Select the dataset adapter |
+| `--dataset locomo` | Select the LoCoMo dataset |
 | `--sample-ids` | Sample selector such as `0,2,5-7` |
 | `--chunk-turns` | Turns per ingest chunk; `0` keeps one whole-session summary |
 | `--artifact-dir` | Existing LoCoMo run root used instead of ingest |
@@ -274,7 +270,6 @@ experiment/locomo/output/
       *_judge*.csv
     _correctness_aggregate.json
     _judge_merged.csv
-  plus/<run-tag>/            # --dataset locomo-plus
 ```
 
 Judged LoCoMo runs aggregate automatically. To rebuild aggregate output:

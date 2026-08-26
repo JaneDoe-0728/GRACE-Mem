@@ -94,7 +94,7 @@ def convert(in_path: Path, out_jsonl: Path, out_txt: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Convert dataset JSON to by-session conversational records")
-    parser.add_argument("--dataset", choices=["locomo", "locomo-plus"], default="locomo")
+    parser.add_argument("--dataset", choices=["locomo"], default="locomo")
     parser.add_argument("-i", "--input", type=Path, default=None, help="Defaults are resolved from --dataset")
     parser.add_argument("--out-jsonl", type=Path, default=None)
     parser.add_argument("--out-txt", type=Path, default=None)

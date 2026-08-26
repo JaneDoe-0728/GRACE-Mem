@@ -276,7 +276,7 @@ class IngestStage:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest by-session conversational JSONL into KG/VDB")
-    parser.add_argument("--dataset", choices=["locomo", "locomo-plus"], default="locomo")
+    parser.add_argument("--dataset", choices=["locomo"], default="locomo")
     parser.add_argument("--sessions-jsonl", default=None, help="Defaults are resolved from --dataset when available")
     parser.add_argument("--dataset-json", default=None, help="Fallback source used to derive sessions when JSONL is absent")
     parser.add_argument("--sample-index", type=int, default=3)
