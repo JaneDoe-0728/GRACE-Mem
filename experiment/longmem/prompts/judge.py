@@ -9,23 +9,6 @@ via response_format and parses tolerantly.
 """
 from __future__ import annotations
 
-# ── JSON schema for JudgeResponse (mirroring hindsight's pydantic JudgeResponse) ─
-JUDGE_RESPONSE_SCHEMA: dict = {
-    "type": "object",
-    "properties": {
-        "reasoning": {"type": "string"},
-        "correct": {"type": "boolean"},
-    },
-    "required": ["reasoning", "correct"],
-    "additionalProperties": False,
-}
-
-JUDGE_RESPONSE_FORMAT: dict = {
-    "type": "json_schema",
-    "json_schema": {"name": "JudgeResponse", "strict": True, "schema": JUDGE_RESPONSE_SCHEMA},
-}
-
-
 def _to_hyphen(category: str | None) -> str:
     """longmem's underscored category -> hindsight's hyphenated one
     (single_session_user -> single-session-user)."""

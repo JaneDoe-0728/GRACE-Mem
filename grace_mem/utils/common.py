@@ -42,12 +42,6 @@ _CONTEXT_LENGTH_ERROR_PATTERNS = (
     "prompt is too long",
 )
 
-# ---------- file helpers ----------
-def file_exists(*paths: str | Path) -> bool:
-    """Return True only when every path exists."""
-    return all(Path(p).exists() for p in paths)
-
-
 def is_context_length_exceeded_error(error: Any) -> bool:
     """Best-effort detection for LLM context-window overflow errors."""
     if error is None:
@@ -78,6 +72,7 @@ def pickle_dump(path: str | Path, obj: Any) -> None:
     except Exception as e:
         logger.error("Pickle dump failed: %s → %s", path, e)
 
+
 def pickle_load(path: str | Path, default: Any = None) -> Any:
     """Load a pickle file and return a fallback value when it is unavailable."""
     try:
@@ -89,11 +84,6 @@ def pickle_load(path: str | Path, default: Any = None) -> Any:
         logger.error("Pickle load failed: %s → %s", path, e)
         return default
 
-def load_vdb_if_exists(vdb_obj: Any, index_path: str | Path, meta_path: str | Path) -> None:
-    """Call vdb.load() only when both the index and the meta file exist."""
-    if file_exists(index_path, meta_path):
-        vdb_obj.load()
-        logger.info("Loaded VDB from %s / %s", index_path, meta_path)
 
 # --- Identity: ids and cache keys ---------------------------------------
 
@@ -233,7 +223,6 @@ class KeywordExtractionResult(BaseModel):
 # Generated from the models above so the schema the LLM is constrained by and
 # the parser that validates its reply can never disagree.
 
-SCHEMA = ExtractionResult.model_json_schema()
 _raw_kw_schema = KeywordExtractionResult.model_json_schema()
 # Both keyword lists are tightened to minItems=1 and marked required. Pydantic
 # defaults them to empty, which the schema advertises as permission: given a

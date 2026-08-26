@@ -200,7 +200,7 @@ def arbitrate_one(key, cands, default_answer):
     question = cands[0][3]
     qdate = cands[0][4]
     scored = []
-    for ans, n_runs, ok, q, qd in cands:
+    for ans, n_runs, ok, _, _ in cands:
         ev = evidence_for(corpus, question, ans)
         sc = verify(question, qdate, ans, ev)
         scored.append((sc, n_runs, ans, ok))

@@ -51,7 +51,6 @@ class ScoringWeights:
     enable_redundancy_penalty: bool = False
     # RRF-specific
     rrf_k: float = 60.0
-    enable_mmr_redundancy: bool = False
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "ScoringWeights":

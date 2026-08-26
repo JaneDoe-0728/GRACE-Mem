@@ -234,18 +234,3 @@ def close_event_loggers(
         closed += 1
 
     return closed
-
-
-def reopen_event_loggers() -> None:
-    """
-    Reopen all event logger file handlers after the log directory has been
-    deleted and recreated (e.g. by refresh_system).  Without this, handlers
-    keep writing to unlinked inodes on Linux and data is silently lost.
-    """
-    for (_name, _path), logger in _EVENT_LOGGERS.items():
-        for handler in logger.handlers:
-            if isinstance(handler, (RotatingFileHandler, logging.FileHandler)):
-                if handler.stream:
-                    handler.stream.close()
-                os.makedirs(os.path.dirname(handler.baseFilename), exist_ok=True)
-                handler.stream = handler._open()

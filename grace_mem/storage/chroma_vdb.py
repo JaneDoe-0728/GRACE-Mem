@@ -625,36 +625,6 @@ class SummariesVDB(SimpleChromaVDB):
             return (results["metadatas"][0].get("summary_text") or "").strip() or None
         return None
 
-    def get_recent_summaries(
-        self, 
-        session_id: int, 
-        k: int = 2, 
-        text_only: bool = True
-    ) -> List[str] | List[Dict[str, Any]]:
-        """Return the most recent summaries for a session as text or metadata rows."""
-        
-        with self._lock:
-            results = self._collection.get(
-                where={"session_id": session_id},
-                include=["metadatas"]
-            )
-        
-        if not results or not results['ids']:
-            return []
-
-        # Sort by timestamp (descending) to find the most recent
-        sorted_metas = sorted(results['metadatas'], key=lambda m: m.get('ts', ''), reverse=True)
-        
-        metas = sorted_metas[:k]
-
-        if not metas:
-            return []
-
-        if text_only:
-            return [m.get("summary_text", "").strip() for m in metas if m.get("summary_text")]
-        
-        return metas
-
     def get_summaries_by_ids(self, summary_ids: list[str], max_len: int = 3000, top_n: int = 10) -> list[str]:
         """Fetch summary texts by ID, truncating each result and capping the count."""
         ids = [str(sid).strip() for sid in summary_ids if sid is not None]

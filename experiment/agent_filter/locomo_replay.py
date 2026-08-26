@@ -65,7 +65,6 @@ def build_chunk_corpus(sample: dict, sample_idx: int, n: int, unit: str = "chunk
             continue
         sess = int(key.split("_", 1)[1])
         date = str(conv.get(f"session_{sess}_date_time", "") or "")
-        kept_lines: list[str] = []
         pos = 0
         chunks: dict[int, list[str]] = {}
         for t in sess_turns:

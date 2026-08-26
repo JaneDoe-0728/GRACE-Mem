@@ -80,14 +80,6 @@ def _format_time(dt: datetime) -> str:
     return dt.strftime("%H:%M")
 
 
-def _start_of_day(dt: datetime) -> datetime:
-    return datetime.combine(dt.date(), time.min)
-
-
-def _end_of_day(dt: datetime) -> datetime:
-    return datetime.combine(dt.date(), time.max)
-
-
 def _valid(code: str = "ok", message: str = "") -> ValidationResult:
     return ValidationResult(ok=True, code=code, message=message)
 
@@ -232,24 +224,6 @@ def _month_display(year: int, month: int) -> str:
     return f"{calendar.month_name[month]} {year:04d}"
 
 
-def _current_season_ordinal(ref_day: date) -> int:
-    month = ref_day.month
-    year = ref_day.year
-    if month in (12,):
-        return year * 4 + 3
-    if month in (1, 2):
-        return (year - 1) * 4 + 3
-    if month in (3, 4, 5):
-        return year * 4
-    if month in (6, 7, 8):
-        return year * 4 + 1
-    return year * 4 + 2
-
-
-def _season_from_ordinal(ordinal: int) -> tuple[int, int]:
-    return ordinal % 4, ordinal // 4
-
-
 def _season_window(season_idx: int, label_year: int) -> tuple[date, date]:
     """Return the date window for a named season in a given year.
 
@@ -270,25 +244,6 @@ def _season_window(season_idx: int, label_year: int) -> tuple[date, date]:
 
 def _season_display(season_idx: int, label_year: int) -> str:
     return f"{_SEASON_LABEL[season_idx]} {label_year:04d}"
-
-
-def _fuzzy_display(original_text: str, context: TimeContext) -> str:
-    """Render an imprecise resolution for display, without implying precision.
-
-    A partially resolved value shown as a full ISO date reads as certain, and
-    the uncertainty is exactly what a reader needs to see.
-    """
-    ref = _ref_date(context).isoformat()
-    text = original_text.strip().lower()
-    mapping = {
-        "a few days ago": f"a few days before {ref}",
-        "some time ago": f"some time before {ref}",
-        "a while ago": f"a while before {ref}",
-        "the other day": f"some time before {ref}",
-        "recently": f"recently before {ref}",
-        "lately": f"recently before {ref}",
-    }
-    return mapping.get(text, f"{text} before {ref}")
 
 
 def _daypart_anchor_map(context: TimeContext) -> dict[str, str]:
@@ -791,7 +746,6 @@ def _resolve_relative_window(original_text: str, span: tuple[int, int], context:
         resolved_day = ref_day - timedelta(days=count * 7)
         granularity = TimeGranularity.WEEK
         week_start = ref_day - timedelta(days=ref_day.weekday()) - timedelta(days=count * 7)
-        week_end = week_start + timedelta(days=6)
         display_value = f"week of {week_start.isoformat()}"
     elif unit.startswith("month"):
         resolved_day = _add_months(ref_day, -count)

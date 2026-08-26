@@ -24,7 +24,6 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 import logging
 import os
-from urllib.parse import urlparse
 import json
 import time
 
@@ -598,12 +597,6 @@ RETURN 1 AS ct"""
         raw = self._exec_graph_query(cypher, params or {}, readonly=False)
         rows = self._rows_as_dicts(raw)
         return rows[0] if rows else None
-
-    def _run_write_batch(self, statements: List[str]) -> None:
-        """Execute a batch of write statements against the selected graph."""
-        self._ensure_open()
-        for s in statements:
-            self._graph.query(s, {})
 
     def _ensure_open(self) -> None:
         """Open the database connection lazily before a graph operation."""

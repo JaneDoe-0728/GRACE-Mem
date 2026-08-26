@@ -10,9 +10,8 @@ to be concatenated later without reconciling headers.
 import csv
 import json
 import shutil
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Sequence
+from typing import Any, Sequence
 
 from grace_mem.storage.paths import resolve_artifacts_dir
 from experiment.common.reproducibility import attach_reproducibility_metadata
@@ -86,16 +85,6 @@ def load_json_records(path: str | Path) -> list[dict[str, Any]]:
     return records
 
 
-def load_json_object(path: str | Path) -> dict[str, Any]:
-    """Load a JSON file expected to hold an object."""
-    target = Path(path)
-    with target.open("r", encoding="utf-8") as fh:
-        data = json.load(fh)
-    if not isinstance(data, dict):
-        raise ValueError(f"{target} must contain a JSON object")
-    return data
-
-
 def load_csv_rows(path: str | Path, *, encoding: str = "utf-8-sig") -> list[dict[str, Any]]:
     target = Path(path)
     with target.open("r", encoding=encoding, newline="") as fh:
@@ -137,52 +126,10 @@ def append_text(path: str | Path, text: str) -> None:
         fh.write(text)
 
 
-def append_csv_with_sample(src_csv: Path, dst_csv: Path, *, sample_index: int) -> None:
-    """Append one sample's eval CSV to a combined file, tagging each row.
-
-    The sample index is added as a column because rows lose their origin once
-    concatenated, and per-sample breakdowns are how a run-wide regression gets
-    localised to the sample that caused it.
-
-    The header is written only when the destination is new, so repeated appends
-    do not interleave header rows into the data.
-    """
-    if not src_csv.exists():
-        return
-    with src_csv.open("r", encoding="utf-8", newline="") as src_fh:
-        reader = csv.DictReader(src_fh)
-        fieldnames = reader.fieldnames or []
-        out_fieldnames = ["sample"] + [name for name in fieldnames if name != "sample"]
-        write_header = not dst_csv.exists()
-        dst_csv.parent.mkdir(parents=True, exist_ok=True)
-        with dst_csv.open("a", encoding="utf-8", newline="") as dst_fh:
-            writer = csv.DictWriter(dst_fh, fieldnames=out_fieldnames, quoting=csv.QUOTE_ALL)
-            if write_header:
-                writer.writeheader()
-            for row in reader:
-                merged = {"sample": f"sample_{sample_index}"}
-                merged.update(row)
-                writer.writerow(merged)
-
-
-def sync_logs(run_root: Path) -> None:
-    copy_dir(Path("./logs"), run_root / "logs")
-
-
 def token_usage_log_path(run_root: Path, sample_index: int) -> Path:
     path = run_root / "logs" / "tokens_usages" / f"tokens_usage{sample_index}.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def write_summary_map(path: Path, per_sample_stats: Dict[str, dict]) -> None:
-    """Write the run's per-sample statistics map."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "per_sample": per_sample_stats,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def backup_artifacts_and_logs(

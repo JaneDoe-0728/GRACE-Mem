@@ -224,60 +224,6 @@ def build_session_records_from_json(path: str | Path) -> List[Dict[str, Any]]:
     return records
 
 
-def index_source_conversations(path: str | Path) -> Dict[str, Dict[str, Any]]:
-    """Load locomo10.json and return a dict keyed by sample_id (e.g. 'conv-26')."""
-    samples = load_raw_samples(path)
-    return {str(s["sample_id"]): s for s in samples if "sample_id" in s}
-
-
-def build_session_records_for_conv(
-    conv_id: str,
-    sample: Dict[str, Any],
-) -> List[Dict[str, Any]]:
-    """Build session records for one locomo10.json sample (identified by conv_id).
-
-    Returns a list sorted by session_id.
-    """
-    conv = get_sample_conversation(sample)
-    return _session_records_from_conv_dict(conv_id, conv)
-
-
-def _session_records_from_conv_dict(
-    conv_id: str,
-    conv: Dict[str, Any],
-) -> List[Dict[str, Any]]:
-    speaker_a, speaker_b = get_sample_speakers(conv)
-    records: List[Dict[str, Any]] = []
-    for key, turns in conv.items():
-        if not key.startswith("session_") or key.endswith("_date_time"):
-            continue
-        if not isinstance(turns, list):
-            continue
-        session_id = int(key.split("_", 1)[1])
-        dialogue: List[str] = []
-        for turn in turns:
-            speaker = str(turn.get("speaker", "")).strip()
-            text = str(turn.get("text", "")).strip().replace("\n", " ")
-            caption = str(turn.get("blip_caption", "")).strip()
-            if not speaker and not text and not caption:
-                continue
-            suffix = f" (Image: {caption})" if caption else ""
-            if not text and caption:
-                dialogue.append(f"{speaker}:{suffix}")
-            else:
-                dialogue.append(f"{speaker}: {text}{suffix}")
-        records.append(
-            {
-                "session_id": session_id,
-                "date_time": conv.get(f"session_{session_id}_date_time"),
-                "speaker_a": speaker_a,
-                "speaker_b": speaker_b,
-                "dialogue": dialogue,
-            }
-        )
-    return sorted(records, key=lambda r: r["session_id"])
-
-
 def find_evidence_turns_from_sample(sample: Dict[str, Any], question: str) -> List[str]:
     """Resolve a question's evidence ids to the turns they name."""
     normalized = [normalize_qa_item(item) for item in load_qa_items_from_sample(sample)]

@@ -51,12 +51,3 @@ def format_ratio(numerator: int, denominator: int) -> str:
     if not denominator:
         return f"{numerator}/{denominator} = n/a"
     return f"{numerator}/{denominator} = {100 * numerator / denominator:.1f}%"
-
-
-def metric_lines(stats: RecallStats, *, gold_label: str, indent: str = "") -> list[str]:
-    return [
-        f"{indent}overall accuracy            {format_ratio(stats.correct, stats.questions)}",
-        f"{indent}{gold_label}       {format_ratio(stats.gold_hit, stats.gold_total)}",
-        f"{indent}all-gold-hit rate           {format_ratio(stats.all_gold_hit, stats.questions_with_gold)}",
-        f"{indent}accuracy when all gold hit  {format_ratio(stats.all_gold_hit_correct, stats.all_gold_hit)}",
-    ]

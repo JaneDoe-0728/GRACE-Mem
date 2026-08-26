@@ -69,26 +69,6 @@ def _load_csv_rows(path: Path, *, encoding: str = "utf-8-sig") -> list[dict[str,
         return list(csv.DictReader(fh))
 
 
-def _load_jsonl_records(path: Path) -> list[dict[str, Any]]:
-    """Read a JSONL file, skipping lines that do not parse.
-
-    Tolerant by necessity, not by preference. These files are appended to by
-    concurrent workers and read while a run is still going, so the last line is
-    routinely a partial write. Failing the whole load for it would make live
-    inspection impossible.
-    """
-    records: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if line:
-                try:
-                    records.append(json.loads(line))
-                except json.JSONDecodeError:
-                    pass
-    return records
-
-
 # ---------- Public API ----------
 
 def timestamp_now() -> str:

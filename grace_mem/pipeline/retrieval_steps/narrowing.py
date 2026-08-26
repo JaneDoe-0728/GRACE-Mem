@@ -82,17 +82,6 @@ class NarrowingModule:
         self.min_overlap: int = int(kwargs.get("min_overlap", 1))
         self.enabled: bool = bool(kwargs.get("enabled", True))
 
-    def configure(self, *, keep_top_n: int | None = None,
-                  min_overlap: int | None = None,
-                  enabled: bool | None = None) -> None:
-        """Update config at call time (used by the retriever from RetrieverConfig)."""
-        if keep_top_n is not None:
-            self.keep_top_n = int(keep_top_n)
-        if min_overlap is not None:
-            self.min_overlap = int(min_overlap)
-        if enabled is not None:
-            self.enabled = bool(enabled)
-
     def narrow(
         self,
         question: str,

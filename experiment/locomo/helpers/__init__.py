@@ -43,11 +43,9 @@ _EXPORTS = {
 }
 
 for _name in (
-    "build_session_records_for_conv",
     "build_session_records_from_json",
     "category_to_label",
     "find_evidence_turns_from_sample",
-    "index_source_conversations",
     "is_adversarial_category",
     "is_adversarial_item",
     "load_qa_items",

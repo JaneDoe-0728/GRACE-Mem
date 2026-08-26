@@ -31,24 +31,6 @@ def find_sample_dirs(root: Path) -> list[Path]:
     return sorted([path for path in root.iterdir() if path.is_dir() and path.name.startswith("sample_")])
 
 
-def read_csvs(csv_files: Sequence[Path]) -> tuple[list[DataFrame], list[str]]:
-    """Read several CSVs into one frame, skipping any that are missing or empty.
-
-    Tolerant because aggregation runs over whatever samples finished; a sample
-    that failed leaves no CSV, and that should shorten the aggregate rather than
-    abort it.
-    """
-    pd = _require_pandas()
-    frames: list[DataFrame] = []
-    errors: list[str] = []
-    for csv_path in csv_files:
-        try:
-            frames.append(pd.read_csv(csv_path))
-        except Exception as exc:
-            errors.append(f"{csv_path.name}: {exc}")
-    return frames, errors
-
-
 def _latest_judge_csv(sample_dir: Path) -> Path | None:
     candidates = sorted(sample_dir.glob("*_judge*.csv"), key=lambda path: path.stat().st_mtime, reverse=True)
     return candidates[0] if candidates else None
@@ -155,20 +137,6 @@ def _missing_entry() -> Dict[str, object]:
         "by_category": {},
         "source": "missing",
     }
-
-
-def _print_skipped(errors: Sequence[str]) -> None:
-    """Report samples that produced no output.
-
-    Printed rather than passed over, so a run of eight samples is
-    distinguishable from a run of ten with two silent failures -- the averages
-    alone would not show it.
-    """
-    if not errors:
-        return
-    print(f"[WARN] Skipped {len(errors)} files due to read errors:")
-    for err in errors[:10]:
-        print(f"  {err}")
 
 
 def _run_locomo(args: argparse.Namespace) -> None:

@@ -249,7 +249,6 @@ class RetrieverConfig:
     filter_method: str = "similarity"      # "similarity" | "rrf" | "ppr" | "rrf+ppr" | "reranker_only"
     # RRF parameters (active when filter_method in {"rrf", "rrf+ppr"})
     rrf_k: float = 60.0
-    rrf_cosine_weight: float = 1.0
     rrf_candidate_k: int = 50             # RRF top-N fed into PPR (only for "rrf+ppr")
     # PPR parameters (active when filter_method in {"ppr", "rrf+ppr"})
     ppr_alpha: float = 0.85
@@ -277,7 +276,6 @@ class RetrieverConfig:
     summary_enable_redundancy_penalty: bool = False
     # RRF-specific (used when summary_filter_mode in {"graph_rrf", "graph_rrf_mmr"})
     summary_rrf_k: float = 60.0
-    summary_enable_mmr_redundancy: bool = False
     # ── Raw context mode ──────────────────────────────────────────────────────
     # When True, summary vectors are still used for scoring and top-K selection,
     # but the final text returned for each selected snippet is the raw turn text
@@ -392,7 +390,6 @@ class Retriever:
             vector_db_manager=self.MGR,
             embed_function=self.embed
         )
-        self.temporal_calc = TemporalRelevanceCalculator()
         raw_context_lookup = (
             RawContextLookup(self.cfg.raw_context_data_dir)
             if (self.cfg.use_raw_context or self.cfg.use_split_embeddings) and self.cfg.raw_context_data_dir
@@ -448,28 +445,6 @@ class Retriever:
         ent_id2meta, _ = build_id_to_meta_maps(self.cache)
         meta = ent_id2meta.get(entity_id, {}) or {}
         return meta.get("name") or entity_id
-
-    def _relationship_name_by_id(self, relationship_id: str) -> str:
-        """Resolve one relationship ID into a readable source->target label."""
-        ent_id2meta, rel_id2meta = build_id_to_meta_maps(self.cache)
-        meta = rel_id2meta.get(relationship_id, {}) or {}
-        if not meta:
-            return relationship_id
-
-        src_name = (
-            meta.get("source_entity")
-            or (ent_id2meta.get(meta.get("source_id"), {}) or {}).get("name")
-            or meta.get("source_id")
-            or "?"
-        )
-        tgt_name = (
-            meta.get("target_entity")
-            or (ent_id2meta.get(meta.get("target_id"), {}) or {}).get("name")
-            or meta.get("target_id")
-            or "?"
-        )
-        desc = (meta.get("description") or "").strip()
-        return f"{src_name} -> {tgt_name}" if not desc else f"{src_name} -> {tgt_name} | {desc}"
 
     def _entity_names_from_ids(self, entity_ids: List[str]) -> List[str]:
         """Resolve multiple entity IDs into deduplicated display names."""
@@ -593,36 +568,6 @@ class Retriever:
         return self._dedupe_preserve_order(
             [self._relationship_name_from_edge(edge) for edge in (edge_subgraph or [])]
         )
-
-    def _entity_names_from_hits(self, hit_map: Dict[str, List[Tuple[Dict[str, Any], float]]]) -> List[str]:
-        """Collect entity names from hybrid-search hit maps."""
-        names: list[str] = []
-        for hits in (hit_map or {}).values():
-            for meta, _ in hits:
-                if meta:
-                    names.append(meta.get("name") or meta.get("id"))
-        return self._dedupe_preserve_order(names)
-
-    def _relationship_names_from_hits(self, hit_map: Dict[str, List[Tuple[Dict[str, Any], float]]]) -> List[str]:
-        """Collect relationship labels from vector-search hit maps."""
-        labels: list[str] = []
-        for hits in (hit_map or {}).values():
-            for meta, _ in hits:
-                if not meta:
-                    continue
-                src_name = (
-                    meta.get("source_entity")
-                    or meta.get("source_name")
-                    or self._entity_name_by_id(meta.get("source_id"))
-                )
-                tgt_name = (
-                    meta.get("target_entity")
-                    or meta.get("target_name")
-                    or self._entity_name_by_id(meta.get("target_id"))
-                )
-                desc = (meta.get("description") or meta.get("name") or "").strip()
-                labels.append(f"{src_name} -> {tgt_name}" if not desc else f"{src_name} -> {tgt_name} | {desc}")
-        return self._dedupe_preserve_order(labels)
 
     def _build_stage_trace_snapshot(
         self,
@@ -1459,7 +1404,7 @@ class Retriever:
             )
 
             if self.cfg.filter_method == "rrf+ppr":
-                ent_id2meta_pp, rel_id2meta_pp = build_id_to_meta_maps(self.cache)
+                _, rel_id2meta_pp = build_id_to_meta_maps(self.cache)
                 rrf_candidate_set = set(filtered_entity_ids)
                 induced_edges = [
                     (rel_id2meta_pp[rid]["source_id"], rid, rel_id2meta_pp[rid]["target_id"])
@@ -1495,7 +1440,7 @@ class Retriever:
             cosine_scores_ppr = self.context_filter.compute_cosine_scores(
                 intersect_entity_ids, query_vec
             )
-            ent_id2meta_pp, rel_id2meta_pp = build_id_to_meta_maps(self.cache)
+            _, rel_id2meta_pp = build_id_to_meta_maps(self.cache)
             ppr_candidates = sorted(intersect_entity_ids)
             ppr_candidate_set = set(ppr_candidates)
             induced_edges_ppr = [
@@ -2380,7 +2325,6 @@ class Retriever:
                 enable_popularity_penalty=self.cfg.summary_enable_popularity_penalty,
                 enable_redundancy_penalty=self.cfg.summary_enable_redundancy_penalty,
                 rrf_k=self.cfg.summary_rrf_k,
-                enable_mmr_redundancy=self.cfg.summary_enable_mmr_redundancy,
             )
             # Ablation A: KG_ABLATION_NO_DIRECT_VECTOR=1 -> config closes the direct
             # search channel down to topn=0 (add_direct becomes a no-op); all that is

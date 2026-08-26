@@ -67,7 +67,6 @@ RERANKER_PARAMS = dict(
     rrk_rel_topk=25,
     rrk_threshold=-100.0,
     rrf_k=60.0,
-    rrf_cosine_weight=1.0,
     rrf_candidate_k=50,
     ppr_alpha=0.85,
     ppr_top_k=10,
@@ -98,7 +97,6 @@ RERANKER_PARAMS = dict(
     summary_enable_redundancy_penalty=False,
     # RRF-specific (used when summary_filter_mode in {"graph_rrf", "graph_rrf_mmr"})
     summary_rrf_k=60.0,
-    summary_enable_mmr_redundancy=False,
     # ── HyDE summary retrieval ─────────────────────────────────────────────
     summary_hyde_enable=False,
     summary_hyde_weight=0.1,

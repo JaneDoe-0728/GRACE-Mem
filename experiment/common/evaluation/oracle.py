@@ -20,7 +20,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 _ROOT = Path(__file__).resolve().parents[3]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
@@ -107,10 +107,6 @@ def _answer_client(config: OracleConfig) -> LLMClient:
 
 def _truthy(value: object) -> bool:
     return str(value).strip().lower() in {"true", "1", "yes"}
-
-
-def _dedupe(values: Iterable[str]) -> list[str]:
-    return list(dict.fromkeys(value for value in values if value))
 
 
 def expand_longmem_sids(corpus: Corpus, gold_sids: Sequence[str], window: int) -> list[str]:

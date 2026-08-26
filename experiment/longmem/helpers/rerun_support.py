@@ -17,7 +17,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from experiment.longmem.pipeline.decision import retrieval_context_needs_rerun
-from experiment.longmem.utils.io import glob_sorted, read_csv_frame, read_json_file, upsert_csv_row
+from experiment.longmem.utils.io import glob_sorted, read_csv_frame
 
 
 ARTIFACT_MARKERS = (
@@ -199,12 +199,3 @@ def rerun_accuracy(results: list[dict]) -> tuple[int, int]:
     judged = [row for row in results if str(row.get("correctness", "")).strip() in ("0", "1")]
     correct = sum(1 for row in judged if str(row.get("correctness", "")).strip() == "1")
     return correct, len(judged)
-
-
-def read_summary_accuracy(summary_path: Path) -> tuple[int, int]:
-    data = read_json_file(summary_path, default=[]) or []
-    return rerun_accuracy(data)
-
-
-def upsert_result_csv(path: Path, row: dict) -> None:
-    upsert_csv_row(path, row, key_columns=["variant"])

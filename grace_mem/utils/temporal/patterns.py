@@ -24,7 +24,6 @@ ABSOLUTE_DATE_TEXT = (
 )
 ABSOLUTE_TIME_TEXT = r"(?:at\s+)?(?:\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))"
 # Compound daypart phrases must precede bare day tokens so they win the alternation.
-DAYPART = r"(?:morning|afternoon|evening|night)"
 RELATIVE_DAYPART_TEXT = r"(?:yesterday\s+(?:morning|afternoon|evening|night)|tomorrow\s+(?:morning|afternoon|evening)|last\s+night)"
 RELATIVE_DAY_TEXT = (
     rf"(?:this\s+(?:morning|afternoon|evening)"
@@ -102,7 +101,6 @@ WEEK_POINT_PARSE_RE = re.compile(
 WEEKEND_PARSE_RE = re.compile(r"^(this\s+past|last|this|next)\s+weekend$", re.IGNORECASE)
 MONTH_POINT_PARSE_RE = re.compile(rf"^((?:last|this|next)\s+month|{MONTH_NAME}\s+\d{{4}})$", re.IGNORECASE)
 SEASON_POINT_PARSE_RE = re.compile(rf"^((?:last|this|next)\s+{SEASON_NAME}|{SEASON_NAME}\s+\d{{4}})$", re.IGNORECASE)
-YEAR_POINT_PARSE_RE = re.compile(r"^(last|this|next)\s+year$", re.IGNORECASE)
 MONTH_WEEK_RANGE_PARSE_RE = re.compile(
     rf"^(?:the\s+)?(first|last)\s+week\s+of\s+({MONTH_NAME})\s+(\d{{4}})$",
     re.IGNORECASE,

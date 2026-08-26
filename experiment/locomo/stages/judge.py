@@ -423,7 +423,6 @@ def llm_as_judge_singlemode(
             df["category_label"] = df[category_col].apply(category_to_label)
 
     total = len(df)
-    already_scored = int(df["correctness"].apply(lambda x: pd.notna(x) and str(x).strip() != "").sum())
     pbar = tqdm(df.iterrows(), total=total, desc="Judging", unit="q",
                 bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
     for i, row in pbar:

@@ -4,12 +4,8 @@
 Sits between the dataset loaders and `grace_mem`'s Ingestor, reshaping sessions
 into the per-turn records ingestion expects.
 
-Two knobs here change what the graph ends up containing, so they belong to the
-experiment rather than to the pipeline. `chunk_turns` splits a long session into
-several ingestion units, which bounds how much context one extraction call
-sees. And MAKE_SESSION_UID namespaces session ids by sample: without it, two
-samples that both number their sessions from 1 would write into each other's
-provenance.
+The `chunk_turns` setting splits a long session into several ingestion units,
+which bounds how much context one extraction call sees.
 """
 
 from collections import defaultdict
@@ -31,8 +27,6 @@ from experiment.experiment_config import INGEST_PARAMS
 
 
 # ========= Config: edit here =========
-INPUT_JSONL = "data/locomo_by_session.jsonl"   # one session per line (a session dict)
-MAKE_SESSION_UID = True             # session_id = f"{sample_index}__{session_id}"
 PREV_K = 2
 ENTITY_SIM_TOPK = 4
 ENTITY_SIM_THRESHOLD = 0.5

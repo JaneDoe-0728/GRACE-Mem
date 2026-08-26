@@ -68,29 +68,6 @@ class SpreadingActivationEngine:
         meta = ent_id2meta.get(entity_id, {}) or {}
         return meta.get("name") or entity_id
 
-    def _relationship_name(self, rel_id: Optional[str]) -> str:
-        """Resolve one relationship ID into a readable source->target label."""
-        if not rel_id:
-            return "(missing relation)"
-        ent_id2meta, rel_id2meta = build_id_to_meta_maps(self.cache)
-        meta = rel_id2meta.get(rel_id, {}) or {}
-        if not meta:
-            return rel_id
-        src_name = (
-            meta.get("source_entity")
-            or (ent_id2meta.get(meta.get("source_id"), {}) or {}).get("name")
-            or meta.get("source_id")
-            or "?"
-        )
-        tgt_name = (
-            meta.get("target_entity")
-            or (ent_id2meta.get(meta.get("target_id"), {}) or {}).get("name")
-            or meta.get("target_id")
-            or "?"
-        )
-        desc = (meta.get("description") or "").strip()
-        return f"{src_name} -> {tgt_name}" if not desc else f"{src_name} -> {tgt_name} | {desc}"
-
     def _edge_label(self, source_id: str, rel_id: Optional[str], target_id: str) -> str:
         """Render one traversed edge into a readable label."""
         source_name = self._entity_name(source_id)

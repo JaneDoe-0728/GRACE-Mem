@@ -45,13 +45,6 @@ _AGG_QUESTION_RE = re.compile(
 _READ_RE = re.compile(r"^\s*READ\s+(\S+)(?:\s+(\d+))?\s*$", re.IGNORECASE)
 _VECTOR_RE = re.compile(r"^\s*VECTOR\s+(.+?)\s*$", re.IGNORECASE)
 _FINAL_RE = re.compile(r"^\s*FINAL\s*[::]?\s*(.*?)\s*$", re.IGNORECASE)
-_COVERAGE_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9'-]{2,}", re.IGNORECASE)
-_COVERAGE_STOPWORDS = {
-    "the", "and", "that", "this", "with", "from", "were", "have", "has",
-    "had", "for", "her", "his", "their", "they", "them", "she", "you",
-    "your", "what", "when", "where", "which", "does", "did", "about",
-    "into", "also", "just", "very", "more", "some", "user", "assistant",
-}
 
 
 def seed_sids_from_context(context: str) -> list[str]:
@@ -318,100 +311,6 @@ def _candidates_block(corpus: Corpus, sids: list[str]) -> str:
             t = corpus.resolve(s)[0]
             lines.append(f"[sid={s}] [{t.date}] {entry}")
     return "\n".join(lines) if lines else "(none)"
-
-
-def _coverage_tokens(text: str) -> set[str]:
-    """Extract small, dependency-free lexical evidence signatures.
-
-    This is intentionally generic: it does not classify the question or
-    assign special handling to temporal/counting/category labels.
-    """
-    return {
-        tok.lower()
-        for tok in _COVERAGE_TOKEN_RE.findall(text or "")
-        if tok.lower() not in _COVERAGE_STOPWORDS
-    }
-
-
-def _portfolio_pad(
-    *,
-    question: str,
-    corpus: Corpus,
-    seed_sids: list[str],
-    selected_sids: list[str],
-    target_size: int,
-    seed_scores: dict[str, float],
-) -> tuple[list[str], dict]:
-    """Add a diverse evidence portfolio using generic lexical MMR signals.
-
-    Candidates remain restricted to upstream seed sids.  At each step the
-    candidate with the best combination of question overlap, new lexical
-    coverage, distance from already selected evidence, and upstream score is
-    added.  No question category or question-shape rule is used.
-    """
-    target_size = max(0, target_size)
-    selected = list(dict.fromkeys(selected_sids))
-    selected_set = set(selected)
-    seed_order = list(dict.fromkeys(seed_sids))
-    q_tokens = _coverage_tokens(question)
-    signatures = {
-        s: _coverage_tokens(corpus.display_entry(s, max_chars=4000) or "")
-        for s in seed_order
-    }
-    groups = {s: s.split(":", 1)[0] for s in seed_order}
-    covered = set().union(*(signatures.get(s, set()) for s in selected))
-    covered_groups = {groups[s] for s in selected if s in groups}
-    additions: list[str] = []
-    scores: dict[str, float] = {}
-
-    while len(selected) < target_size:
-        remaining = [s for s in seed_order if s not in selected_set]
-        if not remaining:
-            break
-
-        best = None
-        best_key = None
-        for sid in remaining:
-            tokens = signatures.get(sid, set())
-            if not tokens:
-                continue
-            overlap = len(tokens & q_tokens)
-            novelty = len(tokens - covered)
-            group_gain = 1.0 if groups.get(sid) not in covered_groups else 0.0
-            # Penalize redundancy against the most similar selected item.
-            max_similarity = 0.0
-            for picked in selected:
-                other = signatures.get(picked, set())
-                union = tokens | other
-                if union:
-                    max_similarity = max(max_similarity, len(tokens & other) / len(union))
-            diversity = 1.0 - max_similarity
-            rerank = float(seed_scores.get(sid, 0.0))
-            # Lexical question overlap is the relevance guard; novelty and
-            # diversity prevent the portfolio from collapsing to near copies.
-            score = 2.0 * overlap + 0.25 * novelty + diversity + 1.5 * group_gain + 0.5 * rerank
-            key = (score, group_gain, novelty, overlap, rerank, -seed_order.index(sid))
-            if best_key is None or key > best_key:
-                best_key = key
-                best = sid
-
-        if best is None:
-            break
-        selected.append(best)
-        selected_set.add(best)
-        additions.append(best)
-        scores[best] = round(float(best_key[0]), 4)
-        covered.update(signatures.get(best, set()))
-        covered_groups.add(groups.get(best, best))
-
-    return selected, {
-        "added": additions,
-        "candidate_count": len(seed_order),
-        "selected_count": len(selected),
-        "covered_token_count": len(covered),
-        "covered_group_count": len(covered_groups),
-        "scores": scores,
-    }
 
 
 def _vector_search(
@@ -1073,13 +972,11 @@ def refine_context(
         # through an LLM DROP. This differs from min-keep in being a category-level
         # "do not cut" rather than a question-shape trigger.
         keep_all_cats = p.get("grep_agent_adjudicate_keep_all_categories")
-        adjudicated = False
         if adj_on and len(final) < max_sids:
             pending = [s for s in seed_norm if s not in set(final)]
             if pending and keep_all_cats and category in keep_all_cats:
                 trace["adjudication"] = {"keep_all": True, "kept": pending, "dropped": []}
                 final = (final + [s for s in pending if s not in set(final)])[:max_sids]
-                adjudicated = True
             elif pending:
                 _t0 = time.perf_counter()
                 try:
@@ -1091,7 +988,6 @@ def refine_context(
                     trace["adjudication"] = verdicts
                     final = (final + [s for s in kept_adj
                                       if s not in set(final)])[:max_sids]
-                    adjudicated = True
                 except Exception as exc:  # an adjudication crash must not disturb the main flow; the floor carries on
                     trace["adjudication"] = {"error": str(exc)[:200]}
 
@@ -1235,13 +1131,11 @@ def finalize_from_raw(
     if adj_cats is not None and category not in adj_cats:
         adj_on = 0
     keep_all_cats = p.get("grep_agent_adjudicate_keep_all_categories")
-    adjudicated = False
     if adj_on and len(final) < max_sids:
         pending = [s for s in seed_norm if s not in set(final)]
         if pending and keep_all_cats and category in keep_all_cats:
             trace["adjudication"] = {"keep_all": True, "kept": pending, "dropped": []}
             final = (final + [s for s in pending if s not in set(final)])[:max_sids]
-            adjudicated = True
         elif pending:
             _t0 = time.perf_counter()
             try:
@@ -1252,7 +1146,6 @@ def finalize_from_raw(
                 verdicts["ms"] = round((time.perf_counter() - _t0) * 1000)
                 trace["adjudication"] = verdicts
                 final = (final + [s for s in kept_adj if s not in set(final)])[:max_sids]
-                adjudicated = True
             except Exception as exc:
                 trace["adjudication"] = {"error": str(exc)[:200]}
 
