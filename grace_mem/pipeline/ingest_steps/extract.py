@@ -55,7 +55,7 @@ class EntityExtractor:
                     _jlog("parse_entity_extraction_done", request_id, entity_count=entity_count, attempt=attempt + 1)
 
                     if entity_count == 0 and attempt < max_retries:
-                        print(f"⚠️  0 entities extracted. Retrying... ({attempt + 1}/{max_retries})")
+                        print(f"0 entities extracted. Retrying... ({attempt + 1}/{max_retries})")
                         continue
 
                     print(f"✓ Entity Extraction: {entity_count} entities")
@@ -73,10 +73,10 @@ class EntityExtractor:
                         )
                     _jlog("parse_entity_extraction_failed", request_id, error=str(parse_error), attempt=attempt + 1)
                     if attempt < max_retries:
-                        print(f"⚠️  Parse error: {parse_error}. Retrying...")
+                        print(f"Parse error: {parse_error}. Retrying...")
                         continue
                     else:
-                        print(f"❌ Entity parse failed: {parse_error}")
+                        print(f"Entity parse failed: {parse_error}")
                         return (False, f"validation_error: {parse_error}")
 
 
@@ -133,7 +133,7 @@ class RelationshipExtractor:
                     _jlog("parse_relationship_extraction_done", request_id, relationship_count=relationship_count, attempt=attempt + 1)
 
                     if relationship_count == 0 and attempt < max_retries:
-                        print(f"⚠️  0 relationships extracted. Retrying... ({attempt + 1}/{max_retries})")
+                        print(f"0 relationships extracted. Retrying... ({attempt + 1}/{max_retries})")
                         continue
 
                     print(f"✓ Relationship Extraction: {relationship_count} relationships")
@@ -152,8 +152,8 @@ class RelationshipExtractor:
                         )
                     _jlog("parse_relationship_extraction_failed", request_id, error=str(parse_error), attempt=attempt + 1)
                     if attempt < max_retries:
-                        print(f"⚠️  Parse error: {parse_error}. Retrying...")
+                        print(f"Parse error: {parse_error}. Retrying...")
                         continue
                     else:
-                        print(f"❌ Relationship parse failed: {parse_error}")
+                        print(f"Relationship parse failed: {parse_error}")
                         return (False, f"validation_error: {parse_error}")

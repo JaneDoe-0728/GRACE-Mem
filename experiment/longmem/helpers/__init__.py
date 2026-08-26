@@ -5,7 +5,6 @@ pipeline, and listing them here without importing keeps `--help` fast.
 """
 
 __all__ = [
-    "ablation_support",
     "analysis_cases",
     "analysis_summary",
     "checkpoints",

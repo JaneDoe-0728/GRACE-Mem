@@ -95,7 +95,7 @@ class RateLimiter:
             if len(self.calls) >= self.max_calls:
                 sleep_time = self.period - (now - self.calls[0]) + 0.1
                 if sleep_time > 0:
-                    print(f"⏳ Rate limit reached, sleeping {sleep_time:.1f}s...")
+                    print(f"Rate limit reached, sleeping {sleep_time:.1f}s...")
                     time.sleep(sleep_time)
                     self.calls = []
             self.calls.append(time.time())
@@ -173,7 +173,7 @@ class EntityOpsProcessor:
         if not entities:
             return {"results": []}
 
-        print(f"\n🚀 Processing {len(entities)} entities (parallel={self.config.max_workers})...")
+        print(f"\nProcessing {len(entities)} entities (parallel={self.config.max_workers})...")
 
         # Captured here and re-applied inside each worker: the token tracker
         # keys its context to the current thread, so pool threads would
@@ -207,7 +207,7 @@ class EntityOpsProcessor:
                 if attempt == self.config.max_retries - 1:
                     raise
                 wait = 2 ** attempt
-                print(f"⚠️  Retry {attempt+1}/{self.config.max_retries} for {entity['entity_name']}, wait {wait}s")
+                print(f"Retry {attempt+1}/{self.config.max_retries} for {entity['entity_name']}, wait {wait}s")
                 time.sleep(wait)
 
     def _process_single(self, entity: "EntityInput", similar_map: "SimilarMap") -> "EntityOp":
@@ -219,7 +219,7 @@ class EntityOpsProcessor:
         parsed = _parse_entity_ops_block(raw_output or "")
         parsed_result = parsed.get("results", [{}])[0] if parsed.get("results") else {}
         result = self._validate_result(parsed_result, entity, candidates)
-        print(f"🔍 Parsed result for '{name}':\n{result}\n")
+        print(f"Parsed result for '{name}':\n{result}\n")
         return result
 
     def _extract_entity_info(self, entity: "EntityInput") -> tuple[str, str, str]:
@@ -249,7 +249,7 @@ class EntityOpsProcessor:
             lines.append("Candidates: (none)")
             lines.append("Valid target_existing_id choices: []  # No candidates -> only valid action is ADD")
         prompt_block = "\n".join(lines)
-        print(f"📝 Built prompt for entity '{name}':\n{prompt_block}\n")
+        print(f"Built prompt for entity '{name}':\n{prompt_block}\n")
         return f"{ENTITY_OPS_RULES_V2}\n\n{ENTITY_OPS_FEW_SHOT}\n=== SINGLE ENTITY ===\n{prompt_block}"
 
     def _validate_result(self, parsed: "EntityOp", entity: "EntityInput", candidates: List["VDBSearchHit"]) -> "EntityOp":

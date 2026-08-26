@@ -227,7 +227,7 @@ def _infer_chunk_turns(run_dir: Path, turn_index: dict[int, dict[int, dict[int, 
     if not constrained:
         return 0                     # every session is a single summary → session mode
     if lo > hi:
-        print(f"⚠️  ambiguous/inconsistent chunk size (lo={lo} hi={hi}); pass --chunk-turns explicitly")
+        print(f"ambiguous/inconsistent chunk size (lo={lo} hi={hi}); pass --chunk-turns explicitly")
     return lo
 
 

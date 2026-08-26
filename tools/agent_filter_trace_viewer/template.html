@@ -328,7 +328,7 @@ function diagnosis(r){
   }
   if(corr!=null){
     if(Number(corr)<1&&goldInFinal.length){
-      notes.push("⚠ The final context holds the gold but the answer is wrong -> the problem is in answering/reasoning, not retrieval.");
+      notes.push("The final context holds the gold but the answer is wrong -> the problem is in answering/reasoning, not retrieval.");
       if(sev==="info"){stage="context had the gold but generation answered wrong";sev="crit";}}
     if(Number(corr)>=1&&r.final_recall!=null&&r.final_recall<0.5)
       notes.push("The answer is right but strict gold recall is low -- gold_sids may be too broad (counting a whole session as gold); read it against session recall.");
@@ -384,7 +384,7 @@ function sidChips(list,cls,goldSet,sidtext){
     let c=cls;
     if(cls==="dropped"&&goldSet&&goldSet.has(s))c="dropgold";
     if(cls==="adj-kept"&&goldSet&&goldSet.has(s))c="adj-kept-gold";
-    const el=E("span","sid "+c,esc(s)+(goldSet&&goldSet.has(s)?" ⚠gold":""));
+    const el=E("span","sid "+c,esc(s)+(goldSet&&goldSet.has(s)?" gold":""));
     if(sidtext&&sidtext[s])el.title=sidtext[s];
     box.appendChild(el);
   });
@@ -399,7 +399,7 @@ function stepEl(c){
   sum.appendChild(E("span","arg",esc(c.arg||"")));
   if(c.result_chars!=null)sum.appendChild(E("span","ms",c.result_chars+" chars"));
   if(c.ms!=null)sum.appendChild(E("span","ms",c.ms+"ms"));
-  if(c.content_empty)sum.appendChild(E("span","ms","⚠ empty content"));
+  if(c.content_empty)sum.appendChild(E("span","ms","empty content"));
   if(c.finish_reason&&c.finish_reason!=="stop")sum.appendChild(E("span","ms","finish="+esc(c.finish_reason)));
   d.appendChild(sum);
   const det=E("div","detail");
@@ -407,7 +407,7 @@ function stepEl(c){
   if(c.reasoning){det.appendChild(E("div","lbltiny","reasoning channel (outside content)"));det.appendChild(E("div","reply",esc(c.reasoning)));}
   if(c.tool_calls&&c.tool_calls.length){det.appendChild(E("div","lbltiny","native tool_calls"));det.appendChild(E("div","reply",esc(JSON.stringify(c.tool_calls))));}
   if(c.result){det.appendChild(E("div","lbltiny","fetched content (result)"));det.appendChild(E("div","result",esc(c.result)));}
-  if(c.content_empty)det.appendChild(E("div","reply","⚠ message.content is empty; message fields: "+esc((c.message_keys||[]).join(", "))+(c.reasoning?" -- the output landed in the reasoning channel":" -- reasoning is empty too (a genuinely empty reply, or the adapter dropped fields)")));
+  if(c.content_empty)det.appendChild(E("div","reply","message.content is empty; message fields: "+esc((c.message_keys||[]).join(", "))+(c.reasoning?" -- the output landed in the reasoning channel":" -- reasoning is empty too (a genuinely empty reply, or the adapter dropped fields)")));
   if(!c.reply&&!c.result&&!c.reasoning&&!c.content_empty)det.appendChild(E("div","reply","(no reply/result on this step -- common with PARSE_FAIL / REPEAT_BREAK)"));
   d.appendChild(det);
   return d;
@@ -456,15 +456,15 @@ function card(r){
   sum.appendChild(E("span","badge b-cat mono",esc(r.sample)));
   if(isAbs(r))sum.appendChild(E("span","badge b-info","abs"));
   if(judgeDisagree(r))sum.appendChild(E("span","badge b-warn","Judge disagreement"));
-  if(r.fallback)sum.appendChild(E("span","badge b-warn","⚠ "+esc(r.fallback)));
+  if(r.fallback)sum.appendChild(E("span","badge b-warn",esc(r.fallback)));
   if(r.seed_recall!=null){
     const drop=recallDrop(r);
     sum.appendChild(E("span","badge "+(drop?"b-crit":"b-good"),
       `recall ${pct(r.seed_recall)}${drop?" ↓ ":"→"}${pct(r.final_recall)}`));
   }
   const _dg=diagnosis(r);
-  if(_dg.sev!=="info")sum.appendChild(E("span","badge "+(_dg.sev==="crit"?"b-crit":"b-warn"),"⚑ "+esc(_dg.stage)));
-  else if(_dg.drift.length)sum.appendChild(E("span","badge b-warn","⚑ query/action drift"));
+  if(_dg.sev!=="info")sum.appendChild(E("span","badge "+(_dg.sev==="crit"?"b-crit":"b-warn"),esc(_dg.stage)));
+  else if(_dg.drift.length)sum.appendChild(E("span","badge b-warn","query/action drift"));
   sum.appendChild(E("span","qtext",esc(r.question)));
   sum.appendChild(E("span","ms",`${((r.agent_ms||0)/1000).toFixed(2)}s · ${(r.commands||[]).length} steps`));
   d.appendChild(sum);
@@ -552,7 +552,7 @@ function card(r){
         else{src="?";cls="src-other";why="origin unknown (no provenance field)";}
         const row=E("div","adjrow "+cls+(isGold?" adj-gold":""));
         row.appendChild(E("span","srcv "+cls,src));
-        const sid=E("span","adjsid",s+(isGold?" ⚠gold":""));
+        const sid=E("span","adjsid",s+(isGold?" gold":""));
         if(r.sid_text&&r.sid_text[s])sid.title=r.sid_text[s];
         row.appendChild(sid);
         row.appendChild(E("span","adjwhy",why));
@@ -602,7 +602,7 @@ function card(r){
           const isGold=goldSet&&goldSet.has(s);
           const row=E("div","adjrow adj-"+v.toLowerCase()+(isGold?" adj-gold":""));
           const vtag=E("span","adjv adjv-"+v.toLowerCase(),v);
-          const sid=E("span","adjsid",s+(isGold?" ⚠gold":""));
+          const sid=E("span","adjsid",s+(isGold?" gold":""));
           if(r.sid_text&&r.sid_text[s])sid.title=r.sid_text[s];
           const why=reasons[s]?String(reasons[s]).replace(/^(KEEP|DROP):\s*/i,""):"";
           const rz=E("span","adjwhy",why||(v==="—"?"(the LLM reply was truncated before reaching this one)":"(this run stored no per-item reasons)"));

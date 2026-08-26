@@ -1308,10 +1308,10 @@ class MultiDatasetProcessor:
                     )
                     merged_done.add(config.name)
 
-                print(f"\n✅ Dataset {config.name} completed successfully!")
+                print(f"\nDataset {config.name} completed successfully!")
 
             except Exception as e:
-                print(f"\n❌ Dataset {config.name} failed with error: {e}")
+                print(f"\nDataset {config.name} failed with error: {e}")
                 traceback.print_exc()
                 results.append({
                     "dataset": config.name,
@@ -1334,8 +1334,8 @@ class MultiDatasetProcessor:
                 print(f"      Output: {res['output_path']}")
 
         if successful:
-            print(f"\n📊 Merged CSV: {merged_csv_path}")
-            print(f"📋 Progress:   {self._progress_path()}")
+            print(f"\nMerged CSV: {merged_csv_path}")
+            print(f"Progress:   {self._progress_path()}")
             print(f"   Total: {len(successful)} datasets successfully processed")
         return results
     

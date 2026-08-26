@@ -68,7 +68,7 @@ class QAEvalStage:
         wrong range, which is worse than leaving it unanchored.
         """
         if time_rewrite_ablation_enabled():
-            print("⏰ [ablation] time rewrite skipped (KG_ABLATION_NO_TIME_REWRITE=1)")
+            print("[ablation] time rewrite skipped (KG_ABLATION_NO_TIME_REWRITE=1)")
             return question
 
         if not query_time:
@@ -93,7 +93,7 @@ class QAEvalStage:
             if ((constraint.get("resolution") or {}).get("status") == "resolved")
         ]
         if resolved_constraints:
-            print("⏰ Time expressions detected and rewritten:")
+            print("Time expressions detected and rewritten:")
             print(f"   Original:  {question}")
             print(f"   Rewritten: {rewritten_question}")
             for constraint in resolved_constraints:

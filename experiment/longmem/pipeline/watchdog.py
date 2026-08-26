@@ -766,9 +766,9 @@ def _run_rerun_mode(
                     stages=set(selected_stages),
                 )
                 results.append(result)
-                logger.info("✅ %s | correctness=%s", dataset_name, result["correctness"])
+                logger.info("%s | correctness=%s", dataset_name, result["correctness"])
             except Exception as exc:
-                logger.exception("❌ %s: %s", dataset_name, exc)
+                logger.exception("%s: %s", dataset_name, exc)
                 error_result = {"dataset": dataset_name, "error": str(exc)}
                 results.append(error_result)
                 try:
@@ -791,7 +791,7 @@ def _run_rerun_mode(
     if errors:
         logger.warning("Errors: %d", len(errors))
         for row in errors:
-            logger.warning("  ❌ %s: %s", row["dataset"], row["error"])
+            logger.warning("  %s: %s", row["dataset"], row["error"])
 
     correct, judged = rerun_accuracy(success)
     if judged:

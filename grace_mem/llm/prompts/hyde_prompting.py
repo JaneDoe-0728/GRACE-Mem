@@ -2,9 +2,8 @@
 HyDE-style prompt: generate hypothetical memory summary sentences for a question.
 
 The generated sentences are embedded and compared against stored summary vectors
-to improve summary retrieval, complementing the raw query embedding. Unlike the
-dynamic retrieval planner (dynamic_prompting.py), these are content sentences that
-look like real memories, not retrieval instructions.
+to improve summary retrieval, complementing the raw query embedding. They are
+content sentences that look like real memories, not retrieval instructions.
 """
 
 HYDE_SYSTEM = (

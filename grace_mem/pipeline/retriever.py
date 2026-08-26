@@ -8,7 +8,6 @@ from dataclasses import dataclass
 import numpy as np
 
 from grace_mem.llm.prompts.keyword.extraction import keyword_extraction_PROMPT
-from grace_mem.llm.prompts.dynamic_prompting import DYNAMIC_PLANNING_SYSTEM, DYNAMIC_PLANNING_USER
 from grace_mem.llm.prompts.hyde_prompting import HYDE_SYSTEM, HYDE_USER
 from grace_mem.utils.common import KeywordExtractionResult
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
@@ -360,7 +359,7 @@ class Retriever:
 
         Args:
             llm: LLM client for keyword extraction
-            graph: Neo4j graph interface
+            graph: FalkorDB graph interface
             mgr: VDB manager
             embed: Embedding function
             cache: Global cache

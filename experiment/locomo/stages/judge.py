@@ -462,26 +462,26 @@ def llm_as_judge_singlemode(
         df.to_csv(output_csv, index=False, encoding="utf-8-sig")
 
     df.to_csv(output_csv, index=False, encoding="utf-8-sig")
-    print(f"✅ Done. Saved to {output_csv}")
+    print(f"Done. Saved to {output_csv}")
 
     stats = compute_correctness_stats(df, exclude_adversarial=exclude_adversarial)
     if stats["avg_correctness"] is not None:
-        print(f"📊 Avg correctness: {stats['avg_correctness']:.4f} ({stats['avg_correctness_percent']:.2f}%)")
+        print(f"Avg correctness: {stats['avg_correctness']:.4f} ({stats['avg_correctness_percent']:.2f}%)")
     else:
-        print("📊 Avg correctness: N/A (no scored rows)")
+        print("Avg correctness: N/A (no scored rows)")
 
     if stats["avg_f1"] is not None:
-        print(f"📊 Avg F1: {stats['avg_f1']:.4f}")
+        print(f"Avg F1: {stats['avg_f1']:.4f}")
     else:
-        print("📊 Avg F1: N/A (no scored rows)")
+        print("Avg F1: N/A (no scored rows)")
 
     if stats["avg_bleu1"] is not None:
-        print(f"📊 Avg BLEU-1: {stats['avg_bleu1']:.4f}")
+        print(f"Avg BLEU-1: {stats['avg_bleu1']:.4f}")
     else:
-        print("📊 Avg BLEU-1: N/A (no scored rows)")
+        print("Avg BLEU-1: N/A (no scored rows)")
 
     if stats["by_category"]:
-        print("📊 Correctness by category:")
+        print("Correctness by category:")
         for label, val in stats["by_category"].items():
             parts = []
             correctness = val.get("avg_correctness")
@@ -562,13 +562,13 @@ def llm_as_judge_open_domain(
         df.at[i, "correctness"] = val
 
     df.to_csv(output_csv, index=False, encoding="utf-8-sig")
-    print(f"✅ Done. Saved to {output_csv}")
+    print(f"Done. Saved to {output_csv}")
 
     stats = compute_correctness_stats(df, exclude_adversarial=False)
     if stats["avg_correctness"] is not None:
-        print(f"📊 Avg correctness: {stats['avg_correctness']:.4f} ({stats['avg_correctness_percent']:.2f}%)")
+        print(f"Avg correctness: {stats['avg_correctness']:.4f} ({stats['avg_correctness_percent']:.2f}%)")
     else:
-        print("📊 Avg correctness: N/A (no scored rows)")
+        print("Avg correctness: N/A (no scored rows)")
     return {
         "avg_correctness": stats["avg_correctness"],
         "avg_correctness_percent": stats["avg_correctness_percent"],

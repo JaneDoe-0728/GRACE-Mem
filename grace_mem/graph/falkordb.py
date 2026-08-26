@@ -1,11 +1,8 @@
-"""FalkorDB-backed knowledge graph store, API-compatible with the Neo4j wrapper.
+"""FalkorDB-backed knowledge graph store.
 
-FalkorDB speaks OpenCypher over the Redis RESP protocol, so it answers the same
-queries as Neo4j while running as a single Redis process. That is why this
-module exists: the experiment harness spins graphs up and tears them down once
-per sample, and a Neo4j server's startup cost dominated the run. Keeping the
-surface identical to `neo4j.py` means the pipeline can swap between them by
-configuration alone -- see `graph_from_env` at the bottom.
+FalkorDB speaks OpenCypher over the Redis RESP protocol and runs as a single
+Redis process. The experiment harness spins graphs up and tears them down once
+per sample; see `graph_from_env` at the bottom for connection configuration.
 
 The environment variables keep their NEO4J_* names on purpose, so an existing
 deployment can switch backends without rewriting its config:
@@ -61,8 +58,7 @@ except Exception as e:  # pragma: no cover
 class GraphConfig:
     """Connection and schema settings for a single FalkorDB graph.
 
-    Field names mirror the Neo4j wrapper's config so call sites port over
-    unchanged, even though `uri` here is a redis/rediss URI of the form
+    `uri` is a redis/rediss URI of the form
     redis://[:password]@host:port/db.
 
     Attributes:

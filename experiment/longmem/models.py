@@ -1,9 +1,6 @@
-"""Value types for a LongMemEval run: dataset identity and its derived paths.
+"""Value types for a LongMemEval run.
 
-`DatasetConfig` is the identity of one evaluation unit and `DatasetPaths` is
-where that unit's files live. They are separate because paths are derived --
-recomputing them from the config everywhere is what keeps a resumed run
-reading the same files the original wrote.
+`DatasetConfig` is the identity and configuration of one evaluation unit.
 
 LongMemEval splits into categories (single-session-user, multi-session, and so
 on) that are evaluated independently and reported separately, so almost
@@ -13,7 +10,6 @@ everything here is keyed by category rather than by run.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Mapping, Optional
 
 
@@ -132,30 +128,3 @@ class DatasetConfig:
             "summary_topk_per_item": self.summary_topk_per_item,
             "summary_vec_threshold": self.summary_vec_threshold,
         }
-
-
-@dataclass(frozen=True)
-class DatasetPaths:
-    """Where one dataset's inputs, outputs, and checkpoints live.
-
-    Derived from `DatasetConfig` rather than stored, so a resumed run recomputes
-    the same paths the original wrote to instead of relying on a record of them.
-    """
-    base_output_dir: Path
-    dataset_name: str
-
-    @property
-    def output_csv(self) -> Path:
-        return self.base_output_dir / f"{self.dataset_name}.csv"
-
-    @property
-    def artifacts_dir(self) -> Path:
-        return self.base_output_dir / f"artifacts_{self.dataset_name}"
-
-    @property
-    def log_dir(self) -> Path:
-        return self.base_output_dir / f"logs_{self.dataset_name}"
-
-    @property
-    def checkpoint_json(self) -> Path:
-        return self.base_output_dir / f"checkpoint_{self.dataset_name}.json"

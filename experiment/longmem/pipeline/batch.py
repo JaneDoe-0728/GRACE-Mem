@@ -307,10 +307,10 @@ def main(argv: list[str] | None = None):
 
             for i, res in enumerate(results, start=1):
                 if "error" in res:
-                    print(f"  [{i}] ❌ {res['dataset']}: FAILED")
+                    print(f"  [{i}] {res['dataset']}: FAILED")
                     print(f"      Error: {res['error']}")
                 else:
-                    print(f"  [{i}] ✅ {res['dataset']}: SUCCESS")
+                    print(f"  [{i}] {res['dataset']}: SUCCESS")
                     print(f"      Questions answered: {res['num_questions']}")
                     print(f"      Output CSV: {res['output_path']}")
                     print(f"      VDB artifacts: {res['artifacts_dir']}")

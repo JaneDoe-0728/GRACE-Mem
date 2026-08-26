@@ -84,7 +84,6 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
     """Open connections and return the constructed pipeline runtime."""
     from grace_mem.pipeline.retriever import Retriever
     from grace_mem.pipeline.ingestor import Ingestor
-    # from grace_mem.pipeline.ingestor import IngestorNoEntityOps
     from grace_mem.storage import MGR
     from grace_mem.llm import LLMClient
     from grace_mem.graph.falkordb import graph_from_env

@@ -493,12 +493,12 @@ def main(argv: list[str] | None = None) -> None:
                     )
                     results.append(result)
                     success_results.setdefault(output_dir, []).append(result)
-                    print(f"✅ {dataset_name} | correctness={result['correctness']}")
+                    print(f"{dataset_name} | correctness={result['correctness']}")
                 except Exception as exc:
                     import traceback
 
                     traceback.print_exc()
-                    print(f"❌ {dataset_name}: {exc}")
+                    print(f"{dataset_name}: {exc}")
                     error_result = {"dataset": dataset_name, "error": str(exc)}
                     results.append(error_result)
                     error_results.append(error_result)
@@ -521,7 +521,7 @@ def main(argv: list[str] | None = None) -> None:
     if error_results:
         print(f"Errors: {len(error_results)}")
         for row in error_results:
-            print(f"  ❌ {row['dataset']}: {row['error']}")
+            print(f"  {row['dataset']}: {row['error']}")
 
     success = [row for row in results if "error" not in row]
     correct, judged = rerun_accuracy(success)

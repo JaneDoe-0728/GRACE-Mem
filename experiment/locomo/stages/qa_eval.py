@@ -95,14 +95,14 @@ WHAT TO EXTRACT
 
 Extract facts worth remembering long-term, including:
 
-✅ Personal info: names, relationships, roles, background
-✅ Long-term preferences, habits, interests, favorites
-✅ Significant events, milestones, decisions, achievements, changes
-✅ Plans, goals, deadlines, commitments
-✅ Expertise, skills, certifications, experience
-✅ Important context: projects, problems, constraints
-✅ Reasons, motivations, lessons learned, takeaways, emotional significance
-✅ QA-critical details: exact names, titles, authors, pet names, organizations, programs, dates, places, and event names
+Personal info: names, relationships, roles, background
+Long-term preferences, habits, interests, favorites
+Significant events, milestones, decisions, achievements, changes
+Plans, goals, deadlines, commitments
+Expertise, skills, certifications, experience
+Important context: projects, problems, constraints
+Reasons, motivations, lessons learned, takeaways, emotional significance
+QA-critical details: exact names, titles, authors, pet names, organizations, programs, dates, places, and event names
 
 Do NOT extract greetings, filler, process chatter, repeated info, or trivial one-off details.
 
