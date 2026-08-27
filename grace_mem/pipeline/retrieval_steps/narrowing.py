@@ -25,7 +25,7 @@ Integration point in build_kg_context():
     Step 4:   kg_context = base_text + evidence_block                      ← to LLM
 
 Interface contract:
-    narrow(question, evidence_block, *, query_vec, request_id) -> str
+    narrow(question, evidence_block, *, request_id) -> str
     - Output is a SUBSET of input snippets, same format.
     - Never adds snippets not present in the input.
     - Never raises; on failure returns input unchanged.
@@ -87,7 +87,6 @@ class NarrowingModule:
         question: str,
         evidence_block: str,
         *,
-        query_vec: Any = None,
         request_id: str | None = None,
         entity_names: list[str] | None = None,
     ) -> str:

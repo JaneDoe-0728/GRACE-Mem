@@ -381,20 +381,21 @@ class EvidenceBuilder:
                 )
             scored_events = reranked
         elif summary_filter_mode in _RRF_MODES:
-            _rrf_fn = (
-                select_summaries_rrf_mmr
-                if summary_filter_mode == "graph_rrf_mmr"
-                else select_summaries_rrf
-            )
-            rrf_ranked = _rrf_fn(
-                scored_events=scored_events,
-                context_entities=context_entities,
-                context_relationships=context_relationships,
-                cache=self.cache,
-                weights=_weights,
-                summaries_vdb=self.summaries_vdb,
-                topk=topk,
-            )
+            rrf_kwargs = {
+                "scored_events": scored_events,
+                "context_entities": context_entities,
+                "context_relationships": context_relationships,
+                "cache": self.cache,
+                "weights": _weights,
+                "topk": topk,
+            }
+            if summary_filter_mode == "graph_rrf_mmr":
+                rrf_ranked = select_summaries_rrf_mmr(
+                    **rrf_kwargs,
+                    summaries_vdb=self.summaries_vdb,
+                )
+            else:
+                rrf_ranked = select_summaries_rrf(**rrf_kwargs)
             reranked = []
             for sc, ev in rrf_ranked:
                 reranked.append((sc.final_score, ev))

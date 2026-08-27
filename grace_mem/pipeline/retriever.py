@@ -2380,7 +2380,6 @@ class Retriever:
                 evidence_block = self.narrowing_module.narrow(
                     question=question,
                     evidence_block=evidence_block,
-                    query_vec=query_vec,
                     request_id=request_id,
                 )
                 _jlog(

@@ -114,7 +114,6 @@ def compute_confidence(
 # ──────────────────────────────────────────────────────────────────────────────
 
 def diagnose_retrieval(
-    question: str,
     entities: list[dict],
     rels: list[dict],
     conf: float,
@@ -223,7 +222,7 @@ def rewrite_query(
     Returns:
         (rewritten_query, latency_sec)
     """
-    pattern, diagnosis = diagnose_retrieval(question, entities, rels, conf)
+    pattern, diagnosis = diagnose_retrieval(entities, rels, conf)
     ent_names = [e.get("name", "?") for e in entities] or ["none"]
     rel_descs = [r.get("rel_desc", "?") for r in rels] or ["none"]
 

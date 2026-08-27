@@ -798,7 +798,6 @@ def select_summaries_rrf(
     context_relationships: list[dict],
     cache: dict,
     weights: ScoringWeights,
-    summaries_vdb: Any,
     topk: int | None = None,
 ) -> list[tuple[SummaryRRFScore, dict]]:
     """

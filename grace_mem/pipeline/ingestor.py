@@ -182,7 +182,7 @@ def _repair_temporal_entities(
             if key not in marker_hint_for:
                 marker_hint_for[key] = h
 
-    def _temporal_meta_for(name: str, etype: EntityType) -> dict | None:
+    def _temporal_meta_for(name: str) -> dict | None:
         """Build the temporal metadata block for one entity name, or None.
 
         Two sources, in priority order. A precomputed hint is preferred because
@@ -322,7 +322,7 @@ def _repair_temporal_entities(
                 if len(_candidates) == 1:
                     final_name = _candidates[0]
 
-            final_meta = meta or _temporal_meta_for(name, etype) or _temporal_meta_for(final_name, etype)
+            final_meta = meta or _temporal_meta_for(name) or _temporal_meta_for(final_name)
             final_desc = _prefer_existing_temporal_description(
                 desc,
                 name=final_name,
@@ -670,7 +670,7 @@ class Ingestor:
             raise
 
     # ---------- Thin delegation methods (preserve existing call sites) ----------
-    def summarize_turn(self, session_id: int | str, message_id: int, user_text: str, assistant_text: str, prev_k: int | None, request_id: str, dialogue_datetime: str | None = None, temporal_hints: list | None = None, tctx: TimeContext | None = None) -> tuple[str, str]:
+    def summarize_turn(self, session_id: int | str, message_id: int, user_text: str, assistant_text: str, request_id: str, dialogue_datetime: str | None = None, temporal_hints: list | None = None, tctx: TimeContext | None = None) -> tuple[str, str]:
         """Delegate turn summarization to the compressor with step logging."""
         with self.log_step("summarize_turn", request_id, session_id=session_id, message_id=message_id):
             return self._compressor.summarize_turn(
@@ -886,7 +886,7 @@ class Ingestor:
             summary_id, _summary_text = self.summarize_turn(
                 session_id=session_id, message_id=message_id,
                 user_text=user_text, assistant_text=assistant_text,
-                prev_k=prev_k, request_id=request_id, dialogue_datetime=dialogue_datetime,
+                request_id=request_id, dialogue_datetime=dialogue_datetime,
                 temporal_hints=temporal_hints if temporal_hints else None,
                 tctx=_tctx,
             )
