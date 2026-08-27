@@ -157,7 +157,6 @@ def judge_single(
     gold: str,
     gen: str,
     *,
-    category: str | None = None,
     evidence: str = "",
     mode: str = "standard",
 ) -> float:
@@ -450,7 +449,6 @@ def llm_as_judge_singlemode(
                 q,
                 gold,
                 gen,
-                category=row.get("category"),
                 evidence=str(row.get("gold_evidence_source", "")).strip(),
             )
             df.at[i, "correctness"] = val
@@ -512,7 +510,6 @@ def llm_as_judge_open_domain(
     df = pd.read_csv(input_csv)
     locomo_data = load_raw_samples(dataset_json)
 
-    has_category_col = "category" in df.columns
     has_evidence_col = "gold_evidence_source" in df.columns
 
     q_col = next((c for c in df.columns if c.lower() == "question"), None)
@@ -545,16 +542,11 @@ def llm_as_judge_open_domain(
                 print(f"[WARN] No evidence turns found for row {i}: {q[:80]}...")
         df.at[i, "evidence_turns"] = evidence_turns
 
-        if has_category_col:
-            category = str(row.get("category", "")).strip() or None
-        else:
-            category = None
         print(f"Judging row {i}: {q[:50]}...")
         val = judge_single(
             q,
             gold,
             gen,
-            category=category,
             evidence=evidence_turns,
             mode="open-domain",
         )

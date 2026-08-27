@@ -11,7 +11,7 @@ the codebase; instantiating it here means the weights are paid for once per
 process instead of once per caller.
 """
 
-from typing import List, Sequence
+from typing import Sequence
 import numpy as np
 from pathlib import Path
 import os

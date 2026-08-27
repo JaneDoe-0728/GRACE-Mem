@@ -168,8 +168,6 @@ def select_datasets(
 
 def get_question_info(dataset_name: str, data_folder: Path | None, output_csv: Path) -> tuple[str, str | None, str]:
     """Read a dataset's question text and gold answer, for reporting."""
-    import pandas as pd
-
     if data_folder is not None:
         src = data_folder / f"{dataset_name}.csv"
         if src.exists():
@@ -201,8 +199,6 @@ def output_csv_needs_rerun(csv_path: Path) -> bool:
     reports a truncated run as final. Errs toward re-running, since redoing
     finished work costs time while keeping a partial result costs correctness.
     """
-    import pandas as pd
-
     try:
         df = read_csv_frame(csv_path)
         if "Retrieved_Context" not in df.columns or len(df) == 0:

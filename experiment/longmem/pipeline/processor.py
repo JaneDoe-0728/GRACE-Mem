@@ -20,7 +20,6 @@ Shared across datasets:
 
 import gc
 import logging
-import os
 import pandas as pd
 from pathlib import Path
 from typing import Any, Optional, Dict, List, Set
@@ -63,7 +62,6 @@ from grace_mem.utils.error_analysis import (
     append_pretty_block,
     build_top_miss_snapshot,
     coerce_float,
-    compact_json,
     derive_anomaly_flags,
     derive_drop_reasons,
     derive_failure_type,
@@ -751,7 +749,7 @@ class MultiDatasetProcessor:
         self.current_retriever = self._build_retriever(config)
         print("[SPLIT] Reopened VDB manager and Retriever on the validated split index")
 
-    def _teardown_dataset(self, config: DatasetConfig):
+    def _teardown_dataset(self, _config: DatasetConfig):
         """Clean up after processing dataset"""
         log_dir = getattr(self, "current_log_dir", None)
         cleanup_error: Exception | None = None

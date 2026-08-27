@@ -767,7 +767,7 @@ def refine_context(
             _t0 = time.perf_counter()
             resp = llm.chat(messages=messages, temperature=0.0, max_tokens=512)
             diag = _resp_diag(resp)
-            raw_reply, reply, cmd, source = _parse_response(resp)
+            _, reply, cmd, source = _parse_response(resp)
             if source:
                 diag["command_source"] = source
             messages.append({
@@ -842,7 +842,7 @@ def refine_context(
                     verified_sids=verified_sids,
                     vector_candidate_sids=vector_candidate_sids,
                     question=question, question_date=question_date, category=category,
-                    llm=llm, p=p, artifact_dir=artifact_dir, trace=trace,
+                    llm=llm, p=p, trace=trace,
                 )
             trace["fallback"] = "no_final"
             trace["verified_sids"] = corpus.normalize_sids(list(verified_sids))
@@ -1076,7 +1076,6 @@ def finalize_from_raw(
     category: str | None,
     llm,
     p: dict,
-    artifact_dir,
     trace: dict,
 ) -> tuple[str, dict]:
     """The v1 back half of the pipeline (provenance gate -> filter_fetch ->

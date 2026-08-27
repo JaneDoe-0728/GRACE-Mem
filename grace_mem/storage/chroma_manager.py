@@ -19,7 +19,7 @@ real time at startup.
 
 from pathlib import Path
 import logging
-import os, shutil, threading
+import os, threading
 from typing import Optional
 
 from grace_mem.storage.chroma_vdb import EntitiesVDB, RelationshipsVDB, SummariesVDB

@@ -570,7 +570,7 @@ def main(argv: list[str] | None = None, *, default_source_roles: str = "all") ->
 
     total_processed = total_skipped = 0
 
-    for dir_name, category in _DIR_TO_CATEGORY.items():
+    for dir_name in _DIR_TO_CATEGORY:
         if args.category and dir_name != args.category:
             continue
         cat_dir = output_dir / dir_name

@@ -17,7 +17,7 @@ disappears from those reports.
 """
 
 import logging
-import os, time, json, requests
+import os, time, requests
 from pathlib import Path
 from typing import Any, Iterator
 from dotenv import load_dotenv

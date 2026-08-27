@@ -6,7 +6,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 if __package__ in (None, ""):
     repo_root = Path(__file__).resolve().parents[3]
