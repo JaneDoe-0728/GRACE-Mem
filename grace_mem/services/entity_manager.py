@@ -22,24 +22,27 @@ split entity leaves both halves retrievable, while a wrong merge destroys
 information irreversibly.
 """
 
-import time
 import logging
 import threading
-from dataclasses import dataclass
+import time
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
-from grace_mem.utils.common import (
-    tokenize_en,
-    canonical_entity_id,
-    _entity_key,
-    _parse_entity_ops_block,
-    canonicalize_entity_type_label,
-)
-from grace_mem.llm.prompts.entity_ops import ENTITY_OPS_RULES_V2, ENTITY_OPS_FEW_SHOT
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+
+from grace_mem.llm.prompts.entity_ops import ENTITY_OPS_FEW_SHOT, ENTITY_OPS_RULES_V2
 from grace_mem.llm.token_tracking import token_tracker
 from grace_mem.storage import build_id_to_meta_maps
+from grace_mem.utils.common import (
+    _entity_key,
+    _parse_entity_ops_block,
+    canonical_entity_id,
+    canonicalize_entity_type_label,
+    tokenize_en,
+)
 from grace_mem.utils.logger_config import make_module_jlog
-import numpy as np
 
 
 @dataclass
@@ -101,7 +104,7 @@ class RateLimiter:
             self.calls.append(time.time())
 
 
-def _classify_entity_action(action: Any) -> Optional[str]:
+def _classify_entity_action(action: Any) -> str | None:
     """Return the normalized action type when the input contains ADD or UPDATE."""
     action_text = str(action or "").strip().upper()
     if "UPDATE" in action_text:
@@ -111,7 +114,7 @@ def _classify_entity_action(action: Any) -> Optional[str]:
     return None
 
 
-def _normalize_entity_action(action: Optional[str], target_id: Any, valid_ids: set[Any]) -> Tuple[str, Any]:
+def _normalize_entity_action(action: str | None, target_id: Any, valid_ids: set[Any]) -> tuple[str, Any]:
     """Force an adjudication verdict into a safe (action, target) pair.
 
     The model can return an UPDATE naming an id that was never a candidate --
@@ -128,10 +131,9 @@ def _normalize_entity_action(action: Optional[str], target_id: Any, valid_ids: s
     """
     if not action:
         return "ADD", None
-    if action == "UPDATE":
-        if not target_id or target_id not in valid_ids:
-            target_id = next(iter(valid_ids)) if len(valid_ids) == 1 else None
-            action = "UPDATE" if target_id else "ADD"
+    if action == "UPDATE" and (not target_id or target_id not in valid_ids):
+        target_id = next(iter(valid_ids)) if len(valid_ids) == 1 else None
+        action = "UPDATE" if target_id else "ADD"
     if action == "ADD":
         target_id = None
     return action, target_id
@@ -151,7 +153,7 @@ class EntityOpsProcessor:
         self.config = config or EntityOpsConfig()
         self.rate_limiter = RateLimiter(self.config.rate_limit_per_minute)
 
-    def process_batch(self, entities: List["EntityInput"], similar_map: "SimilarMap") -> "EntityOpsBatchResult":
+    def process_batch(self, entities: list["EntityInput"], similar_map: "SimilarMap") -> "EntityOpsBatchResult":
         """Adjudicate every entity in the batch concurrently.
 
         Results are written back by input index, not appended as futures
@@ -230,7 +232,7 @@ class EntityOpsProcessor:
         desc = entity.get("entity_description", "")
         return name, type_val, desc
 
-    def _build_prompt(self, name: str, type_val: str, desc: str, candidates: List["VDBSearchHit"]) -> str:
+    def _build_prompt(self, name: str, type_val: str, desc: str, candidates: list["VDBSearchHit"]) -> str:
         """Build the entity-op prompt including any similar-entity candidates."""
         lines = [f"[INPUT] name={name} | type={type_val} | desc={desc}"]
         if candidates:
@@ -252,7 +254,7 @@ class EntityOpsProcessor:
         print(f"Built prompt for entity '{name}':\n{prompt_block}\n")
         return f"{ENTITY_OPS_RULES_V2}\n\n{ENTITY_OPS_FEW_SHOT}\n=== SINGLE ENTITY ===\n{prompt_block}"
 
-    def _validate_result(self, parsed: "EntityOp", entity: "EntityInput", candidates: List["VDBSearchHit"]) -> "EntityOp":
+    def _validate_result(self, parsed: "EntityOp", entity: "EntityInput", candidates: list["VDBSearchHit"]) -> "EntityOp":
         """Normalize raw LLM output into a safe ADD or UPDATE entity operation."""
         name, type_val, desc = self._extract_entity_info(entity)
         action = _classify_entity_action(parsed.get("action"))
@@ -293,15 +295,15 @@ class EntityOpsProcessor:
 _jlog = make_module_jlog(name="grace_mem.EntityManager", filename="kg_ingestor.jsonl")
 _log = logging.getLogger(__name__)
 
-Meta = Dict[str, Any]
-EntityInput = Dict[str, Any]
-EntityOp = Dict[str, Any]
-EntityOpsBatchResult = Dict[str, List[EntityOp]]
-EntityLike = Union[EntityInput, Any]
-KeyNameType = Tuple[str, str]
-VDBSearchHit = Tuple[Meta, float]
-KeyNameTypeDesc = Tuple[str, str, str]  # (name, type, desc)
-SimilarMap = Dict[KeyNameType, List[VDBSearchHit]]
+Meta = dict[str, Any]
+EntityInput = dict[str, Any]
+EntityOp = dict[str, Any]
+EntityOpsBatchResult = dict[str, list[EntityOp]]
+EntityLike = EntityInput | Any
+KeyNameType = tuple[str, str]
+VDBSearchHit = tuple[Meta, float]
+KeyNameTypeDesc = tuple[str, str, str]  # (name, type, desc)
+SimilarMap = dict[KeyNameType, list[VDBSearchHit]]
 _TEMPORAL_ANCHOR_TYPES = {"date", "time", "timespan"}
 
 class EntityManager:
@@ -315,9 +317,9 @@ class EntityManager:
         embedder: Any,
         mgr: Any,
         provenance: Any,
-        global_cache: Dict[str, Any],
-        processed_ent_map: Dict[str, Meta],
-        processed_ent_full_map: Dict[KeyNameTypeDesc, Meta],
+        global_cache: dict[str, Any],
+        processed_ent_map: dict[str, Meta],
+        processed_ent_full_map: dict[KeyNameTypeDesc, Meta],
     ) -> None:
         """Store entity persistence dependencies and processed-entity caches."""
         self._embedder = embedder
@@ -359,9 +361,9 @@ class EntityManager:
         type_str = canonicalize_entity_type_label(type_str)
         return (name or "").strip(), (type_str or "").strip(), (desc or "").strip()
 
-    def normalize_entities(self, entities: Iterable[EntityLike]) -> List[EntityInput]:
+    def normalize_entities(self, entities: Iterable[EntityLike]) -> list[EntityInput]:
         """Convert mixed entity inputs into the canonical dict representation."""
-        out: List[EntityInput] = []
+        out: list[EntityInput] = []
         for e in entities or []:
             name, type_str, desc = self._to_name_type_desc(e)
             if not name:
@@ -375,14 +377,14 @@ class EntityManager:
         """Return whether the entity type is a temporal anchor type."""
         return (type_str or "").strip().lower() in _TEMPORAL_ANCHOR_TYPES
 
-    def _find_exact_temporal_candidates(self, name: str, type_str: str) -> List[VDBSearchHit]:
+    def _find_exact_temporal_candidates(self, name: str, type_str: str) -> list[VDBSearchHit]:
         """Return exact-name candidates for temporal anchors from in-memory caches.
 
         Temporal anchors are intentionally conservative: they should only merge
         when both entity type and canonical entity_name match exactly.
         """
         key = _entity_key(name, type_str)
-        candidates: List[VDBSearchHit] = []
+        candidates: list[VDBSearchHit] = []
         seen_ids: set[str] = set()
 
         direct_sources = [
@@ -461,7 +463,7 @@ class EntityManager:
 
         # --- Batch vector search: one VDB query for all N entities ---
         _t_vec_start = time.time()
-        _batch_vec_results: Optional[List] = None
+        _batch_vec_results: list | None = None
         try:
             _batch_vec_results = ent_vdb.batch_search(vecs[search_indexes], top_k=top_k, threshold=threshold)
         except Exception as _batch_exc:
@@ -483,7 +485,7 @@ class EntityManager:
             # -------------------------------
             # BM25 branch (handled first)   # MODIFIED
             # -------------------------------
-            bm25_list: List[Tuple[Dict[str, Any], float]] = []
+            bm25_list: list[tuple[dict[str, Any], float]] = []
             bm25_ids = set()
 
             if bm25 and metas:
@@ -502,7 +504,7 @@ class EntityManager:
 
                     idxs = list(idxs)[::-1]
 
-                    bm25_best: Dict[str, Tuple[float, int]] = {}
+                    bm25_best: dict[str, tuple[float, int]] = {}
 
                     for idx in idxs:
                         meta_i = metas[idx]
@@ -543,7 +545,7 @@ class EntityManager:
                     i, time.time() - _t_single_start,
                 )
 
-            vec_list: List[Tuple[Dict[str, Any], float]] = []
+            vec_list: list[tuple[dict[str, Any], float]] = []
             vec_ids = set()
 
             for meta, sim in vec_hits:
@@ -562,7 +564,7 @@ class EntityManager:
             # -------------------------------
             # Fuse the results: BM25 -> Vector
             # -------------------------------
-            merged: List[Tuple[Dict[str, Any], float]] = []
+            merged: list[tuple[dict[str, Any], float]] = []
             merged.extend(bm25_list)
             merged.extend(vec_list)
 
@@ -570,7 +572,7 @@ class EntityManager:
 
         return out
     
-    def apply_ops(self, ops_results: Dict[str, Any], provenance: Dict[str, Any] | None = None, *, request_id: str = "UNKNOWN") -> Tuple[Dict[KeyNameType, Meta], Dict[KeyNameType, Meta], Dict[str, int]]:
+    def apply_ops(self, ops_results: dict[str, Any], provenance: dict[str, Any] | None = None, *, request_id: str = "UNKNOWN") -> tuple[dict[KeyNameType, Meta], dict[KeyNameType, Meta], dict[str, int]]:
         """
         - read every action in ops_results['results']
         - ADD: build a new meta, embed it, write it to the VDB, refresh the
@@ -581,16 +583,23 @@ class EntityManager:
         """
         ent_id2meta, _ = build_id_to_meta_maps(self._global_cache)
         added = updated = 0
-        texts: List[str] = []
-        metas: List[Meta] = []
-        entity_idx: Dict[KeyNameType, Meta] = {}
-        input2resolved: Dict[KeyNameType, Meta] = {}
+        texts: list[str] = []
+        metas: list[Meta] = []
+        entity_idx: dict[KeyNameType, Meta] = {}
+        input2resolved: dict[KeyNameType, Meta] = {}
 
         for r in (ops_results or {}).get("results", []):
             in_key: KeyNameType = (r.get("input_name", ""), r.get("input_type", ""))
             action = _classify_entity_action(r.get("action"))
 
-            def _add(final_name: str, final_type: str, final_desc: str) -> None:
+            def _add(
+                final_name: str,
+                final_type: str,
+                final_desc: str,
+                *,
+                _record: dict[str, Any] = r,
+                _input_key: KeyNameType = in_key,
+            ) -> None:
                 """Stage a new canonical entity for cache and vector-store insertion."""
                 nonlocal added
                 final_type = canonicalize_entity_type_label(final_type)
@@ -598,7 +607,7 @@ class EntityManager:
                 key_nt = _entity_key(final_name, final_type)
                 meta = {"id": eid, "name": final_name, "type": final_type,
                         "description": final_desc, "prov": self._prov.merge_prov(None, provenance)} # provenance: entity related conversation
-                temporal_meta = r.get("entity_metadata")
+                temporal_meta = _record.get("entity_metadata")
                 if temporal_meta:
                     meta["temporal"] = temporal_meta.get("temporal", temporal_meta)
                 texts.append(f"{final_name} [type={final_type}] {final_desc}")
@@ -606,7 +615,7 @@ class EntityManager:
                 self._processed[key_nt] = meta
                 self._processed_full[(final_name, final_type, final_desc)] = meta
                 entity_idx[key_nt] = meta
-                input2resolved[in_key] = meta
+                input2resolved[_input_key] = meta
                 added += 1
             
             # add operation

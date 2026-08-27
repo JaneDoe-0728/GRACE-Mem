@@ -32,13 +32,15 @@ from experiment.common.reproducibility import (
     write_reproducibility_file,
 )
 from experiment.common.run_metadata import namespace_to_dict, write_run_metadata
+from experiment.locomo.analysis.aggregate import maybe_aggregate_run
+from experiment.locomo.helpers.run_hooks import (
+    _refresh_system,
+    _worker_paths_for_sample,
+)
+from experiment.locomo.models import RunConfig, SamplePlan
+from experiment.locomo.pipeline.worker import run_worker
 from experiment.locomo.utils.io import ensure_dir
 from experiment.locomo.utils.log import log_event
-from experiment.locomo.models import RunConfig, SamplePlan
-from experiment.locomo.analysis.aggregate import maybe_aggregate_run
-from experiment.locomo.helpers.run_hooks import _refresh_system, _worker_paths_for_sample
-from experiment.locomo.pipeline.worker import run_worker
-
 
 _STATELESS_RETRIEVAL_MODES = {
     "gold_summary_only",
@@ -91,10 +93,10 @@ def _write_run_metadata(
 
 def _build_config(args) -> RunConfig:
     """Resolve paths and build the immutable standard LoCoMo run config."""
+    from experiment.locomo.cli import parse_sample_ids, resolve_stages
     from experiment.locomo.helpers.dataset import (
         resolve_dataset_path,
     )
-    from experiment.locomo.cli import parse_sample_ids, resolve_stages
 
     selected_stages = resolve_stages(
         getattr(args, "stages", None),
@@ -189,7 +191,7 @@ def run_orchestrator(args) -> None:
                 dataset="locomo",
                 stages=sorted(selected_stages),
             )
-            result = subprocess.run(cmd)
+            result = subprocess.run(cmd, check=False)
             success = result.returncode == 0
             if not success:
                 log_event("ERROR", "Worker exited with non-zero status", sample=sample_index, exit_code=result.returncode)

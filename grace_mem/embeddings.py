@@ -11,13 +11,14 @@ the codebase; instantiating it here means the weights are paid for once per
 process instead of once per caller.
 """
 
-from typing import Sequence
-import numpy as np
-from pathlib import Path
 import os
+from collections.abc import Sequence
+from pathlib import Path
+
+import numpy as np
+import torch
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
-import torch
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(_REPO_ROOT / ".env")

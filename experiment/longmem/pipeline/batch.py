@@ -9,17 +9,26 @@ Usage:
 """
 
 import argparse
-from pathlib import Path
 import os
 import sys
+from pathlib import Path
 
-from experiment.longmem.pipeline.processor import MultiDatasetProcessor
-from experiment.longmem.helpers.args import add_child_args, add_data_args, add_run_args, resolve_stages
-from experiment.longmem.helpers.datasets import discover_csv_datasets, resolve_child_datasets, select_datasets
-from experiment.longmem.models import DatasetConfig
 from experiment.common.run_metadata import namespace_to_dict, write_run_metadata
-from experiment.longmem.utils.io import write_json_file
 from experiment.experiment_config import INGEST_PARAMS, RETRIEVAL_PARAMS
+from experiment.longmem.helpers.args import (
+    add_child_args,
+    add_data_args,
+    add_run_args,
+    resolve_stages,
+)
+from experiment.longmem.helpers.datasets import (
+    discover_csv_datasets,
+    resolve_child_datasets,
+    select_datasets,
+)
+from experiment.longmem.models import DatasetConfig
+from experiment.longmem.pipeline.processor import MultiDatasetProcessor
+from experiment.longmem.utils.io import write_json_file
 
 
 def _parse_type_filter(value: list[str] | str | None) -> list[str] | None:
@@ -277,12 +286,12 @@ def main(argv: list[str] | None = None):
             write_json_file(summary_path, results)
 
             print(f"\n{'='*60}")
-            print(f"All processing complete!")
+            print("All processing complete!")
             print(f"{'='*60}")
             print(f"Output directory: {processor.base_output_dir}")
             print(f"Summary file: {summary_path}")
             print(f"Stages: {', '.join(selected_stages)}")
-            print(f"\nResults:")
+            print("\nResults:")
 
             for i, res in enumerate(results, start=1):
                 if "error" in res:

@@ -11,8 +11,9 @@ values, so downstream aggregation never has to special-case a skipped stage.
 """
 
 import dataclasses
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 
 def skipped_judge_stats(*, exclude_adversarial: bool) -> dict[str, Any]:

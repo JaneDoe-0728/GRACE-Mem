@@ -21,10 +21,10 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from grace_mem.llm import LLMClient
 from experiment.agent_filter.corpus import load_corpus
 from experiment.agent_filter.harness import refine_context
 from experiment.common.evaluation.oracle import longmem_gold_sids
+from grace_mem.llm import LLMClient
 
 DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
 
@@ -72,7 +72,7 @@ def main() -> None:
     args = ap.parse_args()
 
     cdir = DATA_ROOT / args.category
-    src = (cdir / f"{args.name}.csv") if args.name else sorted(cdir.glob("*.csv"))[0]
+    src = (cdir / f"{args.name}.csv") if args.name else min(cdir.glob("*.csv"))
     df = pd.read_csv(src)
     question = str(df["question"].dropna().iloc[0])
     qdate = str(df["question_date"].dropna().iloc[0]) if df["question_date"].notna().any() else None
@@ -84,7 +84,7 @@ def main() -> None:
 
     from experiment.experiment_config import GREP_AGENT_PARAMS
     params = {**GREP_AGENT_PARAMS, "grep_agent_mode": args.mode}
-    refined, trace = refine_context(
+    _refined, trace = refine_context(
         question=question,
         context=context,
         csv_path=src,

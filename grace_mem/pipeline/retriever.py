@@ -3,33 +3,37 @@ Refactored Retriever that uses modular components from retrieval/ folder.
 """
 import os
 import uuid
-from typing import Any, Optional, Dict, List, Tuple
 from dataclasses import dataclass
+from typing import Any, Optional
+
 import numpy as np
 
-from grace_mem.llm.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
 from grace_mem.llm.prompts.hyde_prompting import HYDE_SYSTEM, HYDE_USER
-from grace_mem.utils.common import KeywordExtractionResult
-from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
-from grace_mem.utils.query_time_parser import parse_query_time
-from grace_mem.utils.temporal import build_time_context, rewrite_temporal_text, time_rewrite_ablation_enabled
-from grace_mem.storage import build_id_to_meta_maps
-
-from grace_mem.utils.raw_context_lookup import RawContextLookup
+from grace_mem.llm.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
 
 # Import modular components
 from grace_mem.pipeline.retrieval_steps import (
-    EntityRelationshipSearcher,
-    TemporalRelevanceCalculator,
-    EvidenceBuilder,
     ContextFilter,
-    SpreadingActivationEngine,
+    EntityRelationshipSearcher,
+    EvidenceBuilder,
     SAConfig,
+    SpreadingActivationEngine,
     SubgraphPageRank,
+    TemporalRelevanceCalculator,
 )
-from grace_mem.pipeline.retrieval_steps.summary_scoring import ScoringWeights
 from grace_mem.pipeline.retrieval_steps.narrowing import NarrowingModule
+from grace_mem.pipeline.retrieval_steps.summary_scoring import ScoringWeights
 from grace_mem.pipeline.retrieval_steps.temporal import date_within_coarse_range
+from grace_mem.storage import build_id_to_meta_maps
+from grace_mem.utils.common import KeywordExtractionResult
+from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
+from grace_mem.utils.query_time_parser import parse_query_time
+from grace_mem.utils.raw_context_lookup import RawContextLookup
+from grace_mem.utils.temporal import (
+    build_time_context,
+    rewrite_temporal_text,
+    time_rewrite_ablation_enabled,
+)
 
 _jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")
 _trace_jlog = make_module_jlog(name="grace_mem.Retriever.Trace", filename="kg_retrieval_trace.jsonl")
@@ -47,8 +51,8 @@ def _env_flag_enabled(name: str) -> bool:
 
 def _maybe_rewrite_retrieval_question(
     question: str,
-    query_time: Optional[str],
-    request_id: Optional[str],
+    query_time: str | None,
+    request_id: str | None,
 ) -> str:
     """Step 0b: rewrite relative temporal expressions for retrieval only."""
     if time_rewrite_ablation_enabled():
@@ -150,14 +154,14 @@ _KEYWORD_CACHE_PATH = os.environ.get(
 )
 _KEYWORD_CACHE_DISABLED = os.environ.get("KG_KEYWORD_CACHE_DISABLE", "") == "1"
 _keyword_cache_lock = _threading.Lock()
-_keyword_cache: Optional[Dict[str, Dict[str, List[str]]]] = None
+_keyword_cache: dict[str, dict[str, list[str]]] | None = None
 
 
 def _keyword_cache_key(prompt: str) -> str:
     return _hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
 
-def _load_keyword_cache() -> Dict[str, Dict[str, List[str]]]:
+def _load_keyword_cache() -> dict[str, dict[str, list[str]]]:
     """Load the on-disk keyword-extraction cache, if one exists.
 
     Keyword extraction is an LLM call per question, and evaluation re-asks the
@@ -351,7 +355,7 @@ class Retriever:
     # Class-level default configuration
     DEFAULTS = RetrieverConfig()
 
-    def __init__(self, *, llm: Any, graph: Any, mgr: Any, embed: Any, cache: Dict[str, Any], config: Optional[Dict | RetrieverConfig] = None) -> None:
+    def __init__(self, *, llm: Any, graph: Any, mgr: Any, embed: Any, cache: dict[str, Any], config: dict | RetrieverConfig | None = None) -> None:
         """
         Initialize retriever with modular components.
 
@@ -438,7 +442,7 @@ class Retriever:
             config={k: v for k, v in self.cfg.__dict__.items()},
         )
 
-    def _entity_name_by_id(self, entity_id: Optional[str]) -> str:
+    def _entity_name_by_id(self, entity_id: str | None) -> str:
         """Resolve one entity ID into a human-readable display name."""
         if not entity_id:
             return "?"
@@ -446,7 +450,7 @@ class Retriever:
         meta = ent_id2meta.get(entity_id, {}) or {}
         return meta.get("name") or entity_id
 
-    def _entity_names_from_ids(self, entity_ids: List[str]) -> List[str]:
+    def _entity_names_from_ids(self, entity_ids: list[str]) -> list[str]:
         """Resolve multiple entity IDs into deduplicated display names."""
         ent_id2meta, _ = build_id_to_meta_maps(self.cache)
         names: list[str] = []
@@ -459,7 +463,7 @@ class Retriever:
                 seen.add(name)
         return names
 
-    def _relationship_names_from_ids(self, relationship_ids: List[str]) -> List[str]:
+    def _relationship_names_from_ids(self, relationship_ids: list[str]) -> list[str]:
         """Resolve multiple relationship IDs into deduplicated readable labels."""
         ent_id2meta, rel_id2meta = build_id_to_meta_maps(self.cache)
         labels: list[str] = []
@@ -488,7 +492,7 @@ class Retriever:
                 seen.add(label)
         return labels
 
-    def _entity_names_from_relationship_ids(self, relationship_ids: List[str]) -> List[str]:
+    def _entity_names_from_relationship_ids(self, relationship_ids: list[str]) -> list[str]:
         """Resolve relationship IDs into readable endpoint entity names."""
         ent_id2meta, rel_id2meta = build_id_to_meta_maps(self.cache)
         names: list[str] = []
@@ -514,7 +518,7 @@ class Retriever:
         return names
 
     @staticmethod
-    def _dedupe_preserve_order(items: List[str]) -> List[str]:
+    def _dedupe_preserve_order(items: list[str]) -> list[str]:
         """Deduplicate strings while preserving the original order."""
         out: list[str] = []
         seen: set[str] = set()
@@ -526,14 +530,14 @@ class Retriever:
             seen.add(value)
         return out
 
-    def _relationship_name_from_edge(self, edge: Dict[str, Any]) -> str:
+    def _relationship_name_from_edge(self, edge: dict[str, Any]) -> str:
         """Render one edge-subgraph record into a readable label."""
         src_name = edge.get("source_name") or self._entity_name_by_id(edge.get("source_id"))
         tgt_name = edge.get("target_name") or self._entity_name_by_id(edge.get("target_id"))
         desc = (edge.get("rel_desc") or edge.get("description") or "").strip()
         return f"{src_name} -> {tgt_name}" if not desc else f"{src_name} -> {tgt_name} | {desc}"
 
-    def _entity_names_from_node_subgraph(self, node_subgraph: Dict[str, Dict]) -> List[str]:
+    def _entity_names_from_node_subgraph(self, node_subgraph: dict[str, dict]) -> list[str]:
         """Collect all node names present in a node subgraph."""
         names: list[str] = []
         for node_id, payload in (node_subgraph or {}).items():
@@ -543,7 +547,7 @@ class Retriever:
                 names.append(neighbor.get("neighbor_name") or neighbor.get("neighbor_id"))
         return self._dedupe_preserve_order(names)
 
-    def _relationship_names_from_node_subgraph(self, node_subgraph: Dict[str, Dict]) -> List[str]:
+    def _relationship_names_from_node_subgraph(self, node_subgraph: dict[str, dict]) -> list[str]:
         """Collect all edge labels present in a node subgraph."""
         labels: list[str] = []
         for node_id, payload in (node_subgraph or {}).items():
@@ -555,7 +559,7 @@ class Retriever:
                 labels.append(f"{src_name} -> {tgt_name}" if not desc else f"{src_name} -> {tgt_name} | {desc}")
         return self._dedupe_preserve_order(labels)
 
-    def _entity_names_from_edge_subgraph(self, edge_subgraph: List[Dict[str, Any]]) -> List[str]:
+    def _entity_names_from_edge_subgraph(self, edge_subgraph: list[dict[str, Any]]) -> list[str]:
         """Collect all endpoint entity names present in an edge subgraph."""
         names: list[str] = []
         for edge in edge_subgraph or []:
@@ -563,7 +567,7 @@ class Retriever:
             names.append(edge.get("target_name") or self._entity_name_by_id(edge.get("target_id")))
         return self._dedupe_preserve_order(names)
 
-    def _relationship_names_from_edge_subgraph(self, edge_subgraph: List[Dict[str, Any]]) -> List[str]:
+    def _relationship_names_from_edge_subgraph(self, edge_subgraph: list[dict[str, Any]]) -> list[str]:
         """Collect all readable edge labels present in an edge subgraph."""
         return self._dedupe_preserve_order(
             [self._relationship_name_from_edge(edge) for edge in (edge_subgraph or [])]
@@ -574,12 +578,12 @@ class Retriever:
         *,
         step: str,
         stage: str,
-        entity_names: List[str],
-        relationship_names: List[str],
-        previous: Optional[Dict[str, Any]] = None,
+        entity_names: list[str],
+        relationship_names: list[str],
+        previous: dict[str, Any] | None = None,
         skipped: bool = False,
-        reason: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        reason: str | None = None,
+    ) -> dict[str, Any]:
         """Build one readable stage snapshot with additions/removals from the previous stage."""
         current_entities = self._dedupe_preserve_order(entity_names)
         current_relationships = self._dedupe_preserve_order(relationship_names)
@@ -606,7 +610,7 @@ class Retriever:
         }
 
     @staticmethod
-    def _format_trace_names(names: List[str]) -> str:
+    def _format_trace_names(names: list[str]) -> str:
         """Render a readable names list for the pretty waterfall trace."""
         if not names:
             return "-"
@@ -615,16 +619,16 @@ class Retriever:
     def _format_retrieval_stage_trace_text(
         self,
         *,
-        request_id: Optional[str],
+        request_id: str | None,
         question: str,
-        low_level_keywords: List[str],
-        high_level_keywords: List[str],
-        local_branch: List[Dict[str, Any]],
-        global_branch: List[Dict[str, Any]],
-        merged_branch: List[Dict[str, Any]],
+        low_level_keywords: list[str],
+        high_level_keywords: list[str],
+        local_branch: list[dict[str, Any]],
+        global_branch: list[dict[str, Any]],
+        merged_branch: list[dict[str, Any]],
         graph_override: bool,
-        stop_reason: Optional[str],
-        elapsed_sec: Optional[float],
+        stop_reason: str | None,
+        elapsed_sec: float | None,
     ) -> str:
         """Format one retrieval request as a readable waterfall trace block."""
         lines = [
@@ -639,7 +643,7 @@ class Retriever:
             "",
         ]
 
-        def append_branch(branch_name: str, stages: List[Dict[str, Any]]) -> None:
+        def append_branch(branch_name: str, stages: list[dict[str, Any]]) -> None:
             """Record one retrieval branch's state into the trace.
 
             What the differential analysis in `derive_drop_reasons` later diffs: each
@@ -691,16 +695,16 @@ class Retriever:
     def _emit_retrieval_stage_trace(
         self,
         *,
-        request_id: Optional[str],
+        request_id: str | None,
         question: str,
-        low_level_keywords: List[str],
-        high_level_keywords: List[str],
-        local_branch: List[Dict[str, Any]],
-        global_branch: List[Dict[str, Any]],
-        merged_branch: List[Dict[str, Any]],
+        low_level_keywords: list[str],
+        high_level_keywords: list[str],
+        local_branch: list[dict[str, Any]],
+        global_branch: list[dict[str, Any]],
+        merged_branch: list[dict[str, Any]],
         graph_override: bool,
-        stop_reason: Optional[str] = None,
-        elapsed_sec: Optional[float] = None,
+        stop_reason: str | None = None,
+        elapsed_sec: float | None = None,
     ) -> None:
         """Write one single-file retrieval waterfall trace for the current request."""
         self._last_stage_trace = {
@@ -746,9 +750,9 @@ class Retriever:
         )
         _trace_pretty_log.info(waterfall_text)
 
-    def generate_query_keywords(self, question: str, request_id: Optional[str] = None,
+    def generate_query_keywords(self, question: str, request_id: str | None = None,
                                 max_retries: int = 5,
-                                retrieval_guidance: Optional[str] = None) -> KeywordExtractionResult:
+                                retrieval_guidance: str | None = None) -> KeywordExtractionResult:
         """
         Extract local/global keywords from query.
         Retries up to max_retries times only if the LLM output is unparseable.
@@ -872,7 +876,7 @@ class Retriever:
         )
         return KeywordExtractionResult()
 
-    def generate_hyde_vector(self, question: str, request_id: Optional[str] = None):
+    def generate_hyde_vector(self, question: str, request_id: str | None = None):
         """
         HyDE: generate hypothetical answer-summary sentences for the question,
         embed them, and return a single normalized vector (mean of sentence
@@ -909,20 +913,20 @@ class Retriever:
     def assemble_context_from_query(
         self,
         question: str,
-        low_level_keywords: List[str],
-        high_level_keywords: List[str],
-        request_id: Optional[str] = None,
-        ent_topk: Optional[int] = None,
-        rel_topk: Optional[int] = None,
-        ent_threshold: Optional[float] = None,
-        rel_threshold: Optional[float] = None,
-        filter_ent_topk: Optional[int] = None,
-        filter_rel_topk: Optional[int] = None,
-        filter_ent_threshold: Optional[float] = None,
-        filter_rel_threshold: Optional[float] = None,
-        query_time: Optional[str] = None,
+        low_level_keywords: list[str],
+        high_level_keywords: list[str],
+        request_id: str | None = None,
+        ent_topk: int | None = None,
+        rel_topk: int | None = None,
+        ent_threshold: float | None = None,
+        rel_threshold: float | None = None,
+        filter_ent_topk: int | None = None,
+        filter_rel_topk: int | None = None,
+        filter_ent_threshold: float | None = None,
+        filter_rel_threshold: float | None = None,
+        query_time: str | None = None,
         _graph: Any = None,
-    ) -> Tuple[List[Dict], List[Dict], str, np.ndarray]:
+    ) -> tuple[list[dict], list[dict], str, np.ndarray]:
         """
         Assemble KG context from query using modular components.
 
@@ -942,19 +946,19 @@ class Retriever:
 
         # Resolve graph: caller may supply a local graph override for adaptive pass-2
         graph = _graph if _graph is not None else self.graph
-        local_branch: List[Dict[str, Any]] = []
-        global_branch: List[Dict[str, Any]] = []
-        merged_branch: List[Dict[str, Any]] = []
+        local_branch: list[dict[str, Any]] = []
+        global_branch: list[dict[str, Any]] = []
+        merged_branch: list[dict[str, Any]] = []
 
         def append_trace(
-            branch: List[Dict[str, Any]],
+            branch: list[dict[str, Any]],
             *,
             step: str,
             stage: str,
-            entity_names: List[str],
-            relationship_names: List[str],
+            entity_names: list[str],
+            relationship_names: list[str],
             skipped: bool = False,
-            reason: Optional[str] = None,
+            reason: str | None = None,
         ) -> None:
             """Append one step record to the retrieval trace."""
             previous = branch[-1] if branch else None
@@ -970,7 +974,7 @@ class Retriever:
                 )
             )
 
-        def emit_trace(stop_reason: Optional[str] = None) -> None:
+        def emit_trace(stop_reason: str | None = None) -> None:
             """Write the accumulated trace out as a structured log event."""
             self._emit_retrieval_stage_trace(
                 request_id=request_id,
@@ -1026,12 +1030,12 @@ class Retriever:
 
         # Extract entity IDs and per-source score dicts for RRF
         ent_ids = list({meta["id"] for hits in ent_hits.values() for meta, _ in hits})
-        entity_emb_scores: Dict[str, float] = {
+        entity_emb_scores: dict[str, float] = {
             meta["id"]: float(score)
             for meta, score in ent_hits.get("__vector__", [])
             if meta.get("id")
         }
-        entity_bm25_scores: Dict[str, float] = {}
+        entity_bm25_scores: dict[str, float] = {}
         for source, hits in ent_hits.items():
             if source == "__vector__":
                 continue
@@ -1256,8 +1260,8 @@ class Retriever:
 
         # Extract relationship IDs and per-source score dicts for RRF
         rel_ids = list({meta["id"] for hits in rel_hits.values() for meta, _ in hits})
-        rel_emb_scores: Dict[str, float] = {}
-        rel_endpoint_scores: Dict[str, float] = {}
+        rel_emb_scores: dict[str, float] = {}
+        rel_endpoint_scores: dict[str, float] = {}
         for hits in rel_hits.values():
             for meta, score in hits:
                 rid = meta.get("id")
@@ -1685,9 +1689,9 @@ class Retriever:
 
     def _render_context_text(
         self,
-        entities: List[Dict],
-        relationships: List[Dict],
-        request_id: Optional[str] = None,
+        entities: list[dict],
+        relationships: list[dict],
+        request_id: str | None = None,
     ) -> str:
         """Render entities and relationships into readable context text."""
         timer_render = _StepTimer()
@@ -1754,9 +1758,9 @@ class Retriever:
 
     @staticmethod
     def _compute_overlap_metrics(
-        pass1_ids: List[str],
-        pass2_ids: List[str],
-    ) -> Tuple[int, Optional[float]]:
+        pass1_ids: list[str],
+        pass2_ids: list[str],
+    ) -> tuple[int, float | None]:
         """Return intersection size and Jaccard overlap for unique IDs."""
         pass1 = set(pass1_ids)
         pass2 = set(pass2_ids)
@@ -1770,16 +1774,16 @@ class Retriever:
         self,
         *,
         pass2_triggered: bool,
-        pass1_entity_ids: List[str],
-        pass1_relation_ids: List[str],
-        pass2_entity_ids: Optional[List[str]] = None,
-        pass2_relation_ids: Optional[List[str]] = None,
-        conf_pass1: Optional[float] = None,
-        conf_pass2: Optional[float] = None,
-        conf_final: Optional[float] = None,
-        rewritten_query: Optional[str] = None,
-        adaptive_skip_reason: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        pass1_entity_ids: list[str],
+        pass1_relation_ids: list[str],
+        pass2_entity_ids: list[str] | None = None,
+        pass2_relation_ids: list[str] | None = None,
+        conf_pass1: float | None = None,
+        conf_pass2: float | None = None,
+        conf_final: float | None = None,
+        rewritten_query: str | None = None,
+        adaptive_skip_reason: str | None = None,
+    ) -> dict[str, Any]:
         """Build a stable trace from pre-merge pass results."""
         entity_ids_2 = list(pass2_entity_ids or []) if pass2_triggered else []
         relation_ids_2 = list(pass2_relation_ids or []) if pass2_triggered else []
@@ -1820,11 +1824,11 @@ class Retriever:
         self,
         *,
         question: str,
-        ctx_entities: List[Dict],
-        ctx_rels: List[Dict],
+        ctx_entities: list[dict],
+        ctx_rels: list[dict],
         ctx_text: str,
         query_vec: np.ndarray,
-        request_id: Optional[str],
+        request_id: str | None,
         ent_topk: int,
         rel_topk: int,
         ent_threshold: float,
@@ -1833,8 +1837,8 @@ class Retriever:
         filter_rel_topk: int,
         filter_ent_threshold: float,
         filter_rel_threshold: float,
-        query_time: Optional[str],
-    ) -> Tuple[List[Dict], List[Dict], str, Any]:
+        query_time: str | None,
+    ) -> tuple[list[dict], list[dict], str, Any]:
         """
         Post-retrieval adaptive re-search (pass 2 of at most 2 total).
 
@@ -1848,10 +1852,10 @@ class Retriever:
         LLM used for rewriting: LLM_API / MODEL_NAME (from .env).
         """
         from grace_mem.pipeline.retrieval_steps.adaptive import (
+            build_adaptive_graph,
+            build_adaptive_llm_client,
             compute_confidence,
             rewrite_query,
-            build_adaptive_llm_client,
-            build_adaptive_graph,
         )
         timer_adaptive = _StepTimer()
 
@@ -1938,7 +1942,7 @@ class Retriever:
         try:
             local_graph = build_adaptive_graph()
             _jlog("adaptive_graph_opened", request_id, step="2b")
-        except EnvironmentError as exc:
+        except OSError as exc:
             _jlog("adaptive_graph_error", request_id, step="2b", error=str(exc))
 
         try:
@@ -2040,15 +2044,15 @@ class Retriever:
     def _additive_merge(
         self,
         *,
-        entities_1: List[Dict],
-        rels_1: List[Dict],
-        entities_2: List[Dict],
-        rels_2: List[Dict],
-        request_id: Optional[str],
+        entities_1: list[dict],
+        rels_1: list[dict],
+        entities_2: list[dict],
+        rels_2: list[dict],
+        request_id: str | None,
         conf_1: float,
         conf_2: float,
         query_vec: Any = None,
-    ) -> Tuple[List[Dict], List[Dict], str, float]:
+    ) -> tuple[list[dict], list[dict], str, float]:
         """
         Additive context merge: preserve all pass-1 results and append only
         pass-2 items whose IDs were not already retrieved in pass-1.
@@ -2116,18 +2120,18 @@ class Retriever:
         self,
         question: str,
         *,
-        ent_topk: Optional[int] = None,
-        rel_topk: Optional[int] = None,
-        ent_threshold: Optional[float] = None,
-        rel_threshold: Optional[float] = None,
-        filter_ent_topk: Optional[int] = None,
-        filter_rel_topk: Optional[int] = None,
-        filter_ent_threshold: Optional[float] = None,
-        filter_rel_threshold: Optional[float] = None,
-        summary_topk_per_item: Optional[int] = None,
-        summary_vec_threshold: Optional[float] = None,
-        query_time: Optional[str] = None,
-        top_k: Optional[int] = None,
+        ent_topk: int | None = None,
+        rel_topk: int | None = None,
+        ent_threshold: float | None = None,
+        rel_threshold: float | None = None,
+        filter_ent_topk: int | None = None,
+        filter_rel_topk: int | None = None,
+        filter_ent_threshold: float | None = None,
+        filter_rel_threshold: float | None = None,
+        summary_topk_per_item: int | None = None,
+        summary_vec_threshold: float | None = None,
+        query_time: str | None = None,
+        top_k: int | None = None,
     ) -> str:
         """
         Main entry point: Build complete KG context with evidence.

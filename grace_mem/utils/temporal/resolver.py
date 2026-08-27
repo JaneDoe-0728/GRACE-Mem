@@ -6,8 +6,8 @@ import calendar
 import re
 from datetime import date, datetime, time, timedelta
 
-from .classifier import classify_single_expression
 from . import patterns
+from .classifier import classify_single_expression
 from .types import (
     ResolutionStatus,
     ResolvedTimeRange,

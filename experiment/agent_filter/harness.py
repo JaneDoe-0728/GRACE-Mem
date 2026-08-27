@@ -333,8 +333,8 @@ def _vector_search(
     if not cands:
         return (f"vector {query!r}: 0 hits above threshold. "
                 "Try rephrasing the query, or fall back to GREP with rare literal words.")
-    lines = [f"vector {query!r}: {len(cands)} semantically similar turns "
-             "(NOT verified — check with READ/GREP before including)"]
+    lines = [(f"vector {query!r}: {len(cands)} semantically similar turns "
+             "(NOT verified — check with READ/GREP before including)")]
     for s, sc in cands:
         turns = corpus.resolve(s)
         entry = corpus.display_entry(s, max_chars=200) or "(text unavailable)"
@@ -366,7 +366,7 @@ def _rebuild_context(
     entries: list[str] = []  # sids (pair base or split sid), order-preserving dedup
     seen: set[str] = set()
     for s in final_sids:
-        key = s.rsplit(":", 1)[0] if include_pair and (s.endswith(":u") or s.endswith(":a")) else s
+        key = s.rsplit(":", 1)[0] if include_pair and (s.endswith((":u", ":a"))) else s
         if key not in seen:
             seen.add(key)
             entries.append(key)
@@ -580,7 +580,8 @@ def refine_context(
         vector_candidate_sids: set[str] = set()
         trace["evidence_provenance"] = {}
         from experiment.agent_filter.prompts import (
-            VECTOR_TOOL_BLOCK, _active_hypothesis_block,
+            VECTOR_TOOL_BLOCK,
+            _active_hypothesis_block,
         )
         emit_hyp = bool(int(p.get("grep_agent_emit_hypothesis", 0)))
         system = SYSTEM_PROMPT.format(
@@ -752,11 +753,11 @@ def refine_context(
         final_raw = _run_loop(max_calls)
 
         _salvage_msgs = [
-            "STOP searching. Reply NOW with only one line listing the selected evidence "
+            ("STOP searching. Reply NOW with only one line listing the selected evidence "
             "sids, copied EXACTLY from this list (or ones you found via GREP):\n{seeds}\n"
-            "FINAL <sid> <sid> ...",
-            "Output ONLY the single line below, filled in with sids from this list — "
-            "no other text, no tool calls:\n{seeds}\nFINAL <sid> <sid> ...",
+            "FINAL <sid> <sid> ..."),
+            ("Output ONLY the single line below, filled in with sids from this list — "
+            "no other text, no tool calls:\n{seeds}\nFINAL <sid> <sid> ..."),
         ]
 
         def _ask_final(attempt: int) -> list[str]:

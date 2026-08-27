@@ -100,7 +100,7 @@ def _source_maps(source_csv: Path) -> tuple[set[str], dict[str, str]]:
     if "dialogue_datetime" in df.columns:
         for dt, sess in zip(df["dialogue_datetime"], df["session_id"]):
             dt2sess[str(dt).strip()] = str(sess).strip()
-    gold = {str(s).strip() for s in df.loc[df["has_answer"] == True, "session_id"]}  # noqa: E712
+    gold = {str(s).strip() for s in df.loc[df["has_answer"] == True, "session_id"]}
     return gold, dt2sess
 
 

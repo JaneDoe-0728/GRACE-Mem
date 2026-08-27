@@ -2,11 +2,10 @@
 Temporal relevance calculation using LiCoMemory-style Weibull decay.
 """
 from datetime import date, datetime, timedelta
-from typing import Optional, Tuple
 
-from grace_mem.utils.query_time_parser import parse_query_time
 from grace_mem.services import Provenance
 from grace_mem.utils.logger_config import make_module_jlog
+from grace_mem.utils.query_time_parser import parse_query_time
 
 _jlog = make_module_jlog(name="grace_mem.Retrieval.Temporal", filename="kg_retrieval_temporal.jsonl")
 
@@ -18,10 +17,9 @@ class TemporalRelevanceCalculator:
 
     def __init__(self) -> None:
         """Create the temporal relevance helper."""
-        pass
 
     @staticmethod
-    def parse_dialogue_datetime(dialogue_datetime: str, request_id: Optional[str] = None) -> Optional[datetime]:
+    def parse_dialogue_datetime(dialogue_datetime: str, request_id: str | None = None) -> datetime | None:
         """
         Parse dialogue_datetime in format: "2023/02/18 (Sat) 08:08"
 
@@ -45,7 +43,7 @@ class TemporalRelevanceCalculator:
             return None
 
     @staticmethod
-    def get_newest_dialogue_datetime(prov: dict, request_id: Optional[str] = None) -> Tuple[Optional[str], Optional[datetime]]:
+    def get_newest_dialogue_datetime(prov: dict, request_id: str | None = None) -> tuple[str | None, datetime | None]:
         """
         Extract the newest dialogue_datetime from provenance events.
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Ingest stage: turn LoCoMo conversation sessions into knowledge-graph writes.
 
 Sits between the dataset loaders and `grace_mem`'s Ingestor, reshaping sessions
@@ -8,11 +7,11 @@ The `chunk_turns` setting splits a long session into several ingestion units,
 which bounds how much context one extraction call sees.
 """
 
+import argparse
+import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-import sys
-import argparse
+from typing import Any
 
 import pandas as pd
 
@@ -21,10 +20,12 @@ if __package__ in (None, ""):
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-from experiment.locomo.helpers.dataset import build_session_records_from_json, resolve_dataset_path
-from experiment.locomo.utils.io import load_jsonl_records
 from experiment.experiment_config import INGEST_PARAMS
-
+from experiment.locomo.helpers.dataset import (
+    build_session_records_from_json,
+    resolve_dataset_path,
+)
+from experiment.locomo.utils.io import load_jsonl_records
 
 # ========= Config: edit here =========
 PREV_K = 2
@@ -41,7 +42,7 @@ PUT_SPEAKER_PREFIX = True           # keep "Caroline: ..." in text if present
 CHUNK_TURNS = int(INGEST_PARAMS.get("chunk_turns", 8) or 0)
 
 
-def _iter_dialogue_chunks(dialogue: List[str], chunk_turns: Optional[int] = None):
+def _iter_dialogue_chunks(dialogue: list[str], chunk_turns: int | None = None):
     """Yield (message_id, chunk_lines).
 
     chunk_turns > 0 → consecutive windows of that many turns, message_id = chunk index.
@@ -64,7 +65,7 @@ def load_sessions(
     *,
     sessions_jsonl: str | Path | None = None,
     dataset_json: str | Path | None = None,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Load session records from JSONL or from the dataset JSON."""
     sessions_path = resolve_dataset_path(
         kind="sessions_jsonl",
@@ -85,7 +86,7 @@ def _session_uid(sample_index: Any, session_id: Any, make_uid: bool) -> str:
     return f"{sample_index}__{session_id}" if make_uid else str(session_id)
 
 
-def _build_dialogue_text(dialogue: List[str]) -> str:
+def _build_dialogue_text(dialogue: list[str]) -> str:
     """Join dialogue lines, optionally stripping speaker prefixes per PUT_SPEAKER_PREFIX."""
     if PUT_SPEAKER_PREFIX:
         return DIALOGUE_JOINER.join(dialogue)
@@ -99,11 +100,11 @@ def _build_dialogue_text(dialogue: List[str]) -> str:
 
 
 def sessions_to_one_turn_df(
-    sessions: List[Dict[str, Any]],
+    sessions: list[dict[str, Any]],
     *,
     make_session_uid: bool = True,
-    sample_filter: Optional[int] = None,
-    chunk_turns: Optional[int] = None,
+    sample_filter: int | None = None,
+    chunk_turns: int | None = None,
 ) -> pd.DataFrame:
     """
     Each session becomes one or more chunks, and each chunk one turn:
@@ -114,7 +115,7 @@ def sessions_to_one_turn_df(
       - user_text: that chunk's dialogue, with the A/B exchange concatenated as is
       - assistant_text: an empty string
     """
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for s in sessions:
         sample_index = s.get("sample_index")
         if sample_filter is not None and int(sample_index) != sample_filter:
@@ -140,10 +141,10 @@ def sessions_to_one_turn_df(
 
 
 def session_records_to_df(
-    records: List[Dict[str, Any]],
+    records: list[dict[str, Any]],
     *,
     conv_id: str,
-    chunk_turns: Optional[int] = None,
+    chunk_turns: int | None = None,
 ) -> pd.DataFrame:
     """Build a one-turn-per-chunk DataFrame from a list of session record dicts.
 
@@ -152,7 +153,7 @@ def session_records_to_df(
     match the value used by the run that produced the artifacts being restored,
     otherwise the resulting summary_ids will not line up.
     """
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for rec in records:
         sess_id = rec.get("session_id")
         dialogue = ["" if x is None else str(x) for x in (rec.get("dialogue", []) or [])]
@@ -177,9 +178,9 @@ def ingest_by_session_one_turn(
     ingestor,
     df: pd.DataFrame,
     *,
-    prev_k: Optional[int] = None,
-    entity_sim_topk: Optional[int] = None,
-    entity_sim_threshold: Optional[float] = None,
+    prev_k: int | None = None,
+    entity_sim_topk: int | None = None,
+    entity_sim_threshold: float | None = None,
 ) -> dict:
     """Ingest each session as a single turn.
 
@@ -223,12 +224,12 @@ class IngestStage:
         ingestor,
         dataset_json=None,
         sessions_jsonl=None,
-        sample_index: Optional[int] = None,
-        prev_k: Optional[int] = None,
-        entity_sim_topk: Optional[int] = None,
-        entity_sim_threshold: Optional[float] = None,
+        sample_index: int | None = None,
+        prev_k: int | None = None,
+        entity_sim_topk: int | None = None,
+        entity_sim_threshold: float | None = None,
         make_session_uid: bool = True,
-        chunk_turns: Optional[int] = None,
+        chunk_turns: int | None = None,
     ) -> None:
         self.ingestor = ingestor
         self.dataset_json = dataset_json

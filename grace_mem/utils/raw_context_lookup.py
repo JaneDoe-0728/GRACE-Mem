@@ -8,10 +8,8 @@ Compressor would have produced for each summary_id.
 from __future__ import annotations
 
 import csv
-import os
 import threading
 from pathlib import Path
-from typing import Optional
 
 
 class RawContextLookup:
@@ -55,8 +53,8 @@ class RawContextLookup:
                 continue
 
         # Sort each session's turns by turn_index
-        for sid in index:
-            index[sid].sort(key=lambda r: r["turn_index"])
+        for turns in index.values():
+            turns.sort(key=lambda r: r["turn_index"])
 
         self._index = index
         self._loaded = True
@@ -67,7 +65,7 @@ class RawContextLookup:
                 if not self._loaded:
                     self._load()
 
-    def get(self, session_id: str, message_id: int) -> Optional[str]:
+    def get(self, session_id: str, message_id: int) -> str | None:
         """
         Reconstruct the raw curr_text for a given (session_id, message_id).
 
@@ -103,7 +101,7 @@ class RawContextLookup:
             user_text = row["content"]
             return user_text.strip() or None
 
-    def get_user_text(self, session_id: str, message_id: int) -> Optional[str]:
+    def get_user_text(self, session_id: str, message_id: int) -> str | None:
         """Return only the raw user turn text preceding the assistant at message_id."""
         self._ensure_loaded()
         turns = self._index.get(str(session_id))
@@ -120,7 +118,7 @@ class RawContextLookup:
             return None
         return row["content"].strip() or None
 
-    def get_assistant_text(self, session_id: str, message_id: int) -> Optional[str]:
+    def get_assistant_text(self, session_id: str, message_id: int) -> str | None:
         """Return only the raw assistant turn text at message_id."""
         self._ensure_loaded()
         turns = self._index.get(str(session_id))

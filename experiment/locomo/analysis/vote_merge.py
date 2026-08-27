@@ -20,6 +20,7 @@ import json
 import re
 
 import pandas as pd
+
 from experiment.common.paths import REPO_ROOT
 
 OUT = REPO_ROOT / "experiment" / "locomo" / "output" / "standard"
@@ -69,7 +70,7 @@ def cluster(llm, question: str, answers: list[str]) -> list[list[int]]:
             {"role": "user", "content": f"QUESTION: {question}\n\n{body}"},
         ], temperature=0.0, max_tokens=200)
         text = (resp.choices[0].message.content or "")
-        m = re.search(r"\{.*\}", text, re.S)
+        m = re.search(r"\{.*\}", text, re.DOTALL)
         groups = json.loads(m.group(0))["groups"]
         seen = set()
         out = []
@@ -87,8 +88,8 @@ def cluster(llm, question: str, answers: list[str]) -> list[list[int]]:
 
 
 def main():
-    from grace_mem.llm import LLMClient
     from experiment.common.evaluation.judge import JudgeEngine, openai_api_key
+    from grace_mem.llm import LLMClient
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", nargs=3, default=["locomo-n8-120b-fo2", "locomo-n8-120b-fo2r", "vote3"])

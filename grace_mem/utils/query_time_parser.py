@@ -10,15 +10,13 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Optional, Tuple
-
 
 import dateparser
 
 from grace_mem.utils.temporal import build_time_context, rewrite_temporal_text
 
 
-def parse_query_time(query_time_str: str) -> Optional[datetime]:
+def parse_query_time(query_time_str: str) -> datetime | None:
     """Parse supported project timestamp formats into a datetime object."""
     if not query_time_str:
         return None
@@ -57,9 +55,9 @@ def parse_query_time(query_time_str: str) -> Optional[datetime]:
 
 def detect_and_parse_time_expressions(
     query: str,
-    query_time: Optional[str] = None,
+    query_time: str | None = None,
     rewrite_query: bool = True,
-) -> Tuple[str, dict]:
+) -> tuple[str, dict]:
     """Detect supported high-confidence English time expressions and optionally rewrite them."""
     if not query_time:
         return query, {

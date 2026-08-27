@@ -6,9 +6,9 @@ changing it while samples execute would make that record inaccurate.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,7 @@ class RunConfig:
         sessions_jsonl_path: Path | None,
         run_root: Path,
         sample_ids: Sequence[int],
-    ) -> "RunConfig":
+    ) -> RunConfig:
         """Build a config from parsed args plus the paths the caller resolved.
 
         Path resolution stays outside this method because it depends on dataset

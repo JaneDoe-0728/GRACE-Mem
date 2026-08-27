@@ -20,11 +20,11 @@ import re
 import sys
 import threading
 import time
+from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
 
 _ROOT = Path(__file__).resolve().parents[3]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
@@ -33,9 +33,9 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 from requests.exceptions import HTTPError, RequestException
 
-from grace_mem.llm import LLMClient
 from experiment.locomo.helpers.llm import build_judge_standard_messages
 from experiment.longmem.prompts import build_judge_messages
+from grace_mem.llm import LLMClient
 
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_BASE_URL = "https://api.openai.com/v1"

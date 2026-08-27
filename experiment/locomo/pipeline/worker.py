@@ -15,10 +15,35 @@ ingestion while varying only retrieval.
 sample that failed still leaves behind the diagnostics explaining why.
 """
 
-import os
 import json
+import os
 from pathlib import Path
 
+from experiment.locomo.helpers.sample_hooks import (
+    artifact_dir_for_sample,
+    ensure_worker_repo_path,
+    export_graph_to_artifacts,
+    reload_mgr_state_from_artifacts,
+    restore_artifacts_from_dir,
+    restore_graph_from_artifact_dir,
+    validate_and_export_graph,
+)
+from experiment.locomo.pipeline.stage_adapter import (
+    build_eval_rows,
+    configure_retriever,
+    run_judge_stage,
+    skipped_judge_stats,
+)
+from experiment.locomo.utils.error_analysis import (
+    append_analysis_record,
+    append_pretty_block,
+    build_bridge_label,
+    build_top_miss_snapshot,
+    coerce_float,
+    derive_anomaly_flags,
+    derive_failure_type,
+    render_failure_digest,
+)
 from experiment.locomo.utils.io import (
     backup_artifacts_and_logs,
     ensure_dir,
@@ -30,33 +55,10 @@ from experiment.locomo.utils.io import (
     write_stats_json,
 )
 from experiment.locomo.utils.log import log_event
-from experiment.locomo.utils.error_analysis import (
-    append_analysis_record,
-    append_pretty_block,
-    build_bridge_label,
-    build_top_miss_snapshot,
-    coerce_float,
-    derive_anomaly_flags,
-    derive_failure_type,
-    render_failure_digest,
-)
-from experiment.locomo.pipeline.stage_adapter import (
-    build_eval_rows,
-    configure_retriever,
-    run_judge_stage,
-    skipped_judge_stats,
-)
-from experiment.locomo.helpers.sample_hooks import (
-    artifact_dir_for_sample,
-    ensure_worker_repo_path,
-    export_graph_to_artifacts,
-    reload_mgr_state_from_artifacts,
-    restore_artifacts_from_dir,
-    restore_graph_from_artifact_dir,
-    validate_and_export_graph,
-)
+
 try:
-    from experiment.experiment_config import RERANKER_PARAMS, RETRIEVAL_PARAMS as _RETRIEVAL_PARAMS
+    from experiment.experiment_config import RERANKER_PARAMS
+    from experiment.experiment_config import RETRIEVAL_PARAMS as _RETRIEVAL_PARAMS
 except Exception:
     RERANKER_PARAMS = {
         "use_reranker": True,
@@ -462,11 +464,12 @@ def _load_session_summaries_from_artifacts(sample_run_dir: Path) -> dict[str, st
 def _run_locomo_gold_summary_only(args) -> None:
     """Gold-summary-only ablation: skip ingest/graph, answer from session_summary in the dataset JSON."""
     import json as _json
+
     import pandas as pd
 
-    from grace_mem.llm import token_tracker
-    from experiment.locomo.stages import judge, qa_eval
     from experiment.locomo.helpers.dataset import resolve_dataset_path
+    from experiment.locomo.stages import judge, qa_eval
+    from grace_mem.llm import token_tracker
 
     dataset = "locomo"
     dataset_json = resolve_dataset_path(kind="qa_json", explicit_path=args.dataset_json)
@@ -545,11 +548,12 @@ def _run_locomo_gold_summary_only(args) -> None:
 def _run_locomo_gold_raw_text_only(args) -> None:
     """Gold-raw-text-only ablation: skip ingest/graph, answer from raw conversation turns in the dataset JSON."""
     import json as _json
+
     import pandas as pd
 
-    from grace_mem.llm import token_tracker
-    from experiment.locomo.stages import judge, qa_eval
     from experiment.locomo.helpers.dataset import resolve_dataset_path
+    from experiment.locomo.stages import judge, qa_eval
+    from grace_mem.llm import token_tracker
 
     dataset = "locomo"
     dataset_json = resolve_dataset_path(kind="qa_json", explicit_path=args.dataset_json)
@@ -622,11 +626,12 @@ def _run_locomo_gold_raw_text_only(args) -> None:
 def _run_locomo_replay_summary_raw_text_from_run(args) -> None:
     """Replay selected evidence ids from a prior run, but replace summaries with raw session text."""
     import json as _json
+
     import pandas as pd
 
-    from grace_mem.llm import token_tracker
-    from experiment.locomo.stages import judge, qa_eval
     from experiment.locomo.helpers.dataset import resolve_dataset_path
+    from experiment.locomo.stages import judge, qa_eval
+    from grace_mem.llm import token_tracker
 
     if not args.replay_run_dir:
         raise ValueError("--replay-run-dir is required for replay_summary_raw_text_from_run mode")
@@ -712,11 +717,12 @@ def _run_locomo_replay_summary_raw_text_from_run(args) -> None:
 def _run_locomo_replay_summary_fact_from_run(args) -> None:
     """Replay selected evidence ids from a prior run, extract facts from raw session text."""
     import json as _json
+
     import pandas as pd
 
-    from grace_mem.llm import token_tracker
-    from experiment.locomo.stages import judge, qa_eval
     from experiment.locomo.helpers.dataset import resolve_dataset_path
+    from experiment.locomo.stages import judge, qa_eval
+    from grace_mem.llm import token_tracker
 
     if not args.replay_run_dir:
         raise ValueError("--replay-run-dir is required for replay_summary_fact_from_run mode")
@@ -807,9 +813,6 @@ def run_locomo_worker(args) -> None:
 
     import pandas as pd
 
-    from grace_mem.llm import token_tracker
-    from experiment.locomo.stages import ingest, judge
-    from experiment.locomo.helpers.dataset import load_raw_samples, resolve_dataset_path
     from experiment.locomo.artifacts.snapshot import (
         build_snapshot_compatibility,
         clear_working_artifacts,
@@ -818,6 +821,9 @@ def run_locomo_worker(args) -> None:
         restore_graph,
         save_snapshot,
     )
+    from experiment.locomo.helpers.dataset import load_raw_samples, resolve_dataset_path
+    from experiment.locomo.stages import ingest, judge
+    from grace_mem.llm import token_tracker
 
     dataset = "locomo"
     dataset_json = resolve_dataset_path(
@@ -913,8 +919,8 @@ def run_locomo_worker(args) -> None:
         if artifact_dir is not None:
             reload_mgr_state_from_artifacts(MGR)
 
-        from grace_mem.pipeline.factory import build_pipeline
         from experiment.locomo.stages import qa_eval
+        from grace_mem.pipeline.factory import build_pipeline
 
         pipeline = build_pipeline(retriever_config=RERANKER_PARAMS, ingestor_config=_INGESTOR_CONFIG)
         retriever = pipeline.retriever

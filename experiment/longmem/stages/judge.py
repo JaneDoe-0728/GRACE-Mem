@@ -15,7 +15,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from experiment.common.evaluation.judge import JudgeEngine, parse_binary_judge
+from experiment.common.evaluation.judge import JudgeEngine
+from experiment.common.evaluation.judge import parse_binary_judge as _parse_binary_judge
 from experiment.longmem.utils.io import read_csv_dict_rows, write_csv_frame
 
 
@@ -26,7 +27,7 @@ class JudgeStage:
     DEFAULT_OUTPUT_CSV = "./experiment/longmem/output/default/temporal_reasoning/all_answers_judged_0316.csv"
 
     def parse_binary_judge(self, text: str) -> int:
-        return parse_binary_judge(text)
+        return _parse_binary_judge(text)
 
     def judge_single(
         self,

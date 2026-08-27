@@ -7,8 +7,9 @@ import argparse
 import json
 import subprocess
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Sequence
+from typing import TYPE_CHECKING, Any
 
 MODULE_DIR = Path(__file__).resolve().parent
 if __package__ in (None, ""):
@@ -16,8 +17,11 @@ if __package__ in (None, ""):
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
+from experiment.locomo.analysis.summary import (
+    compute_summary_from_df,
+    compute_summary_from_rows,
+)
 from experiment.locomo.models import AggregateResult
-from experiment.locomo.analysis.summary import compute_summary_from_df, compute_summary_from_rows
 from experiment.locomo.utils.log import log_event
 
 if TYPE_CHECKING:
@@ -56,7 +60,7 @@ def aggregate_judge_csv_files(
     exclude_adversarial: bool,
     note: str = "overall stats only include samples with judge CSVs",
     sample_name_fn: Callable[[Path], str] | None = None,
-) -> tuple[Dict[str, Any], DataFrame]:
+) -> tuple[dict[str, Any], DataFrame]:
     """Combine per-sample judge CSVs into overall and per-category accuracy.
 
     Rows with no parseable verdict are excluded from both numerator and
@@ -66,8 +70,8 @@ def aggregate_judge_csv_files(
     """
     pd = _require_pandas()
     merged_frames: list[DataFrame] = []
-    per_sample: Dict[str, Dict[str, object]] = {}
-    sources: Dict[str, str] = {}
+    per_sample: dict[str, dict[str, object]] = {}
+    sources: dict[str, str] = {}
     rows_for_overall: list[dict[str, Any]] = []
 
     for csv_path in csv_files:
@@ -110,7 +114,7 @@ def aggregate_judge_csv_files(
     return payload, merged_df
 
 
-def _summary_entry_from_payload(data: dict[str, Any], source: Path | str) -> Dict[str, object]:
+def _summary_entry_from_payload(data: dict[str, Any], source: Path | str) -> dict[str, object]:
     """Extract one sample's summary row from its stats payload."""
     return {
         "avg_correctness": data.get("avg_correctness"),
@@ -122,7 +126,7 @@ def _summary_entry_from_payload(data: dict[str, Any], source: Path | str) -> Dic
     }
 
 
-def _missing_entry() -> Dict[str, object]:
+def _missing_entry() -> dict[str, object]:
     """Placeholder summary for a sample that produced no output.
 
     Emitted rather than omitted so a missing sample is visible in the run
@@ -157,7 +161,7 @@ def _run_locomo(args: argparse.Namespace) -> None:
 
     judge_csv_files: list[Path] = []
     sample_names_by_judge_csv: dict[Path, str] = {}
-    summary_entries: Dict[str, Dict[str, object]] = {}
+    summary_entries: dict[str, dict[str, object]] = {}
     missing_sample_names: list[str] = []
 
     for sample_dir in sample_dirs:
@@ -265,7 +269,7 @@ if __name__ == "__main__":
 _AGGREGATE_SCRIPT = Path(__file__).resolve()
 
 
-def _aggregate_locomo_run(run_root: Path, *, include_adversarial: bool) -> Optional[AggregateResult]:
+def _aggregate_locomo_run(run_root: Path, *, include_adversarial: bool) -> AggregateResult | None:
     """Aggregate one LoCoMo run directory."""
     output_json = run_root / "_correctness_aggregate.json"
     merged_csv = run_root / "_judge_merged.csv"
@@ -279,7 +283,7 @@ def _aggregate_locomo_run(run_root: Path, *, include_adversarial: bool) -> Optio
     ]
     if include_adversarial:
         cmd.append("--include-adversarial")
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         log_event("AGGREGATE][WARN", "locomo/analysis/aggregate.py exited with non-zero status", exit_code=result.returncode)
         return None
@@ -293,7 +297,7 @@ def maybe_aggregate_run(
     run_root: Path,
     no_judge: bool,
     include_adversarial: bool,
-) -> Optional[AggregateResult]:
+) -> AggregateResult | None:
     """Aggregate a finished run, if there is anything to aggregate.
 
     Called unconditionally at the end of a run, so it has to tolerate a run

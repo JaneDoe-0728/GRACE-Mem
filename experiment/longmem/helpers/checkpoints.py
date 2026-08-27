@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Set
 
 from experiment.longmem.models import DatasetConfig
 from experiment.longmem.utils.io import read_json_file, write_json_file
@@ -39,9 +38,9 @@ def load_checkpoint(base_output_dir: Path, config: DatasetConfig) -> dict:
 def save_checkpoint(
     base_output_dir: Path,
     config: DatasetConfig,
-    processed: Set[str],
+    processed: set[str],
     *,
-    total_sessions: Optional[int] = None,
+    total_sessions: int | None = None,
     stage: str = "ingest_in_progress",
 ) -> None:
     if not config.resume:

@@ -26,7 +26,7 @@ ABSOLUTE_TIME_TEXT = r"(?:at\s+)?(?:\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|p
 # Compound daypart phrases must precede bare day tokens so they win the alternation.
 RELATIVE_DAYPART_TEXT = r"(?:yesterday\s+(?:morning|afternoon|evening|night)|tomorrow\s+(?:morning|afternoon|evening)|last\s+night)"
 RELATIVE_DAY_TEXT = (
-    rf"(?:this\s+(?:morning|afternoon|evening)"
+    r"(?:this\s+(?:morning|afternoon|evening)"
     r"|last\s+night"
     r"|tonight"
     r"|today|yesterday|tomorrow)"

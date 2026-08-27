@@ -1,5 +1,5 @@
 """ExtractionSyncer: VDB writes + FalkorDB sync."""
-from typing import Any, Optional
+from typing import Any
 
 from grace_mem.utils.common import ExtractionResult
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
@@ -21,11 +21,11 @@ class ExtractionSyncer:
     def sync(
         self,
         result: ExtractionResult,
-        provenance: Optional[dict],
+        provenance: dict | None,
         request_id: str,
         *,
-        entity_sim_topk: Optional[int] = None,
-        entity_sim_threshold: Optional[float] = None,
+        entity_sim_topk: int | None = None,
+        entity_sim_threshold: float | None = None,
     ) -> dict:
         """
         1) Find similar entities → 2) Generate entity ops → 3) Apply → 4) Upsert rels → 5) Sync graph.

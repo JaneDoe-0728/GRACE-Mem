@@ -19,7 +19,7 @@ from __future__ import annotations
 import copy
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -53,7 +53,7 @@ class ScoringWeights:
     rrf_k: float = 60.0
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "ScoringWeights":
+    def from_dict(cls, d: dict[str, Any]) -> ScoringWeights:
         valid = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore[attr-defined]
         return cls(**{k: v for k, v in d.items() if k in valid})
 
@@ -74,12 +74,12 @@ class SummaryScore:
     redundancy_penalty: float
     base_score: float    # score before redundancy adjustment
     final_score: float   # base_score - redundancy_penalty_weight * redundancy_penalty
-    matched_entity_ids: List[str] = field(default_factory=list)
-    matched_entity_names: List[str] = field(default_factory=list)
-    matched_relation_ids: List[str] = field(default_factory=list)
-    matched_relation_names: List[str] = field(default_factory=list)
+    matched_entity_ids: list[str] = field(default_factory=list)
+    matched_entity_names: list[str] = field(default_factory=list)
+    matched_relation_ids: list[str] = field(default_factory=list)
+    matched_relation_names: list[str] = field(default_factory=list)
 
-    def to_log_dict(self, weights: ScoringWeights, mode: str) -> Dict[str, Any]:
+    def to_log_dict(self, weights: ScoringWeights, mode: str) -> dict[str, Any]:
         return {
             "summary_id": self.summary_id,
             "final_score": round(self.final_score, 6),
@@ -114,10 +114,10 @@ class SummaryScore:
 # ---------------------------------------------------------------------------
 
 def _build_summary_graph_index(
-    context_entities: List[Dict],
-    context_relationships: List[Dict],
-    cache: Dict,
-) -> Tuple[Dict[str, Set[str]], Dict[str, Set[str]]]:
+    context_entities: list[dict],
+    context_relationships: list[dict],
+    cache: dict,
+) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
     """
     Walk provenance of *surviving* entities/relations to build a reverse index:
         summary_id -> set of entity_ids that reference it
@@ -127,8 +127,8 @@ def _build_summary_graph_index(
     This ensures KG-link counts are conditioned on the retrieval output.
     """
     entity_id2meta, rel_id2meta = build_id_to_meta_maps(cache)
-    summary_to_entities: Dict[str, Set[str]] = {}
-    summary_to_rels: Dict[str, Set[str]] = {}
+    summary_to_entities: dict[str, set[str]] = {}
+    summary_to_rels: dict[str, set[str]] = {}
 
     for ent in (context_entities or []):
         eid = ent.get("id")
@@ -154,9 +154,9 @@ def _build_summary_graph_index(
 
 
 def _compute_pair_bonus(
-    entity_ids: Set[str],
-    rel_ids: Set[str],
-    rel_id2meta: Dict,
+    entity_ids: set[str],
+    rel_ids: set[str],
+    rel_id2meta: dict,
 ) -> float:
     """
     Count (entity, relation) pairs where the entity is an endpoint of the relation
@@ -189,7 +189,7 @@ def _popularity_penalty(ref_count: int, pool_size: int) -> float:
     return min(1.0, ref_count / pool_size)
 
 
-def _rel_display_label(rid: str, entity_id2meta: Dict, rel_id2meta: Dict) -> str:
+def _rel_display_label(rid: str, entity_id2meta: dict, rel_id2meta: dict) -> str:
     """Render a relationship as "source -> target" for logs and evidence text.
 
     Stable formatting matters here: the label is parsed back out when replaying
@@ -222,10 +222,10 @@ def _rel_display_label(rid: str, entity_id2meta: Dict, rel_id2meta: Dict) -> str
 def score_summary_graph_linked(
     summary_id: str,
     semantic_score: float,
-    summary_to_entities: Dict[str, Set[str]],
-    summary_to_rels: Dict[str, Set[str]],
-    entity_id2meta: Dict,
-    rel_id2meta: Dict,
+    summary_to_entities: dict[str, set[str]],
+    summary_to_rels: dict[str, set[str]],
+    entity_id2meta: dict,
+    rel_id2meta: dict,
     pool_size: int,
     weights: ScoringWeights,
     max_entity_count: int = 0,
@@ -312,10 +312,10 @@ def score_summary_graph_linked(
 # ---------------------------------------------------------------------------
 
 def _apply_redundancy_penalty_greedy(
-    ranked: List[SummaryScore],
+    ranked: list[SummaryScore],
     summaries_vdb: Any,
     weights: ScoringWeights,
-) -> List[SummaryScore]:
+) -> list[SummaryScore]:
     """
     Greedy MMR-style redundancy re-ranking.
 
@@ -328,8 +328,8 @@ def _apply_redundancy_penalty_greedy(
     embedding at a time via summaries_vdb._collection.get() which is safe for
     the ChromaDB backend used by this project.
     """
-    selected_vecs: List[np.ndarray] = []
-    result: List[SummaryScore] = []
+    selected_vecs: list[np.ndarray] = []
+    result: list[SummaryScore] = []
     candidates = [copy.copy(sc) for sc in ranked]
 
     while candidates:
@@ -372,14 +372,14 @@ def _apply_redundancy_penalty_greedy(
 # ---------------------------------------------------------------------------
 
 def rank_summaries_by_graph_linked_score(
-    scored_events: List[Tuple[float, Dict]],
-    context_entities: List[Dict],
-    context_relationships: List[Dict],
-    cache: Dict,
+    scored_events: list[tuple[float, dict]],
+    context_entities: list[dict],
+    context_relationships: list[dict],
+    cache: dict,
     weights: ScoringWeights,
     summaries_vdb: Any,
-    topk: Optional[int] = None,
-) -> List[Tuple[SummaryScore, Dict]]:
+    topk: int | None = None,
+) -> list[tuple[SummaryScore, dict]]:
     """
     Re-rank a list of ``(semantic_score, provenance_event)`` pairs using the
     graph-linked scoring formula.
@@ -410,8 +410,8 @@ def rank_summaries_by_graph_linked_score(
     pool_size = len(context_entities or []) + len(context_relationships or [])
 
     # Deduplicate by summary_id, keeping the highest semantic_score per summary
-    best_semantic: Dict[str, float] = {}
-    event_map: Dict[str, Dict] = {}
+    best_semantic: dict[str, float] = {}
+    event_map: dict[str, dict] = {}
     for semantic_score, ev in scored_events:
         sid = ev.get("summary_id")
         if not sid:
@@ -436,11 +436,10 @@ def rank_summaries_by_graph_linked_score(
                 summary_to_rels.get(sid, set()),
                 rel_id2meta,
             )
-            if pb > max_pair_bonus:
-                max_pair_bonus = pb
+            max_pair_bonus = max(max_pair_bonus, pb)
 
     # Score each unique summary
-    scored: List[SummaryScore] = []
+    scored: list[SummaryScore] = []
     for sid, semantic_score in best_semantic.items():
         sc = score_summary_graph_linked(
             summary_id=sid,
@@ -491,10 +490,10 @@ class SummaryRRFFeatures:
     matched_relation_count: int
     pair_coverage_score: float
     popularity_badness: float
-    matched_entity_ids: List[str] = field(default_factory=list)
-    matched_entity_names: List[str] = field(default_factory=list)
-    matched_relation_ids: List[str] = field(default_factory=list)
-    matched_relation_names: List[str] = field(default_factory=list)
+    matched_entity_ids: list[str] = field(default_factory=list)
+    matched_entity_names: list[str] = field(default_factory=list)
+    matched_relation_ids: list[str] = field(default_factory=list)
+    matched_relation_names: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -516,12 +515,12 @@ class SummaryRRFScore:
     base_score: float    # positive_score - penalty_score, before MMR
     final_score: float   # base_score - redundancy_penalty_weight * redundancy_penalty
     redundancy_penalty: float = 0.0
-    matched_entity_ids: List[str] = field(default_factory=list)
-    matched_entity_names: List[str] = field(default_factory=list)
-    matched_relation_ids: List[str] = field(default_factory=list)
-    matched_relation_names: List[str] = field(default_factory=list)
+    matched_entity_ids: list[str] = field(default_factory=list)
+    matched_entity_names: list[str] = field(default_factory=list)
+    matched_relation_ids: list[str] = field(default_factory=list)
+    matched_relation_names: list[str] = field(default_factory=list)
 
-    def to_log_dict(self, weights: ScoringWeights, mode: str) -> Dict[str, Any]:
+    def to_log_dict(self, weights: ScoringWeights, mode: str) -> dict[str, Any]:
         return {
             "summary_id": self.summary_id,
             "summary_filter_mode": mode,
@@ -562,7 +561,7 @@ class SummaryRRFScore:
 # RRF helpers
 # ---------------------------------------------------------------------------
 
-def _assign_ranks_desc(values: List[float]) -> List[int]:
+def _assign_ranks_desc(values: list[float]) -> list[int]:
     """
     Dense rank (1 = highest value). Tied items share the minimum rank in their group.
     Example: [3.0, 3.0, 1.0] → [1, 1, 2]
@@ -581,10 +580,10 @@ def _assign_ranks_desc(values: List[float]) -> List[int]:
 def compute_summary_graph_features(
     summary_id: str,
     semantic_score: float,
-    summary_to_entities: Dict[str, Set[str]],
-    summary_to_rels: Dict[str, Set[str]],
-    entity_id2meta: Dict,
-    rel_id2meta: Dict,
+    summary_to_entities: dict[str, set[str]],
+    summary_to_rels: dict[str, set[str]],
+    entity_id2meta: dict,
+    rel_id2meta: dict,
     pool_size: int,
     weights: ScoringWeights,
 ) -> SummaryRRFFeatures:
@@ -632,9 +631,9 @@ def compute_summary_graph_features(
 # ---------------------------------------------------------------------------
 
 def rank_summary_features(
-    features_list: List[SummaryRRFFeatures],
+    features_list: list[SummaryRRFFeatures],
     weights: ScoringWeights,
-) -> List[SummaryRRFScore]:
+) -> list[SummaryRRFScore]:
     """
     Assign per-dimension dense ranks to all candidates, then compute each
     candidate's RRF score:
@@ -660,7 +659,7 @@ def rank_summary_features(
     sem_ranks = _assign_ranks_desc([f.semantic_similarity for f in features_list])
     pop_ranks = _assign_ranks_desc([f.popularity_badness for f in features_list])
 
-    result: List[SummaryRRFScore] = []
+    result: list[SummaryRRFScore] = []
     for i, feat in enumerate(features_list):
         rr, er, pr, sr, br = rel_ranks[i], ent_ranks[i], pair_ranks[i], sem_ranks[i], pop_ranks[i]
 
@@ -707,16 +706,16 @@ def rank_summary_features(
 # ---------------------------------------------------------------------------
 
 def _apply_rrf_mmr_greedy(
-    ranked: List[SummaryRRFScore],
+    ranked: list[SummaryRRFScore],
     summaries_vdb: Any,
     weights: ScoringWeights,
-) -> List[SummaryRRFScore]:
+) -> list[SummaryRRFScore]:
     """
     Greedy MMR loop on top of RRF scores.
     final_score = base_score - redundancy_penalty_weight * max_cosine_to_selected
     """
-    selected_vecs: List[np.ndarray] = []
-    result: List[SummaryRRFScore] = []
+    selected_vecs: list[np.ndarray] = []
+    result: list[SummaryRRFScore] = []
     candidates = [copy.copy(sc) for sc in ranked]
 
     while candidates:
@@ -751,12 +750,12 @@ def _apply_rrf_mmr_greedy(
 # ---------------------------------------------------------------------------
 
 def _build_rrf_scored_list(
-    scored_events: List[Tuple[float, Dict]],
-    context_entities: List[Dict],
-    context_relationships: List[Dict],
-    cache: Dict,
+    scored_events: list[tuple[float, dict]],
+    context_entities: list[dict],
+    context_relationships: list[dict],
+    cache: dict,
     weights: ScoringWeights,
-) -> Tuple[List[SummaryRRFScore], Dict[str, Dict]]:
+) -> tuple[list[SummaryRRFScore], dict[str, dict]]:
     """Shared setup: dedup → feature extraction → rank fusion → base sort."""
     entity_id2meta, rel_id2meta = build_id_to_meta_maps(cache)
     summary_to_entities, summary_to_rels = _build_summary_graph_index(
@@ -764,8 +763,8 @@ def _build_rrf_scored_list(
     )
     pool_size = len(context_entities or []) + len(context_relationships or [])
 
-    best_semantic: Dict[str, float] = {}
-    event_map: Dict[str, Dict] = {}
+    best_semantic: dict[str, float] = {}
+    event_map: dict[str, dict] = {}
     for sem_score, ev in scored_events:
         sid = ev.get("summary_id")
         if not sid:
@@ -794,14 +793,14 @@ def _build_rrf_scored_list(
 
 
 def select_summaries_rrf(
-    scored_events: List[Tuple[float, Dict]],
-    context_entities: List[Dict],
-    context_relationships: List[Dict],
-    cache: Dict,
+    scored_events: list[tuple[float, dict]],
+    context_entities: list[dict],
+    context_relationships: list[dict],
+    cache: dict,
     weights: ScoringWeights,
     summaries_vdb: Any,
-    topk: Optional[int] = None,
-) -> List[Tuple[SummaryRRFScore, Dict]]:
+    topk: int | None = None,
+) -> list[tuple[SummaryRRFScore, dict]]:
     """
     Rank candidates by RRF score (no redundancy control).
     Use for summary_filter_mode="graph_rrf".
@@ -815,14 +814,14 @@ def select_summaries_rrf(
 
 
 def select_summaries_rrf_mmr(
-    scored_events: List[Tuple[float, Dict]],
-    context_entities: List[Dict],
-    context_relationships: List[Dict],
-    cache: Dict,
+    scored_events: list[tuple[float, dict]],
+    context_entities: list[dict],
+    context_relationships: list[dict],
+    cache: dict,
     weights: ScoringWeights,
     summaries_vdb: Any,
-    topk: Optional[int] = None,
-) -> List[Tuple[SummaryRRFScore, Dict]]:
+    topk: int | None = None,
+) -> list[tuple[SummaryRRFScore, dict]]:
     """
     Rank candidates by RRF score then apply greedy MMR redundancy control.
     Use for summary_filter_mode="graph_rrf_mmr".

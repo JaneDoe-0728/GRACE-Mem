@@ -10,12 +10,12 @@ to be concatenated later without reconciling headers.
 import csv
 import json
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
-from grace_mem.storage.paths import resolve_artifacts_dir
 from experiment.common.reproducibility import attach_reproducibility_metadata
-
+from grace_mem.storage.paths import resolve_artifacts_dir
 
 EVAL_COLUMNS = [
     "question",

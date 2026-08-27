@@ -19,7 +19,11 @@ import pandas as pd
 
 from experiment.longmem.utils.io import read_csv_frame
 from grace_mem.utils.query_time_parser import parse_query_time
-from grace_mem.utils.temporal import build_time_context, rewrite_temporal_text, time_rewrite_ablation_enabled
+from grace_mem.utils.temporal import (
+    build_time_context,
+    rewrite_temporal_text,
+    time_rewrite_ablation_enabled,
+)
 
 
 class QAEvalStage:
@@ -47,10 +51,13 @@ class QAEvalStage:
         question_date = None
         if "question_date" in df.columns:
             for _, row in df.iterrows():
-                if pd.notna(row.get("question")) and str(row["question"]).strip() == question:
-                    if pd.notna(row.get("question_date")):
-                        question_date = str(row["question_date"]).strip()
-                        break
+                if (
+                    pd.notna(row.get("question"))
+                    and str(row["question"]).strip() == question
+                    and pd.notna(row.get("question_date"))
+                ):
+                    question_date = str(row["question_date"]).strip()
+                    break
 
         return question.strip(), question_date
 
@@ -250,9 +257,9 @@ if __name__ == "__main__":
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
+    from experiment.experiment_config import RETRIEVAL_PARAMS
     from grace_mem.llm import LLMClient
     from grace_mem.pipeline.factory import build_pipeline as _build_pipeline
-    from experiment.experiment_config import RETRIEVAL_PARAMS
 
     CSV_PATH = "./experiment/longmem/script_data/temporal_reasoning/2ebe6c92.csv"
     with _build_pipeline() as runtime:

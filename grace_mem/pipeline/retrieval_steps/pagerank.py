@@ -1,7 +1,6 @@
 """
 Personalized PageRank re-ranking on the induced subgraph of RRF candidates.
 """
-from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -17,13 +16,13 @@ class SubgraphPageRank:
 
     def run_ppr(
         self,
-        entity_ids: List[str],
-        rrf_scores: Dict[str, float],
-        subgraph_edges: List[Tuple[str, str, str]],
+        entity_ids: list[str],
+        rrf_scores: dict[str, float],
+        subgraph_edges: list[tuple[str, str, str]],
         alpha: float,
         top_k: int,
         inverse_degree_weight: bool,
-    ) -> Tuple[List[str], Dict[str, float]]:
+    ) -> tuple[list[str], dict[str, float]]:
         """
         Run Personalized PageRank and return ranked entities.
 

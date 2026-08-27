@@ -29,16 +29,34 @@ anchored one is needed.
 `Ingestor` runs the full LLM path, including LLM adjudication in step 4.
 """
 
+import os
 import re
 import threading
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional
 from dataclasses import dataclass
-import os
+from typing import Any
 
-from grace_mem.llm.prompts import EXTRA_KWARGS, entity_extraction_only, relationship_extraction_only
-from grace_mem.utils.common import Entity, EntityType, ExtractionResult, Relationship, is_context_length_exceeded_error
+from grace_mem.llm.prompts import (
+    EXTRA_KWARGS,
+    entity_extraction_only,
+    relationship_extraction_only,
+)
+from grace_mem.pipeline.ingest_steps.compress import Compressor
+from grace_mem.pipeline.ingest_steps.extract import (
+    EntityExtractor,
+    RelationshipExtractor,
+)
+from grace_mem.pipeline.ingest_steps.sync import ExtractionSyncer
+from grace_mem.utils.common import (
+    Entity,
+    EntityType,
+    ExtractionResult,
+    Relationship,
+    is_context_length_exceeded_error,
+)
+from grace_mem.utils.error_analysis import append_analysis_record
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
 from grace_mem.utils.query_time_parser import parse_query_time
 from grace_mem.utils.temporal import (
@@ -49,12 +67,6 @@ from grace_mem.utils.temporal import (
     format_temporal_hints_for_prompt,
     rewrite_temporal_text,
 )
-from grace_mem.utils.error_analysis import append_analysis_record
-
-from grace_mem.pipeline.ingest_steps.compress import Compressor
-from grace_mem.pipeline.ingest_steps.extract import EntityExtractor, RelationshipExtractor
-from grace_mem.pipeline.ingest_steps.sync import ExtractionSyncer
-
 
 _jlog = make_module_jlog(name="grace_mem.Ingestor", filename="kg_ingestor.jsonl")
 _TRACE_PRETTY_LOG_DIR = os.environ.get("KG_TRACE_PRETTY_LOG_DIR", "logs")
@@ -114,7 +126,7 @@ def _repair_temporal_entities(
     entities: list[Entity],
     relationships: list[Relationship],
     temporal_hints: list[dict],
-    tctx: Optional[TimeContext] = None,
+    tctx: TimeContext | None = None,
 ) -> tuple[list[Entity], list[Relationship]]:
     """Normalize temporal entity names to resolved values before the KG write.
 
@@ -170,7 +182,7 @@ def _repair_temporal_entities(
             if key not in marker_hint_for:
                 marker_hint_for[key] = h
 
-    def _temporal_meta_for(name: str, etype: EntityType) -> Optional[dict]:
+    def _temporal_meta_for(name: str, etype: EntityType) -> dict | None:
         """Build the temporal metadata block for one entity name, or None.
 
         Two sources, in priority order. A precomputed hint is preferred because
@@ -219,7 +231,7 @@ def _repair_temporal_entities(
             }
         }
 
-    def _temporal_anchor_description(name: str, etype: EntityType, meta: Optional[dict]) -> str:
+    def _temporal_anchor_description(name: str, etype: EntityType, meta: dict | None) -> str:
         """Compose a description for a temporal node the extractor left bare.
 
         Injected marker entities arrive with no description, and a node with an
@@ -247,11 +259,11 @@ def _repair_temporal_entities(
         return f"The timespan {name}."
 
     def _prefer_existing_temporal_description(
-        description: Optional[str],
+        description: str | None,
         *,
         name: str,
         etype: EntityType,
-        meta: Optional[dict],
+        meta: dict | None,
     ) -> str:
         """Keep the extractor's description, falling back to a generated anchor.
 
@@ -471,7 +483,7 @@ class Ingestor:
     # Overridable per instance via __init__(config=...).
     DEFAULTS = IngestorConfig()
 
-    def __init__(self, *, llm: Any, graph: Any, mgr: Any, ent_svc: Any, rel_svc: Any, config: Optional[dict | IngestorConfig] = None) -> None:
+    def __init__(self, *, llm: Any, graph: Any, mgr: Any, ent_svc: Any, rel_svc: Any, config: dict | IngestorConfig | None = None) -> None:
         """Wire up the ingestion steps and resolve the effective config.
 
         Args:
@@ -658,7 +670,7 @@ class Ingestor:
             raise
 
     # ---------- Thin delegation methods (preserve existing call sites) ----------
-    def summarize_turn(self, session_id: int | str, message_id: int, user_text: str, assistant_text: str, prev_k: int | None, request_id: str, dialogue_datetime: Optional[str] = None, temporal_hints: Optional[list] = None, tctx: Optional[TimeContext] = None) -> tuple[str, str]:
+    def summarize_turn(self, session_id: int | str, message_id: int, user_text: str, assistant_text: str, prev_k: int | None, request_id: str, dialogue_datetime: str | None = None, temporal_hints: list | None = None, tctx: TimeContext | None = None) -> tuple[str, str]:
         """Delegate turn summarization to the compressor with step logging."""
         with self.log_step("summarize_turn", request_id, session_id=session_id, message_id=message_id):
             return self._compressor.summarize_turn(
@@ -667,7 +679,7 @@ class Ingestor:
                 tctx=tctx,
             )
 
-    def extract_entities_only(self, prompt_vars: dict[str, Any], prompt_template: str, request_id: str, *, tuple_delim: Optional[str] = None, record_delim: Optional[str] = None, completion_delim: Optional[str] = None, max_retries: int = 2) -> tuple[bool, Any]:
+    def extract_entities_only(self, prompt_vars: dict[str, Any], prompt_template: str, request_id: str, *, tuple_delim: str | None = None, record_delim: str | None = None, completion_delim: str | None = None, max_retries: int = 2) -> tuple[bool, Any]:
         """Run only the entity-extraction phase under unified step logging."""
         with self.log_step("entity_extraction", request_id):
             return self._entity_extractor.extract(
@@ -676,7 +688,7 @@ class Ingestor:
                 completion_delim=completion_delim, max_retries=max_retries,
             )
 
-    def extract_relationships_only(self, prompt_vars: dict[str, Any], prompt_template: str, extracted_entities: List[Any], request_id: str, *, tuple_delim: Optional[str] = None, record_delim: Optional[str] = None, completion_delim: Optional[str] = None, max_retries: int = 2) -> tuple[bool, Any]:
+    def extract_relationships_only(self, prompt_vars: dict[str, Any], prompt_template: str, extracted_entities: list[Any], request_id: str, *, tuple_delim: str | None = None, record_delim: str | None = None, completion_delim: str | None = None, max_retries: int = 2) -> tuple[bool, Any]:
         """Run only the relationship-extraction phase under unified step logging."""
         with self.log_step("relationship_extraction", request_id):
             return self._rel_extractor.extract(
@@ -685,7 +697,7 @@ class Ingestor:
                 completion_delim=completion_delim, max_retries=max_retries,
             )
 
-    def apply_extraction_and_sync(self, result: ExtractionResult, provenance: Optional[dict] = None, request_id: str = "UNKNOWN", *, entity_sim_topk: Optional[int] = None, entity_sim_threshold: Optional[float] = None) -> dict[str, Any]:
+    def apply_extraction_and_sync(self, result: ExtractionResult, provenance: dict | None = None, request_id: str = "UNKNOWN", *, entity_sim_topk: int | None = None, entity_sim_threshold: float | None = None) -> dict[str, Any]:
         """Apply extracted entities and relationships to the vector stores and graph."""
         return self._syncer.sync(
             result, provenance, request_id,
@@ -697,15 +709,15 @@ class Ingestor:
     def ingest_turn(
         self,
         prompt_vars: dict,
-        prompt_templates: dict = None,
-        provenance: Optional[dict] = None,
+        prompt_templates: dict | None = None,
+        provenance: dict | None = None,
         request_id: str = "UNKNOWN",
         *,
-        entity_sim_topk: Optional[int] = None,
-        entity_sim_threshold: Optional[float] = None,
-        temporal_hints: Optional[list] = None,
-        tctx: Optional[TimeContext] = None,
-    ) -> List[tuple[str, bool, Any]]:
+        entity_sim_topk: int | None = None,
+        entity_sim_threshold: float | None = None,
+        temporal_hints: list | None = None,
+        tctx: TimeContext | None = None,
+    ) -> list[tuple[str, bool, Any]]:
         """
         TWO-STEP extraction: entities first, then relationships
         1) Extract entities using entity_extraction prompt
@@ -799,11 +811,11 @@ class Ingestor:
         message_id: int,
         user_text: str,
         assistant_text: str,
-        prev_k: Optional[int] = None,
+        prev_k: int | None = None,
         *,
-        entity_sim_topk: Optional[int] = None,
-        entity_sim_threshold: Optional[float] = None,
-        dialogue_datetime: Optional[str] = None,
+        entity_sim_topk: int | None = None,
+        entity_sim_threshold: float | None = None,
+        dialogue_datetime: str | None = None,
     ) -> Any:
         """
         Generate summary from query & response → TWO-STEP extraction (entities → relationships) → Write to VDB & KG
@@ -822,7 +834,7 @@ class Ingestor:
             # Rewrite relative temporal phrases directly to resolved absolute values.
             # Hints are kept as secondary metadata for summary annotation and pre-write repair.
             temporal_hints: list[dict] = []
-            _tctx: Optional[TimeContext] = None
+            _tctx: TimeContext | None = None
             aug_user_text = user_text
             aug_asst_text = assistant_text
 

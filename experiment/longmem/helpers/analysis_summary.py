@@ -14,7 +14,12 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-from experiment.longmem.utils.io import ensure_dir, glob_sorted, read_json_file, write_csv_dict_rows
+from experiment.longmem.utils.io import (
+    ensure_dir,
+    glob_sorted,
+    read_json_file,
+    write_csv_dict_rows,
+)
 
 
 def diagnose(row: dict) -> str:

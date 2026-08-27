@@ -1,16 +1,17 @@
 """
 Evidence building from provenance and summaries.
 """
-from typing import Any, Dict, List, Optional, Set, Tuple
-from grace_mem.storage import build_id_to_meta_maps
-from grace_mem.services import Provenance
-from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
+from typing import Any
+
 from grace_mem.pipeline.retrieval_steps.summary_scoring import (
     ScoringWeights,
     rank_summaries_by_graph_linked_score,
     select_summaries_rrf,
     select_summaries_rrf_mmr,
 )
+from grace_mem.services import Provenance
+from grace_mem.storage import build_id_to_meta_maps
+from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Retrieval.Evidence", filename="kg_retrieval_evidence.jsonl")
 
@@ -28,7 +29,7 @@ class EvidenceBuilder:
     Builds evidence blocks from entity/relationship provenance and summaries.
     """
 
-    def __init__(self, summaries_vdb: Any, vector_db_manager: Any, cache: Dict[str, Any], raw_context_lookup: Any = None) -> None:
+    def __init__(self, summaries_vdb: Any, vector_db_manager: Any, cache: dict[str, Any], raw_context_lookup: Any = None) -> None:
         """
         Args:
             summaries_vdb: Summaries vector database
@@ -58,10 +59,10 @@ class EvidenceBuilder:
         summary_rerank_topk: int = 0,
         summary_rerank_cosine_only: bool = False,
         split_single_entry_raw: bool = False,
-        query_text: Optional[str] = None,
-        request_id: Optional[str] = None,
+        query_text: str | None = None,
+        request_id: str | None = None,
         summary_filter_mode: str = "semantic",
-        scoring_weights: Optional[ScoringWeights] = None,
+        scoring_weights: ScoringWeights | None = None,
         hyde_vec: Any = None,
         hyde_weight: float = 0.0,
         hyde_mode: str = "blend",
@@ -169,7 +170,7 @@ class EvidenceBuilder:
             return (str(ev.get("session_id")), str(ev.get("message_id")))
 
         # ========== Stage 1: Score events without fetching text ==========
-        def score_event(ev: dict) -> Optional[float]:
+        def score_event(ev: dict) -> float | None:
             """
             Compute similarity score for a single event without fetching text.
             Returns None if below threshold or cannot compare.
@@ -180,7 +181,7 @@ class EvidenceBuilder:
 
             # Use cached score if available
             if summary_id in snippet_cache:
-                snippet, cached_score = snippet_cache[summary_id]
+                _snippet, cached_score = snippet_cache[summary_id]
                 _jlog(
                     "summary_cache_hit",
                     request_id,
@@ -482,7 +483,7 @@ class EvidenceBuilder:
         )
 
         # ========== Stage 4: Fetch text for top-K only ==========
-        def fetch_snippet(ev: dict, score: float) -> Optional[str]:
+        def fetch_snippet(ev: dict, score: float) -> str | None:
             """
             Fetch summary/raw text for events that passed threshold and are in top-K.
             Updates snippet_cache with text + score.
@@ -493,7 +494,7 @@ class EvidenceBuilder:
 
             # Use cached snippet if available
             if summary_id in snippet_cache:
-                cached_snippet, cached_score = snippet_cache[summary_id]
+                cached_snippet, _cached_score = snippet_cache[summary_id]
                 if cached_snippet is not None:
                     _jlog(
                         "summary_cache_hit",
@@ -506,7 +507,7 @@ class EvidenceBuilder:
                 # If only score cached, fetch text below
 
             t = _StepTimer()
-            snippet: Optional[str] = None
+            snippet: str | None = None
             stage_stats["fetch_attempts"] += 1
 
             # 1) Raw context mode: skip summary text, fetch raw turn text from CSV lookup
@@ -691,7 +692,7 @@ class EvidenceBuilder:
 
         return result
 
-    def _fetch_split_raw_text(self, entry_id: str) -> Optional[str]:
+    def _fetch_split_raw_text(self, entry_id: str) -> str | None:
         """Raw turn text for a split/single entry: raw_text metadata → stored
         document → raw_context_lookup (older artifacts lack text/raw_text
         metadata; fetch the raw pair text from script_data instead)."""
@@ -725,8 +726,8 @@ class EvidenceBuilder:
         summary_rerank_topk: int = 0,
         summary_rerank_cosine_only: bool = False,
         split_single_entry_raw: bool = False,
-        query_text: Optional[str] = None,
-        request_id: Optional[str],
+        query_text: str | None = None,
+        request_id: str | None,
     ) -> str:
         """
         Evidence building for use_split_embeddings=True.
@@ -739,9 +740,9 @@ class EvidenceBuilder:
         effective_threshold = float(summary_vec_threshold) if isinstance(summary_vec_threshold, (int, float)) else 0.0
 
         # entry_id → score cache
-        entry_score_cache: dict[str, Optional[float]] = {}
+        entry_score_cache: dict[str, float | None] = {}
 
-        def score_entry(entry_id: str) -> Optional[float]:
+        def score_entry(entry_id: str) -> float | None:
             """Score one evidence entry, memoizing by entry id.
 
             The same entry is reached through several entities and relationships, and
@@ -911,7 +912,7 @@ class EvidenceBuilder:
         )
 
         # Fetch text and format
-        evidence_items: list[tuple[float, str, str, Optional[str]]] = []
+        evidence_items: list[tuple[float, str, str, str | None]] = []
         for score, entry_id, ev in scored_entries:
             if split_single_entry_raw:
                 snippet = self._fetch_split_raw_text(entry_id)

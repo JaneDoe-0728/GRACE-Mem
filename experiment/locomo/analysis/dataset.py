@@ -14,10 +14,11 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import mean
-from typing import Any, Iterable
+from typing import Any
 
 if __package__ in (None, ""):
     repo_root = Path(__file__).resolve().parents[3]
@@ -253,7 +254,7 @@ def build_report(dataset_path: Path) -> str:
         findings.append("No missing conversation or QA containers were detected in the dataset.")
 
     parts = [
-        f"# LoCoMo Statistics\n",
+        "# LoCoMo Statistics\n",
         f"Dataset: `{dataset_path}`\n",
         "## Basic Counts\n",
         markdown_table(["Metric", "Value"], basic_rows),

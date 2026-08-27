@@ -7,7 +7,6 @@ import threading
 import time
 from pathlib import Path
 
-
 _TOKEN_LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "token_usage.jsonl"
 
 _METHOD_LABELS = {
@@ -95,8 +94,8 @@ class TokenTracker:
         with self._lock:
             lines = [
                 "=== Token Usage Summary ===",
-                f"  {'dataset':<20} {'stage':<10} {'label':<22} {'calls':>5}  "
-                f"{'prompt':>8}  {'completion':>10}  {'total':>8}",
+                (f"  {'dataset':<20} {'stage':<10} {'label':<22} {'calls':>5}  "
+                f"{'prompt':>8}  {'completion':>10}  {'total':>8}"),
                 "  " + "-" * 85,
             ]
             grand_prompt = grand_completion = grand_calls = 0

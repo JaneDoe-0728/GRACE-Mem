@@ -41,7 +41,7 @@ import json
 import subprocess
 import sys
 import tokenize
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 STATUSES = ("new", "rewritten", "deleted", "unchanged")
@@ -76,7 +76,7 @@ class FileReport:
 def git_show(rev: str, path: str) -> str | None:
     """Read a file at a revision, or None when it did not exist there."""
     result = subprocess.run(
-        ["git", "show", f"{rev}:{path}"], capture_output=True, text=True
+        ["git", "show", f"{rev}:{path}"], capture_output=True, text=True, check=False
     )
     return result.stdout if result.returncode == 0 else None
 
@@ -84,7 +84,7 @@ def git_show(rev: str, path: str) -> str | None:
 def changed_files(base: str, head: str, path_filter: str | None) -> list[str]:
     """List the .py files that differ between the two revisions."""
     cmd = ["git", "diff", "--name-only", base, head, "--", "*.py"]
-    files = subprocess.run(cmd, capture_output=True, text=True).stdout.split()
+    files = subprocess.run(cmd, capture_output=True, text=True, check=False).stdout.split()
     if path_filter:
         files = [f for f in files if f.startswith(path_filter)]
     return files

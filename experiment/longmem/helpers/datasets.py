@@ -13,8 +13,8 @@ reports it as final.
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 from experiment.longmem.pipeline.decision import (
     filter_child_entries,

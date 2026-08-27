@@ -22,13 +22,11 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if __package__ in (None, "") and str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from experiment.longmem.tools.convert_dataset import convert_longmem_dataset
-
 
 LOCOMO_REVISION = "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376"
 LONGMEM_REVISION = "98d7416c24c778c2fee6e6f3006e7a073259d48f"

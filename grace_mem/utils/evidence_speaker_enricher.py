@@ -4,10 +4,9 @@ from __future__ import annotations
 import argparse
 import csv
 import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Mapping, Optional
-
 
 SID_RE = re.compile(r"\[sid=([^\]]+)\]")
 SPEAKER_LINE_RE = re.compile(r"^\s*([A-Za-z][A-Za-z ._'’-]{0,60}|user|assistant)\s*:\s*(.*)$", re.IGNORECASE)
@@ -37,7 +36,7 @@ def parse_speaker_turns(raw_text: str) -> list[SpeakerTurn]:
     speaker prefix are ignored unless they continue a previous speaker turn.
     """
     turns: list[SpeakerTurn] = []
-    current_speaker: Optional[str] = None
+    current_speaker: str | None = None
     current_lines: list[str] = []
 
     def flush() -> None:
@@ -107,7 +106,7 @@ def _ordered_speakers(turns: Iterable[SpeakerTurn]) -> list[str]:
     return speakers
 
 
-def _speaker_from_line(line: str, known_speakers: list[str]) -> tuple[Optional[str], str]:
+def _speaker_from_line(line: str, known_speakers: list[str]) -> tuple[str | None, str]:
     """Return explicit leading speaker and line text without the speaker marker."""
     stripped = line.strip()
     colon_match = SPEAKER_LINE_RE.match(stripped)
@@ -125,7 +124,7 @@ def _speaker_from_line(line: str, known_speakers: list[str]) -> tuple[Optional[s
     return None, stripped
 
 
-def _best_overlap_speaker(line: str, raw_turns: list[SpeakerTurn], min_score: float) -> Optional[str]:
+def _best_overlap_speaker(line: str, raw_turns: list[SpeakerTurn], min_score: float) -> str | None:
     line_tokens = tokenize(line)
     if not line_tokens:
         return None
@@ -144,7 +143,7 @@ def _best_overlap_speaker(line: str, raw_turns: list[SpeakerTurn], min_score: fl
     return best_speaker if best_score >= min_score else None
 
 
-def _alternate_speaker(previous_speaker: Optional[str], ordered_speakers: list[str]) -> Optional[str]:
+def _alternate_speaker(previous_speaker: str | None, ordered_speakers: list[str]) -> str | None:
     if not previous_speaker or len(ordered_speakers) != 2:
         return None
     if previous_speaker.lower() == ordered_speakers[0].lower():
@@ -173,7 +172,7 @@ def annotate_summary_with_speakers(
     raw_is_summary = (raw_text or "").strip() == (summary_text or "").strip()
 
     annotated: list[str] = []
-    previous_speaker: Optional[str] = None
+    previous_speaker: str | None = None
     for raw_line in (summary_text or "").splitlines():
         if not raw_line.strip() or re.match(r"^\s*\[[^\]]+\]\s+", raw_line):
             annotated.append(raw_line)
@@ -219,7 +218,7 @@ def enrich_evidence_summary(
     max_speakers: int = 4,
 ) -> str:
     """Add speaker tags to Evidence Summary bullet blocks."""
-    def raw_for_sid(sid: str) -> Optional[str]:
+    def raw_for_sid(sid: str) -> str | None:
         raw_text = raw_by_sid.get(sid)
         if raw_text is None and ":" in sid:
             raw_text = raw_by_sid.get(sid.rsplit(":", 1)[0])
@@ -318,7 +317,7 @@ def build_raw_map_from_rows(rows: Iterable[Mapping[str, object]]) -> dict[str, s
             raw_by_sid[sid] = "\n".join(session_lines)
             raw_by_sid[f"{sid}:{normalized[-1]['turn_index']}"] = raw_by_sid[sid]
 
-        pending_user: Optional[dict[str, object]] = None
+        pending_user: dict[str, object] | None = None
         for row in normalized:
             role = str(row["role"])
             if role == "user":

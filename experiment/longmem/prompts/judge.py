@@ -9,6 +9,7 @@ via response_format and parses tolerantly.
 """
 from __future__ import annotations
 
+
 def _to_hyphen(category: str | None) -> str:
     """longmem's underscored category -> hindsight's hyphenated one
     (single_session_user -> single-session-user)."""

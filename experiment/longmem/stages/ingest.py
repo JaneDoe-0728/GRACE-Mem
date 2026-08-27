@@ -13,7 +13,6 @@ question nobody answered yields entities with no facts attached to them.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Optional
 
 import pandas as pd
 
@@ -40,9 +39,9 @@ class IngestStage:
         ingestor,
         df: pd.DataFrame,
         *,
-        prev_k: Optional[int] = None,
-        entity_sim_topk: Optional[int] = None,
-        entity_sim_threshold: Optional[float] = None,
+        prev_k: int | None = None,
+        entity_sim_topk: int | None = None,
+        entity_sim_threshold: float | None = None,
         ignore_trailing_user_without_reply: bool = True,
     ) -> dict:
         data = self.normalize_sessions(df)
@@ -118,9 +117,9 @@ class IngestStage:
         ingestor,
         df: pd.DataFrame,
         *,
-        prev_k: Optional[int] = None,
-        entity_sim_topk: Optional[int] = None,
-        entity_sim_threshold: Optional[float] = None,
+        prev_k: int | None = None,
+        entity_sim_topk: int | None = None,
+        entity_sim_threshold: float | None = None,
     ) -> dict:
         data = self.normalize_sessions(df)
         results = {}

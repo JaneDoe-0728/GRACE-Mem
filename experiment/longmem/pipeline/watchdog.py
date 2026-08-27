@@ -25,24 +25,34 @@ if __package__ in (None, ""):
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-from experiment.longmem.helpers.args import DEFAULT_STAGES, add_child_args, add_data_args, add_rerun_args, add_run_args, resolve_stages
-from experiment.longmem.helpers.datasets import resolve_child_datasets, select_dataset_names, select_datasets
-from experiment.longmem.helpers.progress import append_stuck_history_entry
 from experiment.common.run_metadata import namespace_to_dict, write_run_metadata
+from experiment.longmem.helpers.args import (
+    DEFAULT_STAGES,
+    add_child_args,
+    add_data_args,
+    add_rerun_args,
+    add_run_args,
+    resolve_stages,
+)
+from experiment.longmem.helpers.datasets import (
+    resolve_child_datasets,
+    select_dataset_names,
+    select_datasets,
+)
+from experiment.longmem.helpers.progress import append_stuck_history_entry
 from experiment.longmem.utils.io import (
-    append_type_subdir,
     append_jsonl,
+    append_type_subdir,
     ensure_dir,
     glob_sorted,
     list_run_targets,
     read_json_file,
+    read_jsonl_file,
     resolve_batch_output_root,
     resolve_output_dir,
-    read_jsonl_file,
-    write_status_file,
     write_json_file,
+    write_status_file,
 )
-
 
 DEFAULT_OUTPUT_BASE = _LONGMEM_ROOT / "output"
 BATCH_MODULE = "experiment.longmem.pipeline.batch"
@@ -569,7 +579,9 @@ def _resolve_rerun_targets(
     prompted each one -- a dataset re-run for a stall and one re-run for an
     incomplete output are different situations.
     """
-    from experiment.longmem.helpers.rerun_support import retrieval_datasets_from_artifacts
+    from experiment.longmem.helpers.rerun_support import (
+        retrieval_datasets_from_artifacts,
+    )
 
     if type_names:
         return [
@@ -625,11 +637,14 @@ def _run_rerun_mode(
     data_folder: Path | None = None,
 ) -> int:
     """Run the watchdog in rerun mode: re-do the datasets that need it, then stop."""
-    from experiment.longmem.pipeline.aggregate import update_all_answers_csv, update_progress_rows
     from experiment.longmem.helpers.rerun_support import (
         cleanup_retrieval_loggers,
-        retrieval_datasets_from_artifacts,
         rerun_accuracy,
+        retrieval_datasets_from_artifacts,
+    )
+    from experiment.longmem.pipeline.aggregate import (
+        update_all_answers_csv,
+        update_progress_rows,
     )
     from experiment.longmem.pipeline.rerun import LongMemRerun
 
@@ -720,7 +735,7 @@ def _run_rerun_mode(
                 results.append(result)
                 logger.info("%s | correctness=%s", dataset_name, result["correctness"])
             except Exception as exc:
-                logger.exception("%s: %s", dataset_name, exc)
+                logger.exception("Dataset %s failed", dataset_name)
                 error_result = {"dataset": dataset_name, "error": str(exc)}
                 results.append(error_result)
                 try:
@@ -1084,9 +1099,9 @@ def main(argv: list[str] | None = None) -> int:
             write_status_file(status_path, status)
             return 130
 
-        except Exception as exc:
+        except Exception:
             # Watchdog itself crashed — log and try to carry on
-            logger.exception("Unexpected watchdog error: %s", exc)
+            logger.exception("Unexpected watchdog error")
             status["state"] = "watchdog_error"
             write_status_file(status_path, status)
             logger.info("Sleeping 60s after watchdog error before retrying...")

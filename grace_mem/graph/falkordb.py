@@ -19,13 +19,13 @@ exist first -- `init_schema` therefore creates indexes before constraints.
 Requires the `FalkorDB` python client.
 """
 
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Dict, List, Optional, Any
+import json
 import logging
 import os
-import json
 import time
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 
 from grace_mem.utils.logger_config import make_module_jlog
 
@@ -96,7 +96,7 @@ class Graph:
     def __init__(self, cfg: GraphConfig) -> None:
         """Store FalkorDB settings and lazy connection handles."""
         self.cfg = cfg
-        self._db: Optional[FalkorDB] = None
+        self._db: FalkorDB | None = None
         self._graph = None  # FalkorDB Graph object
 
     # ---------- lifecycle ----------
@@ -179,18 +179,18 @@ class Graph:
 
     # ---------- upsert helpers ----------
     @staticmethod
-    def _cypher_map_literal(d: Dict[str, Any]) -> str:
+    def _cypher_map_literal(d: dict[str, Any]) -> str:
         """Render a flat dict of scalars as a Cypher map literal: {k: val, ...}"""
         parts = [f"{k}: {Graph._cypher_literal(v)}" for k, v in d.items()]
         return "{" + ", ".join(parts) + "}"
 
-    def _build_unwind_query(self, rows: List[Dict[str, Any]], body: str) -> str:
+    def _build_unwind_query(self, rows: list[dict[str, Any]], body: str) -> str:
         """Build: UNWIND [{...}, ...] AS row <body>  with all values embedded as literals."""
         list_lit = "[" + ", ".join(self._cypher_map_literal(r) for r in rows) + "]"
         return f"UNWIND {list_lit} AS row\n{body}"
 
     # ---------- upsert ----------
-    def sync_entities(self, entity_idx: Dict) -> int:
+    def sync_entities(self, entity_idx: dict) -> int:
         """Batch-upsert entities via a single UNWIND query per chunk (N+1 → O(N/batch) round-trips)."""
         if not entity_idx:
             logger.debug("[sync_entities] empty input")
@@ -200,7 +200,7 @@ class Graph:
         now_iso = datetime.utcnow().isoformat()
 
         # Deduplicate: keep last entry per id
-        by_id: Dict[str, Dict[str, Any]] = {}
+        by_id: dict[str, dict[str, Any]] = {}
         dropped = 0
         for meta in entity_idx.values():
             if not meta or "id" not in meta:
@@ -284,7 +284,7 @@ RETURN 1 AS ct"""
         logger.debug("[sync_entities] ok=%d/%d elapsed=%.3fs", ok, len(by_id), elapsed)
         return ok
 
-    def sync_relationships(self, relationship_metas: List[Dict]) -> int:
+    def sync_relationships(self, relationship_metas: list[dict]) -> int:
         """Batch-upsert relationships via a single UNWIND query per chunk.
 
         The per-row endpoint existence check (which doubled query count) is removed:
@@ -408,7 +408,7 @@ RETURN 1 AS ct"""
         return ok
 
     # ---------- queries ----------
-    def get_node_subgraph(self, entity_ids: List[str]) -> Dict[str, Dict]:
+    def get_node_subgraph(self, entity_ids: list[str]) -> dict[str, dict]:
         """Fetch matching nodes and their adjacent edges and neighbors."""
         if not entity_ids:
             return {}
@@ -441,7 +441,7 @@ RETURN 1 AS ct"""
         """
 
         rows = self._run_read(query, {})
-        out: Dict[str, Dict] = {}
+        out: dict[str, dict] = {}
 
         for rec in rows:
             sid = rec.get("source_id")
@@ -476,7 +476,7 @@ RETURN 1 AS ct"""
         return out
 
 
-    def check_entity_ids(self, ids: List[str]) -> List[str]:
+    def check_entity_ids(self, ids: list[str]) -> list[str]:
         """Return the subset of entity IDs that actually exist in FalkorDB."""
         if not ids:
             return []
@@ -488,7 +488,7 @@ RETURN 1 AS ct"""
         rows = self._run_read(query, {})
         return [r["id"] for r in rows if r.get("id") is not None]
 
-    def check_relationship_ids(self, ids: List[str]) -> List[str]:
+    def check_relationship_ids(self, ids: list[str]) -> list[str]:
         """Return the subset of relationship IDs that actually exist in FalkorDB."""
         if not ids:
             return []
@@ -500,7 +500,7 @@ RETURN 1 AS ct"""
         rows = self._run_read(query, {})
         return [r["id"] for r in rows if r.get("id") is not None]
 
-    def get_edge_subgraph(self, rel_ids: List[str]) -> List[Dict]:
+    def get_edge_subgraph(self, rel_ids: list[str]) -> list[dict]:
         """Fetch matching relationships together with source and target nodes."""
         if not rel_ids:
             return []
@@ -532,7 +532,7 @@ RETURN 1 AS ct"""
         """
 
         rows = self._run_read(query, {})
-        out: List[Dict] = []
+        out: list[dict] = []
 
         for rec in rows:
             # rec is already a dict of primitives (thanks to _rows_as_dicts)
@@ -581,7 +581,7 @@ RETURN 1 AS ct"""
         raise RuntimeError("Failed to clear_all after reconnect") from last_exc
 
     # ---------- low-level helpers ----------
-    def _run_read(self, cypher: str, params: dict) -> List[Dict[str, Any]]:
+    def _run_read(self, cypher: str, params: dict) -> list[dict[str, Any]]:
         """Execute a read query and normalize FalkorDB's raw response rows."""
         self._ensure_open()
         raw = self._exec_graph_query(cypher, params or {}, readonly=True)
@@ -592,7 +592,7 @@ RETURN 1 AS ct"""
                      len(raw) if isinstance(raw, (list, tuple)) else None, len(recs))
         return recs
 
-    def _run_write(self, cypher: str, params: dict) -> Optional[Dict[str, Any]]:
+    def _run_write(self, cypher: str, params: dict) -> dict[str, Any] | None:
         """Execute a write query and return the first normalized response row."""
         raw = self._exec_graph_query(cypher, params or {}, readonly=False)
         rows = self._rows_as_dicts(raw)
@@ -604,7 +604,7 @@ RETURN 1 AS ct"""
             self.open()
 
     @staticmethod
-    def _rows_as_dicts(query_result: Any) -> List[Dict[str, Any]]:
+    def _rows_as_dicts(query_result: Any) -> list[dict[str, Any]]:
         """
         Supports:
         A) Raw RedisGraph/FalkorDB reply: [header, rows, stats]
@@ -631,7 +631,7 @@ RETURN 1 AS ct"""
             if not isinstance(header_raw, (list, tuple)) or len(header_raw) == 0:
                 return []
 
-            header: List[str] = []
+            header: list[str] = []
 
             # Case A1: header = [[col,type], ...]
             if isinstance(header_raw[0], (list, tuple)):
@@ -649,9 +649,9 @@ RETURN 1 AS ct"""
             if not isinstance(rows_raw, (list, tuple)):
                 return []
 
-            out: List[Dict[str, Any]] = []
+            out: list[dict[str, Any]] = []
             for row in rows_raw:
-                d: Dict[str, Any] = {}
+                d: dict[str, Any] = {}
                 if not isinstance(row, (list, tuple)):
                     # single scalar row
                     d[header[0]] = row
@@ -666,7 +666,7 @@ RETURN 1 AS ct"""
         result_set = getattr(query_result, "result_set", None) or []
         if not header:
             return []
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for row in result_set:
             d = {}
             for i, col in enumerate(header):
@@ -689,7 +689,7 @@ RETURN 1 AS ct"""
         s = s.replace("\\", "\\\\").replace("'", "\\'")
         return f"'{s}'"
 
-    def _build_cypher_prefix(self, params: Optional[Dict[str, Any]]) -> str:
+    def _build_cypher_prefix(self, params: dict[str, Any] | None) -> str:
         """
         Build: CYPHER k=val k2=val2 ...
         This is the server-side parameterization format:
@@ -700,7 +700,7 @@ RETURN 1 AS ct"""
         parts = [f"{k}={self._cypher_literal(v)}" for k, v in params.items()]
         return "CYPHER " + " ".join(parts) + " "
 
-    def _exec_graph_query(self, query: str, params: Optional[Dict[str, Any]] = None, readonly: bool = False) -> Any:
+    def _exec_graph_query(self, query: str, params: dict[str, Any] | None = None, readonly: bool = False) -> Any:
         """
         Execute query via Redis command directly, bypassing falkordb-py Graph.query().
         Returns raw Redis reply: [header, rows, stats]
@@ -723,7 +723,7 @@ RETURN 1 AS ct"""
         # Connect straight from the URL, sidestepping incompatible __init__ kwargs
         return FalkorDB.from_url(uri)
 
-    def _create_unique_constraint_node(self, label: str, props: List[str]) -> Any:
+    def _create_unique_constraint_node(self, label: str, props: list[str]) -> Any:
         """
         GRAPH.CONSTRAINT CREATE <graph> UNIQUE NODE <label> PROPERTIES <n> <prop...>
         """
@@ -731,7 +731,7 @@ RETURN 1 AS ct"""
         if not hasattr(self._db, "execute_command"):
             raise RuntimeError("Underlying client does not support execute_command")
 
-        args: List[Any] = [
+        args: list[Any] = [
             "GRAPH.CONSTRAINT",
             "CREATE",
             self.cfg.graph_name,
@@ -744,7 +744,7 @@ RETURN 1 AS ct"""
         ]
         return self._db.execute_command(*args)
 
-    def _create_unique_constraint_rel(self, rel_type: str, props: List[str]) -> Any:
+    def _create_unique_constraint_rel(self, rel_type: str, props: list[str]) -> Any:
         """
         GRAPH.CONSTRAINT CREATE <graph> UNIQUE RELATIONSHIP <type> PROPERTIES <n> <prop...>
         """
@@ -752,7 +752,7 @@ RETURN 1 AS ct"""
         if not hasattr(self._db, "execute_command"):
             raise RuntimeError("Underlying client does not support execute_command")
 
-        args: List[Any] = [
+        args: list[Any] = [
             "GRAPH.CONSTRAINT",
             "CREATE",
             self.cfg.graph_name,

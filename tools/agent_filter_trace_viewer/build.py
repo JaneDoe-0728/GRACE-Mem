@@ -66,7 +66,7 @@ def _corpus(data_root: Path, cat: str, stem: str):
         p = data_root / cat / f"{stem}.csv"
         try:
             _corpus_cache[key] = load_corpus(p) if p.exists() else None
-        except Exception:  # noqa: BLE001
+        except Exception:
             _corpus_cache[key] = None
     return _corpus_cache[key]
 
@@ -81,7 +81,7 @@ def sid_texts(data_root: Path, cat: str, stem: str, sids: set[str]) -> dict[str,
     for s in sids:
         try:
             turns = corp.resolve(s)
-        except Exception:  # noqa: BLE001
+        except Exception:
             turns = []
         if turns:
             txt = " ".join(str(t.text) for t in turns).strip()
@@ -180,7 +180,7 @@ def correctness(out_root: Path, run_tag: str, cat: str, stem: str):
                         if v is not None:
                             val = v
                             break
-        except Exception:  # noqa: BLE001
+        except Exception:
             val = None
     _corr_cache[key] = val
     return val
@@ -204,7 +204,7 @@ def judge_scores(out_root: Path, run_tag: str, cat: str, stem: str) -> dict[str,
                     if value is not None:
                         scores[model] = value
                         break
-    except Exception:  # noqa: BLE001
+    except Exception:
         return {}
     return scores
 

@@ -6,7 +6,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 if __package__ in (None, ""):
     repo_root = Path(__file__).resolve().parents[3]
@@ -19,14 +19,19 @@ from experiment.locomo.helpers.dataset import (
     load_raw_samples,
     resolve_dataset_path,
 )
-from experiment.locomo.utils.io import append_jsonl_record, append_text, ensure_dir, remove_if_exists
+from experiment.locomo.utils.io import (
+    append_jsonl_record,
+    append_text,
+    ensure_dir,
+    remove_if_exists,
+)
 
 SESSION_KEY_RE = re.compile(r"^session_(\d+)$")
 SESSION_DT_RE = re.compile(r"^session_(\d+)_date_time$")
 
 
-def extract_sessions(conv: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    sessions: Dict[str, Dict[str, Any]] = {}
+def extract_sessions(conv: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    sessions: dict[str, dict[str, Any]] = {}
     for key, value in conv.items():
         match = SESSION_KEY_RE.match(key)
         if match and isinstance(value, list):
@@ -39,8 +44,8 @@ def extract_sessions(conv: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     return sessions
 
 
-def build_lines(turns: List[Dict[str, Any]]) -> List[str]:
-    lines: List[str] = []
+def build_lines(turns: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
     for turn in turns:
         speaker = str(turn.get("speaker", "")).strip()
         text = str(turn.get("text", "")).strip().replace("\n", " ")

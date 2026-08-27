@@ -15,21 +15,24 @@ ambiguous and expensive to get wrong, whereas an edge is already pinned by two
 resolved endpoints, which leaves far less room for a wrong merge.
 """
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from collections.abc import Callable, Iterable
+from typing import Any
+
 import numpy as np
+
 from grace_mem.utils.common import canonical_rel_id
 from grace_mem.utils.logger_config import make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.RelationshipManager", filename="kg_ingestor.jsonl")
 
-Meta = Dict[str, object]
-KeyNameType = Tuple[str, str]  # (input_name, input_type)
+Meta = dict[str, object]
+KeyNameType = tuple[str, str]  # (input_name, input_type)
 # The two relationship keyings are not redundant. RelKeyST identifies the edge
 # and is what merging collapses onto; RelKeySTD additionally carries the
 # description, which preserves each distinct statement about that edge for
 # retrieval even after the edge itself has been merged.
-RelKeyST = Tuple[str, str]     # (source_id, target_id)
-RelKeySTD = Tuple[str, str, str]  # (source_id, target_id, description)
+RelKeyST = tuple[str, str]     # (source_id, target_id)
+RelKeySTD = tuple[str, str, str]  # (source_id, target_id, description)
 
 class RelationshipManager:
     """Resolve, merge, and persist extracted relationships.
@@ -45,9 +48,9 @@ class RelationshipManager:
         embedder: Any,                          # must provide .embed(List[str]) -> np.ndarray
         mgr: Any,                               # must provide .get_relationships_vdb(dim), .persist_async()
         provenance: Any,                        # must provide .merge_prov(old, new)
-        global_cache: Dict[str, Any],
-        processed_rel_map: Dict[RelKeyST, Meta],
-        processed_rel_full_map: Dict[RelKeySTD, Meta]
+        global_cache: dict[str, Any],
+        processed_rel_map: dict[RelKeyST, Meta],
+        processed_rel_full_map: dict[RelKeySTD, Meta]
     ) -> None:
         """Store the injected collaborators and the two processed-edge caches.
 
@@ -66,9 +69,9 @@ class RelationshipManager:
     # ---- resolve entities through input2resolved only ----
     @staticmethod
     def _resolve_via_input2resolved(
-        name: Optional[str],
-        input2resolved: Dict[KeyNameType, Meta] | None
-    ) -> Optional[Meta]:
+        name: str | None,
+        input2resolved: dict[KeyNameType, Meta] | None
+    ) -> Meta | None:
         """Look up the resolved entity behind an extracted endpoint name.
 
         Matches on name only, ignoring the type half of the key. Extraction
@@ -90,7 +93,7 @@ class RelationshipManager:
         return None
     
     @staticmethod
-    def _check_mappings(relationships: Iterable[Any], input2resolved: Dict[KeyNameType, Meta] | None) -> set[str]:
+    def _check_mappings(relationships: Iterable[Any], input2resolved: dict[KeyNameType, Meta] | None) -> set[str]:
         """Report endpoint names that no resolved entity accounts for.
 
         Diagnostic only -- the caller logs the result and carries on, because
@@ -107,7 +110,7 @@ class RelationshipManager:
         if not relationships:
             return missing
         names_in_map = {(in_name or "").strip()
-                        for (in_name, _t) in (input2resolved or {}).keys()}
+                        for (in_name, _t) in (input2resolved or {})}
         for r in relationships:
             if (r.source_entity or "").strip() not in names_in_map:
                 missing.add((r.source_entity or "").strip())
@@ -118,13 +121,13 @@ class RelationshipManager:
     def upsert_from_extraction(
         self,
         result: Any,                 # ExtractionResult (carries result.relationships)
-        provenance: Optional[dict] = None,
-        input2resolved: Dict[KeyNameType, Meta] | None = None,
+        provenance: dict | None = None,
+        input2resolved: dict[KeyNameType, Meta] | None = None,
         *,
         request_id: str = "UNKNOWN",
         sync_to_graph: bool = False,
-        sync_fn: Optional[Callable[[List[Meta]], int]] = None           # callable: List[Meta] -> int
-    ) -> List[Meta]:
+        sync_fn: Callable[[list[Meta]], int] | None = None           # callable: List[Meta] -> int
+    ) -> list[Meta]:
         """Resolve, merge, and persist every relationship in an extraction result.
 
         Per edge: both endpoints must resolve, or the edge is skipped and
@@ -158,8 +161,8 @@ class RelationshipManager:
         if missing:
             _jlog("relationship_endpoint_mapping_missing", request_id, missing_names=sorted(missing))
             
-        texts: List[str] = []
-        metas: List[Meta] = []
+        texts: list[str] = []
+        metas: list[Meta] = []
         skipped = 0
 
         for r in rels:

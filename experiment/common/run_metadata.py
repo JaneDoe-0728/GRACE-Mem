@@ -25,7 +25,6 @@ from dotenv import dotenv_values
 
 from experiment.common.reproducibility import attach_reproducibility_metadata
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ENV_PATHS = {
     ".env": _REPO_ROOT / ".env",

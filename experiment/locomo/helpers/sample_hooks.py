@@ -15,7 +15,6 @@ import shutil
 import sys
 from pathlib import Path
 
-from grace_mem.storage.cache import CacheStore
 from experiment.locomo.utils.graph import (
     ARTIFACTS_SRC,
     GRAPH_EXPORT_FILE,
@@ -23,6 +22,8 @@ from experiment.locomo.utils.graph import (
     write_graph_export,
 )
 from experiment.locomo.utils.log import log_event
+from grace_mem.storage.cache import CacheStore
+
 
 def ensure_worker_repo_path() -> None:
     repo_root = Path(__file__).resolve().parent.parent.parent.parent

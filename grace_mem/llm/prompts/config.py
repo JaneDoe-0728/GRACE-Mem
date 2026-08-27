@@ -1,9 +1,8 @@
 """
 Common configuration for LLM prompts.
 """
-from typing import Dict
 
-EXTRA_KWARGS: Dict[str, str] = {
+EXTRA_KWARGS: dict[str, str] = {
     # "language": "English",
     # "entity_types": "person, organization, location, geo, event, animal, food, product, category, unknown",
     "entity_types": "Person, Event, Date, Time, Timespan, Location, Organization, Product, Service, Activity, Topic, Concept",

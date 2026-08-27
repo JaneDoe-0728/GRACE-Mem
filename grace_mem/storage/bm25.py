@@ -11,9 +11,12 @@ with a two-word name would let description terms dominate the score for a query
 that was actually naming an entity.
 """
 
-from typing import List, Dict, Any, Optional
+import pickle
+import threading
+from typing import Any
+
 from rank_bm25 import BM25Okapi
-import pickle, threading
+
 
 class EntitiesBM25:
     """Parallel BM25 indexes over entity names and descriptions.
@@ -28,11 +31,11 @@ class EntitiesBM25:
     def __init__(self) -> None:
         """Initialize BM25 indexes for entity names, descriptions, and metadata."""
         self._lock = threading.Lock()
-        self._docs_name: List[List[str]] = []
-        self._docs_desc: List[List[str]] = []
-        self._bm25_name: Optional[BM25Okapi] = None
-        self._bm25_desc: Optional[BM25Okapi] = None
-        self._metas: List[Dict[str, Any]] = []
+        self._docs_name: list[list[str]] = []
+        self._docs_desc: list[list[str]] = []
+        self._bm25_name: BM25Okapi | None = None
+        self._bm25_desc: BM25Okapi | None = None
+        self._metas: list[dict[str, Any]] = []
 
     @property
     def size(self) -> int:
@@ -40,7 +43,7 @@ class EntitiesBM25:
         return len(self._metas)
 
     @property
-    def metas(self) -> List[Dict[str, Any]]:
+    def metas(self) -> list[dict[str, Any]]:
         """Expose the metadata list aligned with the BM25 document order."""
         return self._metas
 
@@ -55,7 +58,7 @@ class EntitiesBM25:
         self._bm25_name = BM25Okapi(self._docs_name) if self._docs_name else BM25Okapi([[]])
         self._bm25_desc = BM25Okapi(self._docs_desc) if self._docs_desc else BM25Okapi([[]])
 
-    def add(self, tokens_name: List[str], tokens_desc: List[str], meta: Dict[str, Any]) -> None:
+    def add(self, tokens_name: list[str], tokens_desc: list[str], meta: dict[str, Any]) -> None:
         """Append one entity and rebuild both indexes.
 
         Rebuilding on every insert is O(n) per add, quadratic over a full
@@ -72,7 +75,7 @@ class EntitiesBM25:
             self._metas.append(meta)
             self.build()
 
-    def get_scores(self, q_tokens: List[str]) -> tuple[list[float], list[float]]:
+    def get_scores(self, q_tokens: list[str]) -> tuple[list[float], list[float]]:
         """Score a tokenized query against both indexes.
 
         Args:

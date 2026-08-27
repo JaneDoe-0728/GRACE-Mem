@@ -17,14 +17,14 @@ retrieval never touches the entity collection, and opening a Chroma index costs
 real time at startup.
 """
 
-from pathlib import Path
 import logging
-import os, threading
-from typing import Optional
+import os
+import threading
+from pathlib import Path
 
-from grace_mem.storage.chroma_vdb import EntitiesVDB, RelationshipsVDB, SummariesVDB
 from grace_mem.storage.bm25 import EntitiesBM25
 from grace_mem.storage.cache import CacheStore
+from grace_mem.storage.chroma_vdb import EntitiesVDB, RelationshipsVDB, SummariesVDB
 from grace_mem.storage.paths import resolve_artifacts_dir
 
 logger = logging.getLogger(__name__)
@@ -72,13 +72,13 @@ class VDBManager:
         # Load cache from artifacts directory
         self.cache = CacheStore.load(cache_dir=self.ART)
 
-        self._entities_vdb: Optional[EntitiesVDB] = None
-        self._relationships_vdb: Optional[RelationshipsVDB] = None
-        self._summaries_vdb: Optional[SummariesVDB] = None
-        self._entities_bm25: Optional[EntitiesBM25] = None
+        self._entities_vdb: EntitiesVDB | None = None
+        self._relationships_vdb: RelationshipsVDB | None = None
+        self._summaries_vdb: SummariesVDB | None = None
+        self._entities_bm25: EntitiesBM25 | None = None
         self._persist_lock = threading.Lock()
-        self._persist_thread: Optional[threading.Thread] = None
-        self._persist_error: Optional[Exception] = None
+        self._persist_thread: threading.Thread | None = None
+        self._persist_error: Exception | None = None
 
     def initialize(self) -> bool:
         """Prepare the stores, reporting whether this is a cold start.

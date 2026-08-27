@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, List, Tuple
+from typing import Any
 
 from grace_mem.utils.logger_config import make_module_jlog
 
@@ -48,11 +48,11 @@ _STOPWORDS = {
     "who", "why", "how", "which", "that", "this", "with", "as", "by", "it",
     "she", "he", "they", "her", "his", "their", "you", "we", "about", "from",
     "has", "have", "had", "not", "would", "could", "will", "been", "than",
-    "been", "into", "out", "up", "down", "over", "after", "before",
+    "into", "out", "up", "down", "over", "after", "before",
 }
 
 
-def _content_terms(text: str, min_len: int = 3) -> List[str]:
+def _content_terms(text: str, min_len: int = 3) -> list[str]:
     """Lowercase content tokens (length-filtered, stopword-filtered)."""
     return [
         t for t in re.findall(r"[a-z0-9']+", (text or "").lower())
@@ -89,7 +89,7 @@ class NarrowingModule:
         *,
         query_vec: Any = None,
         request_id: str | None = None,
-        entity_names: List[str] | None = None,
+        entity_names: list[str] | None = None,
     ) -> str:
         """Keep the top-N question-relevant snippets; drop the rest."""
         if not evidence_block or not self.enabled:
@@ -100,8 +100,8 @@ class NarrowingModule:
 
         try:
             lines = evidence_block.split("\n")
-            headers: List[str] = []
-            snippets: List[str] = []
+            headers: list[str] = []
+            snippets: list[str] = []
             for ln in lines:
                 if not ln.strip():
                     continue
@@ -121,7 +121,7 @@ class NarrowingModule:
             for name in (entity_names or []):
                 qterms.update(_content_terms(name))
 
-            scored: List[Tuple[int, int, str]] = []  # (overlap, orig_index, snippet)
+            scored: list[tuple[int, int, str]] = []  # (overlap, orig_index, snippet)
             for idx, snip in enumerate(snippets):
                 low = snip.lower()
                 overlap = sum(1 for t in qterms if t in low)

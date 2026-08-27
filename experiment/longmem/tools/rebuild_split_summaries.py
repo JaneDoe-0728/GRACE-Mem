@@ -21,11 +21,10 @@ import shutil
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 from experiment.common.paths import REPO_ROOT
-from grace_mem.utils.raw_context_lookup import RawContextLookup
 from grace_mem.utils.query_time_parser import parse_query_time
+from grace_mem.utils.raw_context_lookup import RawContextLookup
 from grace_mem.utils.temporal import build_time_context, rewrite_temporal_text
 
 SCRIPT_DATA_DIR = REPO_ROOT / "experiment" / "longmem" / "script_data"
@@ -39,7 +38,7 @@ def get_compressor():
     )
 
 
-def compress_and_rewrite(text: str, compressor, dialogue_datetime: Optional[str]) -> str:
+def compress_and_rewrite(text: str, compressor, dialogue_datetime: str | None) -> str:
     """llmlingua compress assistant text, then rewrite temporal expressions."""
     import torch
     # Step 1: llmlingua
@@ -339,9 +338,12 @@ def main():
         if args.categories and subdir.name not in args.categories:
             continue
         for art_dir in sorted(subdir.iterdir()):
-            if art_dir.is_dir() and art_dir.name.startswith("artifacts_"):
-                if art_dir.name not in (args.exclude or []):
-                    artifact_dirs.append(art_dir)
+            if (
+                art_dir.is_dir()
+                and art_dir.name.startswith("artifacts_")
+                and art_dir.name not in (args.exclude or [])
+            ):
+                artifact_dirs.append(art_dir)
 
     print(f"Found {len(artifact_dirs)} artifact directories")
 

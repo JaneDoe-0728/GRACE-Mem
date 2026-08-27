@@ -15,16 +15,18 @@ Everything rotates, because a full experiment sweep produces event logs large
 enough to fill a disk.
 """
 
-import logging, json, os, time
+import json
+import logging
+import os
+import time
 from logging.handlers import RotatingFileHandler
-from typing import Optional, Any, Dict, Tuple
+from typing import Any
 
 __all__ = [
-    "setup_logger",          # human-readable: [ts][LEVEL] name: msg
-    "get_event_logger",      # JSONL event log
-    "close_event_loggers",   # close the event logger handlers
-    "_jlog",                 # write one JSON event line
     "_StepTimer",
+    "close_event_loggers",   # close the event logger handlers
+    "get_event_logger",      # JSONL event log
+    "setup_logger",          # human-readable: [ts][LEVEL] name: msg
 ]
 
 # ----------- Human-readable logger (for the server) -----------
@@ -79,7 +81,7 @@ def setup_logger(
     return logger
 
 # ----------- JSONL event logger (for KG retrieval/tracing) -----------
-_EVENT_LOGGERS: Dict[Tuple[str, str], logging.Logger] = {}
+_EVENT_LOGGERS: dict[tuple[str, str], logging.Logger] = {}
 
 def get_event_logger(
     name: str = "grace_mem.Events",
@@ -175,7 +177,7 @@ def make_module_jlog(
         backup_count=backup_count,
         also_stdout=also_stdout,
     )
-    def _jlog(event: str, request_id: Optional[str], **data: Any) -> None:
+    def _jlog(event: str, request_id: str | None, **data: Any) -> None:
         """Write one structured JSON event to the bound module logger.
 
         `ensure_ascii=False` keeps non-ASCII conversation text readable in the

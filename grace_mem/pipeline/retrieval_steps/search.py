@@ -2,9 +2,11 @@
 Entity and relationship search functionality using hybrid vector + BM25 approach.
 """
 import os
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-import numpy as np
+from collections.abc import Iterable
+from typing import Any
+
 import faiss
+import numpy as np
 
 from grace_mem.utils.common import tokenize_en
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
@@ -12,7 +14,7 @@ from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
 _jlog = make_module_jlog(name="grace_mem.Retrieval.Search", filename="kg_retrieval_search.jsonl")
 
 
-def _relationship_label(meta: Dict[str, Any]) -> str:
+def _relationship_label(meta: dict[str, Any]) -> str:
     """Render relationship metadata into a human-readable source->target label."""
     src_name = meta.get("source_entity") or meta.get("source_name") or meta.get("source_id") or "?"
     tgt_name = meta.get("target_entity") or meta.get("target_name") or meta.get("target_id") or "?"
@@ -42,8 +44,8 @@ class EntityRelationshipSearcher:
         low_level_keywords: Iterable[str],
         entity_vec_threshold: float,
         entity_top_k: int,
-        request_id: Optional[str] = None,
-    ) -> Dict[str, List[Tuple[Dict[str, Any], float]]]:
+        request_id: str | None = None,
+    ) -> dict[str, list[tuple[dict[str, Any], float]]]:
         """
         Search entities using both vector similarity and BM25 keyword matching.
 
@@ -63,7 +65,7 @@ class EntityRelationshipSearcher:
         """
         timer_total = _StepTimer()
         keywords = [str(keyword) for keyword in (low_level_keywords or []) if keyword]
-        entities_hit: Dict[str, List[Tuple[Dict[str, Any], float]]] = {}
+        entities_hit: dict[str, list[tuple[dict[str, Any], float]]] = {}
 
         _jlog(
             "search_entities_hybrid_start",
@@ -185,8 +187,8 @@ class EntityRelationshipSearcher:
             idxs = np.where(strong_mask)[0]
 
             idxs = list(idxs)[::-1]  # Reverse scan
-            keyword_hits: Dict[str, Tuple[Dict[str, Any], float]] = {}
-            hit_debug: List[dict] = []
+            keyword_hits: dict[str, tuple[dict[str, Any], float]] = {}
+            hit_debug: list[dict] = []
 
             for idx in idxs:
                 meta = metas[idx]
@@ -267,11 +269,11 @@ class EntityRelationshipSearcher:
 
     def search_relationships_by_vec(
         self,
-        keywords: List[str],
+        keywords: list[str],
         relationship_top_k: int,
         relationship_vec_threshold: float,
-        request_id: Optional[str] = None,
-    ) -> Dict[str, List[Tuple[Dict[str, Any], float]]]:
+        request_id: str | None = None,
+    ) -> dict[str, list[tuple[dict[str, Any], float]]]:
         """
         Search relationships using vector similarity on keywords.
 
@@ -356,7 +358,7 @@ class EntityRelationshipSearcher:
         )
         return out
 
-    def embed_query(self, question: str, request_id: Optional[str] = None) -> np.ndarray:
+    def embed_query(self, question: str, request_id: str | None = None) -> np.ndarray:
         """
         Embed query text and normalize.
 

@@ -35,9 +35,9 @@ def _refresh_system(*, sleep_seconds: float) -> None:
     log_event("REFRESH", "Cleaning system for next sample")
     refresh_cmd = [
         sys.executable, "-c",
-        "import sys; sys.path.append('.');"
-        "from tools.refresh_system import refresh_system; refresh_system()"
+        ("import sys; sys.path.append('.');"
+        "from tools.refresh_system import refresh_system; refresh_system()")
     ]
-    subprocess.run(refresh_cmd)
+    subprocess.run(refresh_cmd, check=False)
     if sleep_seconds > 0:
         time.sleep(sleep_seconds)

@@ -25,10 +25,10 @@ from __future__ import annotations
 import csv
 import json
 import re
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable
-
+from typing import Any
 
 _JSONL_FILES = {
     "ingest_delta": "error_analysis_ingest_delta.jsonl",

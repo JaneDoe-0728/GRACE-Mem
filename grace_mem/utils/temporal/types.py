@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 
 class TimeCategory(str, Enum):
@@ -110,11 +109,11 @@ class TimeContext:
             Configurable because the mapping is a convention, not a fact.
     """
     reference_dt: datetime
-    reference_time_str: Optional[str] = None
+    reference_time_str: str | None = None
     timezone: str = "Asia/Taipei"
-    source: Optional[str] = None
+    source: str | None = None
     last_weekday_policy: str = "nearest_previous"
-    daypart_anchor_times: Optional[dict[str, str]] = None
+    daypart_anchor_times: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -140,12 +139,12 @@ class ResolvedTimeRange:
     category: TimeCategory
     status: ResolutionStatus
     method: str
-    anchor_reference_time: Optional[str]
-    granularity: Optional[TimeGranularity]
-    start: Optional[datetime]
-    end: Optional[datetime]
-    operator: Optional[str]
-    display_value: Optional[str]
+    anchor_reference_time: str | None
+    granularity: TimeGranularity | None
+    start: datetime | None
+    end: datetime | None
+    operator: str | None
+    display_value: str | None
     validation_result: ValidationResult
 
     def to_dict(self) -> dict:
@@ -182,9 +181,9 @@ class TemporalConstraint:
     """
     original_text: str
     span: tuple[int, int]
-    operator: Optional[str]
-    anchor_text: Optional[str]
-    anchor_resolution: Optional[ResolvedTimeRange]
+    operator: str | None
+    anchor_text: str | None
+    anchor_resolution: ResolvedTimeRange | None
     resolution: ResolvedTimeRange
 
     def to_dict(self) -> dict:

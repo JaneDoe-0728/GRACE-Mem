@@ -29,16 +29,17 @@ constant across variants, so a difference in accuracy cannot be attributed to
 retrieval having found different things.
 """
 
-import re
+import argparse
 import csv
 import json
-import time
-import argparse
-import pandas as pd
-import sys
 import os
+import re
+import sys
+import time
 from pathlib import Path
 from typing import Any
+
+import pandas as pd
 
 if __package__ in (None, ""):
     repo_root = Path(__file__).resolve().parents[3]
@@ -46,17 +47,21 @@ if __package__ in (None, ""):
         sys.path.insert(0, str(repo_root))
 
 try:
-    from grace_mem.storage import MGR
     from grace_mem.pipeline.retrieval_steps import TemporalRelevanceCalculator
+    from grace_mem.storage import MGR
     from grace_mem.utils.query_time_parser import detect_and_parse_time_expressions
     from grace_mem.utils.temporal import time_rewrite_ablation_enabled
 except Exception as e:
     raise RuntimeError(
-        "Failed to import GRACE-Mem modules. Ensure PYTHONPATH includes your project root. Original error: %r" % (e,)
+        f"Failed to import GRACE-Mem modules. Ensure PYTHONPATH includes your project root. Original error: {e!r}"
     )
 
 from experiment.locomo.helpers.llm import llm_post
-from experiment.locomo.utils.error_analysis import append_analysis_record, compact_json, derive_drop_reasons
+from experiment.locomo.utils.error_analysis import (
+    append_analysis_record,
+    compact_json,
+    derive_drop_reasons,
+)
 from experiment.locomo.utils.io import EVAL_COLUMNS
 
 # retriever is set by the caller (e.g. locomo_pipeline.py) after build_pipeline().
@@ -455,7 +460,7 @@ def _extract_facts_for_evidence(raw_text: str, date_time: str | None) -> list[st
 from experiment.locomo.helpers.dataset import load_qa_items, resolve_dataset_path
 
 try:
-    from experiment.experiment_config import RETRIEVAL_PARAMS, RERANKER_PARAMS
+    from experiment.experiment_config import RERANKER_PARAMS, RETRIEVAL_PARAMS
 except Exception:
     RETRIEVAL_PARAMS = {
         "ent_topk": 20,
@@ -1428,8 +1433,8 @@ class QAEvalStage:
         self.simplify_evidence = simplify_evidence
 
     def run(self) -> list[dict]:
-        import experiment.locomo.stages.qa_eval as _self
-        _self.retriever = self.retriever
+        global retriever
+        retriever = self.retriever
         qa_items = load_questions(
             self.dataset_json,
             sample_index=self.sample_index,
@@ -1439,6 +1444,7 @@ class QAEvalStage:
 
 
 def main():
+    global retriever
     parser = argparse.ArgumentParser(description="Run RAG evaluation for a conversational QA dataset sample")
     parser.add_argument("--dataset-json", default=None, help="Defaults to locomo10.json")
     parser.add_argument("--sample-index", type=int, default=3)
@@ -1456,11 +1462,10 @@ def main():
         output_csv = Path(__file__).resolve().parent / "data" / f"sample{args.sample_index}_eval.csv"
 
     # Standalone mode owns one pipeline runtime for retrieval and graph access.
-    import experiment.locomo.stages.qa_eval as _self
     from grace_mem.pipeline.factory import build_pipeline
 
     with build_pipeline(retriever_config=RERANKER_PARAMS) as runtime:
-        _self.retriever = runtime.retriever
+        retriever = runtime.retriever
         MGR.initialize()
         qa_items = load_questions(
             dataset_json_path,

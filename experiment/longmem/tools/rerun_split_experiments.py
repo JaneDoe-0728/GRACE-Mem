@@ -26,14 +26,14 @@ import sys
 
 import pandas as pd
 
-from grace_mem.llm import LLMClient
-from experiment.common.paths import REPO_ROOT
 from experiment.common.evaluation.judge import (
     LONGMEM_CATEGORIES,
     SKIP_LONGMEM_FILES,
     JudgeEngine,
     find_column,
 )
+from experiment.common.paths import REPO_ROOT
+from grace_mem.llm import LLMClient
 
 CONFIG_PATH = REPO_ROOT / "experiment" / "experiment_config.py"
 OUTPUT_DIR = REPO_ROOT / "experiment" / "longmem" / "output"
@@ -44,14 +44,14 @@ SUFFIX = os.environ.get("LONGMEM_RUN_SUFFIX", "-rr2")
 
 # new_tag suffix is appended; overrides are the 5 swept knobs (confirmed w/ user).
 EXPERIMENTS: list[tuple[str, dict]] = [
-    ("split-embed",   dict(summary_topk_per_item=16, summary_direct_vector_topn=0,  summary_direct_vector_min_score=0.0,  summary_rerank_topk=0,  summary_rerank_cosine_only=False)),
+    ("split-embed",   {"summary_topk_per_item": 16, "summary_direct_vector_topn": 0,  "summary_direct_vector_min_score": 0.0,  "summary_rerank_topk": 0,  "summary_rerank_cosine_only": False}),
     # sweep-topk16 skipped per user (identical config to split-embed).
-    ("sweep-topk24",  dict(summary_topk_per_item=24, summary_direct_vector_topn=0,  summary_direct_vector_min_score=0.0,  summary_rerank_topk=0,  summary_rerank_cosine_only=False)),
-    ("sweep-topk32",  dict(summary_topk_per_item=32, summary_direct_vector_topn=0,  summary_direct_vector_min_score=0.0,  summary_rerank_topk=0,  summary_rerank_cosine_only=False)),
-    ("extraslot-t50", dict(summary_topk_per_item=16, summary_direct_vector_topn=50, summary_direct_vector_min_score=0.50, summary_rerank_topk=0,  summary_rerank_cosine_only=False)),
-    ("extraslot-t40", dict(summary_topk_per_item=16, summary_direct_vector_topn=50, summary_direct_vector_min_score=0.40, summary_rerank_topk=0,  summary_rerank_cosine_only=False)),
-    ("extraslot-t35", dict(summary_topk_per_item=16, summary_direct_vector_topn=50, summary_direct_vector_min_score=0.35, summary_rerank_topk=0,  summary_rerank_cosine_only=False)),
-    ("rerank16",      dict(summary_topk_per_item=16, summary_direct_vector_topn=50, summary_direct_vector_min_score=0.35, summary_rerank_topk=16, summary_rerank_cosine_only=False)),
+    ("sweep-topk24",  {"summary_topk_per_item": 24, "summary_direct_vector_topn": 0,  "summary_direct_vector_min_score": 0.0,  "summary_rerank_topk": 0,  "summary_rerank_cosine_only": False}),
+    ("sweep-topk32",  {"summary_topk_per_item": 32, "summary_direct_vector_topn": 0,  "summary_direct_vector_min_score": 0.0,  "summary_rerank_topk": 0,  "summary_rerank_cosine_only": False}),
+    ("extraslot-t50", {"summary_topk_per_item": 16, "summary_direct_vector_topn": 50, "summary_direct_vector_min_score": 0.50, "summary_rerank_topk": 0,  "summary_rerank_cosine_only": False}),
+    ("extraslot-t40", {"summary_topk_per_item": 16, "summary_direct_vector_topn": 50, "summary_direct_vector_min_score": 0.40, "summary_rerank_topk": 0,  "summary_rerank_cosine_only": False}),
+    ("extraslot-t35", {"summary_topk_per_item": 16, "summary_direct_vector_topn": 50, "summary_direct_vector_min_score": 0.35, "summary_rerank_topk": 0,  "summary_rerank_cosine_only": False}),
+    ("rerank16",      {"summary_topk_per_item": 16, "summary_direct_vector_topn": 50, "summary_direct_vector_min_score": 0.35, "summary_rerank_topk": 16, "summary_rerank_cosine_only": False}),
 ]
 
 

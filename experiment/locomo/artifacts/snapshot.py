@@ -26,9 +26,10 @@ import json
 import logging
 import shutil
 import tempfile
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from experiment.locomo.utils.graph import (
     ARTIFACTS_SRC,
@@ -218,7 +219,7 @@ def highest_existing_snapshot(
     """
     highest = 0
     missing_seen = False
-    for session_id in sorted(set(int(value) for value in session_ids)):
+    for session_id in sorted({int(value) for value in session_ids}):
         if not snapshot_exists(sample_dir, session_id):
             missing_seen = True
             continue

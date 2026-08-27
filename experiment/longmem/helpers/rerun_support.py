@@ -19,7 +19,6 @@ from pathlib import Path
 from experiment.longmem.pipeline.decision import retrieval_context_needs_rerun
 from experiment.longmem.utils.io import glob_sorted, read_csv_frame
 
-
 ARTIFACT_MARKERS = (
     "entities_cache.pkl",
     "relationships_cache.pkl",
@@ -69,9 +68,11 @@ def retrieval_datasets(
 
     selected: list[str] = []
     for csv_path in candidates:
-        if force or output_csv_needs_rerun(csv_path):
-            if resolve_artifact_dir(scan_dir, csv_path.stem) is not None:
-                selected.append(csv_path.stem)
+        if (
+            (force or output_csv_needs_rerun(csv_path))
+            and resolve_artifact_dir(scan_dir, csv_path.stem) is not None
+        ):
+            selected.append(csv_path.stem)
     return selected
 
 
@@ -115,13 +116,12 @@ def output_csv_needs_rerun(csv_path: Path) -> bool:
 
 def setup_retrieval_loggers(dataset_name: str, log_dir: Path) -> None:
     """Point retrieval logging at this dataset's directory for the rerun."""
-    from grace_mem.utils.logger_config import make_module_jlog
-
     import grace_mem.pipeline.retrieval_steps.evidence as evidence_module
     import grace_mem.pipeline.retrieval_steps.filtering as filtering_module
     import grace_mem.pipeline.retrieval_steps.search as search_module
     import grace_mem.pipeline.retrieval_steps.temporal as temporal_module
     import grace_mem.pipeline.retriever as retriever_module
+    from grace_mem.utils.logger_config import make_module_jlog
 
     retriever_module._jlog = make_module_jlog(
         name=f"grace_mem.Retriever.{dataset_name}",

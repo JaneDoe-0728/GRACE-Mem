@@ -12,9 +12,9 @@ and the sample it was meant to affect runs without it.
 
 import argparse
 import sys
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Sequence
 
 MODULE_DIR = Path(__file__).resolve().parent
 if __package__ in (None, ""):

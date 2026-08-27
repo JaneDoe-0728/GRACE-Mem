@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from grace_mem.storage.cache import CacheStore, build_id_to_meta_maps
 
-__all__ = ["ART_DIR", "MGR", "VDBManager", "CacheStore", "build_id_to_meta_maps"]
+__all__ = ["ART_DIR", "MGR", "CacheStore", "VDBManager", "build_id_to_meta_maps"]
 
 if TYPE_CHECKING:
     from grace_mem.storage.chroma_manager import ART_DIR, MGR, VDBManager

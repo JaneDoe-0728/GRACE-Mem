@@ -16,9 +16,12 @@ single shared directory, so two datasets run without it silently overwrite each
 other's extractions.
 """
 
+import logging
+import os
+import pickle
 from pathlib import Path
-from typing import Any, Dict, Tuple, Optional
-import pickle, logging,os
+from typing import Any
+
 logger = logging.getLogger(__name__)
 
 # Deprecated process-wide fallback. Created at import time so the legacy
@@ -37,7 +40,7 @@ class CacheStore:
     """
 
     @staticmethod
-    def load(cache_dir: Optional[Path] = None) -> Dict[str, Dict]:
+    def load(cache_dir: Path | None = None) -> dict[str, dict]:
         """Read the cache from disk, returning empty maps if absent.
 
         A missing or unreadable cache is not an error -- it is a cold start, so
@@ -64,7 +67,7 @@ class CacheStore:
             ent_file = cache_dir / "entities_cache.pkl"
             rel_file = cache_dir / "relationships_cache.pkl"
 
-        def _load(p: Path) -> Dict[str, Dict]:
+        def _load(p: Path) -> dict[str, dict]:
             """Load a cached shard from disk and fall back to an empty mapping on error."""
             try:
                 with open(p, "rb") as f:
@@ -83,7 +86,7 @@ class CacheStore:
         return cache
 
     @staticmethod
-    def save(cache: Dict[str, Dict], cache_dir: Optional[Path] = None) -> None:
+    def save(cache: dict[str, dict], cache_dir: Path | None = None) -> None:
         """Pickle the cache to disk as two shards.
 
         Unlike `load`, a write failure re-raises after logging: a cache that
@@ -109,7 +112,7 @@ class CacheStore:
             ent_file = cache_dir / "entities_cache.pkl"
             rel_file = cache_dir / "relationships_cache.pkl"
 
-        def _dump(p: Path, obj: Dict[str, Dict]) -> None:
+        def _dump(p: Path, obj: dict[str, dict]) -> None:
             """Write one cache shard to disk."""
             try:
                 with open(p, "wb") as f:
@@ -122,7 +125,7 @@ class CacheStore:
         _dump(rel_file, {"relationships": cache.get("relationships", {}), "relationships_full": cache.get("relationships_full", {})})
 
     @staticmethod
-    def clear(cache: Dict[str, Dict]) -> None:
+    def clear(cache: dict[str, dict]) -> None:
         """Empty the cache in memory, leaving the files on disk.
 
         Clears each map in place rather than rebinding, because callers hold
@@ -136,7 +139,7 @@ class CacheStore:
         cache.get("relationships_full", {}).clear()
 
     @staticmethod
-    def reset(cache: Dict[str, Dict], cache_dir: Optional[Path] = None) -> None:
+    def reset(cache: dict[str, dict], cache_dir: Path | None = None) -> None:
         """Clear memory and delete the cache files, forcing a full re-extraction.
 
         Both halves are cleared before either file is removed, so an
@@ -165,7 +168,7 @@ class CacheStore:
             except FileNotFoundError:
                 pass  # already absent is the desired end state
 
-def build_id_to_meta_maps(cache: Dict[str, Dict]) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+def build_id_to_meta_maps(cache: dict[str, dict]) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     """Invert the cache into id -> metadata lookups.
 
     The cache is keyed by normalized name, but retrieval works in ids: graph

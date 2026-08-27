@@ -10,12 +10,12 @@ indirection.
 
 from typing import TYPE_CHECKING, Any
 
-__all__ = ["EntityManager", "RelationshipManager", "Provenance"]
+__all__ = ["EntityManager", "Provenance", "RelationshipManager"]
 
 if TYPE_CHECKING:
     from grace_mem.services.entity_manager import EntityManager
-    from grace_mem.services.relationship_manager import RelationshipManager
     from grace_mem.services.provenance import Provenance
+    from grace_mem.services.relationship_manager import RelationshipManager
 
 
 def __getattr__(name: str) -> Any:

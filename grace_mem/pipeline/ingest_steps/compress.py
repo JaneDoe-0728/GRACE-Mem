@@ -1,6 +1,6 @@
 """Compressor: llmlingua-based turn summarization."""
 import time
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from grace_mem.utils.logger_config import make_module_jlog
 from grace_mem.utils.temporal import TimeContext, rewrite_temporal_text
@@ -33,10 +33,10 @@ class Compressor:
         user_text: str,
         assistant_text: str,
         request_id: str,
-        dialogue_datetime: Optional[str] = None,
-        temporal_hints: Optional[list] = None,
-        tctx: Optional[TimeContext] = None,
-    ) -> Tuple[str, str]:
+        dialogue_datetime: str | None = None,
+        temporal_hints: list | None = None,
+        tctx: TimeContext | None = None,
+    ) -> tuple[str, str]:
         """Compress current turn, write to summaries VDB; returns (summary_id, summary_text)."""
         if not assistant_text or not assistant_text.strip():
             curr_text = user_text.strip()

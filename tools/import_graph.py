@@ -15,9 +15,8 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ROOTS = ("grace_mem", "experiment")

@@ -23,7 +23,7 @@ Paper best values:  c = 0.4,  τa = 0.5
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+
 import numpy as np
 
 from grace_mem.storage import build_id_to_meta_maps
@@ -56,7 +56,7 @@ class SpreadingActivationEngine:
     paper's linear factor to prevent activation explosion.
     """
 
-    def __init__(self, graph, vector_db_manager, config: SAConfig, cache: Optional[dict] = None):
+    def __init__(self, graph, vector_db_manager, config: SAConfig, cache: dict | None = None):
         self.graph = graph
         self.vdb = vector_db_manager
         self.config = config
@@ -68,7 +68,7 @@ class SpreadingActivationEngine:
         meta = ent_id2meta.get(entity_id, {}) or {}
         return meta.get("name") or entity_id
 
-    def _edge_label(self, source_id: str, rel_id: Optional[str], target_id: str) -> str:
+    def _edge_label(self, source_id: str, rel_id: str | None, target_id: str) -> str:
         """Render one traversed edge into a readable label."""
         source_name = self._entity_name(source_id)
         target_name = self._entity_name(target_id)
@@ -83,10 +83,10 @@ class SpreadingActivationEngine:
 
     def run(
         self,
-        seed_entity_ids: List[str],
+        seed_entity_ids: list[str],
         query_vec: np.ndarray,
-        request_id: Optional[str] = None,
-    ) -> Dict[str, float]:
+        request_id: str | None = None,
+    ) -> dict[str, float]:
         """
         Run spreading activation from seed entities.
 
@@ -120,8 +120,8 @@ class SpreadingActivationEngine:
         )
 
         # ── Phase 1: build in-memory adj_dict ────────────────────────────
-        adj_dict: Dict[str, List[Tuple[str, float]]] = {}   # node → [(target, w'), ...]
-        all_nodes: Set[str] = set(seed_entity_ids)
+        adj_dict: dict[str, list[tuple[str, float]]] = {}   # node → [(target, w'), ...]
+        all_nodes: set[str] = set(seed_entity_ids)
 
         frontier = list(seed_entity_ids)
         _jlog(
@@ -139,7 +139,7 @@ class SpreadingActivationEngine:
 
             timer_hop = _StepTimer()
             subgraph = self.graph.get_node_subgraph(frontier)
-            next_frontier: List[str] = []
+            next_frontier: list[str] = []
             hop_edges_total = 0
             hop_edges_kept = 0
             hop_edges_pruned = 0
@@ -147,7 +147,7 @@ class SpreadingActivationEngine:
             pruned_edge_names: list[str] = []
 
             for eid, node_data in subgraph.items():
-                arcs: List[Tuple[str, float]] = []
+                arcs: list[tuple[str, float]] = []
 
                 for neighbor in (node_data.get("neighbors") or []):
                     neighbor_id = neighbor.get("neighbor_id")
@@ -213,11 +213,11 @@ class SpreadingActivationEngine:
         )
 
         # ── Phase 2: BFS spreading activation (Algorithm 1) ──────────────
-        activation_value: Dict[str, float] = {e: 0.0 for e in all_nodes}
+        activation_value: dict[str, float] = {e: 0.0 for e in all_nodes}
         for eid in seed_entity_ids:
             activation_value[eid] = 1.0
 
-        visited: Set[str] = set()
+        visited: set[str] = set()
         queue: deque = deque(seed_entity_ids)
         _jlog(
             "sa_phase2_start",
@@ -287,7 +287,7 @@ class SpreadingActivationEngine:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _raw_edge_weight(self, rel_id: Optional[str], query_vec: np.ndarray) -> float:
+    def _raw_edge_weight(self, rel_id: str | None, query_vec: np.ndarray) -> float:
         """
         cos(query_vec, rel_embed(rel_id))  — before rescaling.
         Returns 0.0 if the relation is not found in the VDB.

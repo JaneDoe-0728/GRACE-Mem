@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -20,7 +21,7 @@ def _require_pandas():
     return pd
 
 
-def _compute_from_df(df: DataFrame, *, exclude_adversarial: bool) -> Dict[str, object]:
+def _compute_from_df(df: DataFrame, *, exclude_adversarial: bool) -> dict[str, object]:
     pd = _require_pandas()
     if "category_label" in df.columns:
         cat_col = "category_label"
@@ -36,7 +37,7 @@ def _compute_from_df(df: DataFrame, *, exclude_adversarial: bool) -> Dict[str, o
         elif "category" in df.columns:
             mask &= ~df["category"].astype(str).str.strip().isin(["5", "adversarial", "Adversarial"])
 
-    stats: Dict[str, object] = {
+    stats: dict[str, object] = {
         "avg_correctness": None,
         "avg_correctness_percent": None,
         "count_correctness": 0,
@@ -78,7 +79,7 @@ def _compute_from_df(df: DataFrame, *, exclude_adversarial: bool) -> Dict[str, o
             stats["count_bleu1"] = int(filtered.shape[0])
             stats["sum_bleu1"] = float(filtered.sum())
 
-    by_category: Dict[str, Dict[str, float | int]] = {}
+    by_category: dict[str, dict[str, float | int]] = {}
     if cat_col:
         cat_df = df[[cat_col]].copy()
         if "correctness" in df.columns:
@@ -117,7 +118,7 @@ def _compute_from_df(df: DataFrame, *, exclude_adversarial: bool) -> Dict[str, o
     return stats
 
 
-def compute_summary_from_df(df: DataFrame, *, exclude_adversarial: bool) -> Dict[str, Any]:
+def compute_summary_from_df(df: DataFrame, *, exclude_adversarial: bool) -> dict[str, Any]:
     """Summarize a judged dataframe into overall and per-category accuracy."""
     stats = _compute_from_df(df, exclude_adversarial=exclude_adversarial)
     by_category = dict(stats["by_category"])
@@ -151,7 +152,7 @@ def compute_summary_from_rows(
     rows: Sequence[dict[str, Any]],
     *,
     exclude_adversarial: bool,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Summarize judged rows without requiring a dataframe.
 
     The row-based entry point, so the worker can summarize its own results

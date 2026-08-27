@@ -13,9 +13,9 @@ import json
 import statistics
 import sys
 from collections import Counter, defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
 
 _ROOT = Path(__file__).resolve().parents[3]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
@@ -23,7 +23,11 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from experiment.common.evaluation.judge import ABSTENTION_COLUMN, MAJORITY_VOTE_COLUMN, as_binary
+from experiment.common.evaluation.judge import (
+    ABSTENTION_COLUMN,
+    MAJORITY_VOTE_COLUMN,
+    as_binary,
+)
 from experiment.locomo.stages.judge import compute_f1_and_bleu1
 
 LOCOMO_OUTPUT = _ROOT / "experiment" / "locomo" / "output" / "standard"

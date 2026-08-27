@@ -19,14 +19,16 @@ similarity. Skipping normalization on either side does not error -- it just
 returns quietly wrong rankings.
 """
 
-import chromadb
-import uuid
-import os
-import json
-import threading
 import datetime
-from typing import List, Dict, Any, Tuple, Optional
+import json
+import os
+import threading
+import uuid
+from typing import Any
+
+import chromadb
 import numpy as np
+
 from grace_mem.embeddings import embedder
 from grace_mem.utils.logger_config import make_module_jlog
 
@@ -53,7 +55,7 @@ def normalize_l2(vectors: np.ndarray) -> np.ndarray:
     return vectors / norm
 
 
-def _serialize_metadata(meta: Dict[str, Any]) -> Dict[str, Any]:
+def _serialize_metadata(meta: dict[str, Any]) -> dict[str, Any]:
     """
     Serialize nested metadata values to JSON strings for ChromaDB compatibility.
     ChromaDB only accepts str, int, float, bool, or None as metadata values.
@@ -67,7 +69,7 @@ def _serialize_metadata(meta: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def _deserialize_metadata(meta: Dict[str, Any]) -> Dict[str, Any]:
+def _deserialize_metadata(meta: dict[str, Any]) -> dict[str, Any]:
     """Restore JSON-encoded metadata values written by `_serialize_metadata`.
 
     Which values were encoded is not recorded, so this infers it: a string
@@ -136,7 +138,7 @@ class SimpleChromaVDB:
         with self._lock:
             return self._collection.count()
 
-    def add(self, vectors: np.ndarray, metadatas: List[Dict[str, Any]]) -> None:
+    def add(self, vectors: np.ndarray, metadatas: list[dict[str, Any]]) -> None:
         """Write vectors and metadata, deduplicating by id within the batch.
 
         Implemented as a Chroma upsert, so this both inserts and overwrites --
@@ -187,12 +189,12 @@ class SimpleChromaVDB:
                 metadatas=serialized_metadatas
             )
 
-    def upsert(self, vectors: np.ndarray, metadatas: List[Dict[str, Any]]) -> None:
+    def upsert(self, vectors: np.ndarray, metadatas: list[dict[str, Any]]) -> None:
         """Alias add() so callers can use an upsert-style API."""
         self.add(vectors, metadatas)
 
-    def search(self, query_vec: np.ndarray, top_k: int = 5, threshold: Optional[float] = None
-               ) -> List[Tuple[Dict[str, Any], float]]:
+    def search(self, query_vec: np.ndarray, top_k: int = 5, threshold: float | None = None
+               ) -> list[tuple[dict[str, Any], float]]:
         """Return the top_k nearest entries by cosine similarity, best first.
 
         Args:
@@ -249,8 +251,8 @@ class SimpleChromaVDB:
         return sorted([(m, s) for (m, s, _) in filtered.values()], key=lambda x: x[1], reverse=True)
 
     def batch_search(
-        self, query_vecs: np.ndarray, top_k: int = 5, threshold: Optional[float] = None
-    ) -> List[List[Tuple[Dict[str, Any], float]]]:
+        self, query_vecs: np.ndarray, top_k: int = 5, threshold: float | None = None
+    ) -> list[list[tuple[dict[str, Any], float]]]:
         """Batch vector search: one ChromaDB query for all N entity vectors.
 
         Returns a list (length N) where each element is the per-entity result
@@ -268,7 +270,7 @@ class SimpleChromaVDB:
                 n_results=top_k,
             )
 
-        out: List[List[Tuple[Dict[str, Any], float]]] = []
+        out: list[list[tuple[dict[str, Any], float]]] = []
         for qi in range(n):
             hits = []
             if results and results.get("ids") and qi < len(results["ids"]):
@@ -278,7 +280,7 @@ class SimpleChromaVDB:
                         meta = _deserialize_metadata(results["metadatas"][qi][j])
                         hits.append((meta, float(score)))
 
-            filtered: Dict[str, Tuple[Dict[str, Any], float, int]] = {}
+            filtered: dict[str, tuple[dict[str, Any], float, int]] = {}
             for meta, score in hits:
                 mid = meta.get("id")
                 if not mid:
@@ -299,7 +301,7 @@ class SimpleChromaVDB:
         mid: str,
         query_vec: np.ndarray,
         threshold: float = 0.0
-    ) -> Optional[Tuple[Dict[str, Any], float]]:
+    ) -> tuple[dict[str, Any], float] | None:
         """Fetch one stored vector by ID and compare it to the query vector."""
         
         if query_vec.ndim == 1:
@@ -327,9 +329,9 @@ class SimpleChromaVDB:
         self,
         mid: str,
         query_vec: np.ndarray,
-        request_id: Optional[str] = None,
-        debug_context: Optional[Dict[str, Any]] = None,
-    ) -> Optional[float]:
+        request_id: str | None = None,
+        debug_context: dict[str, Any] | None = None,
+    ) -> float | None:
         """Fetch one stored vector by ID and return raw cosine score without threshold."""
         if query_vec.ndim == 1:
             qv = query_vec[None, :]
@@ -374,7 +376,7 @@ class SimpleChromaVDB:
         stored_vec = np.array(res['embeddings'][0])
         return float(np.dot(stored_vec, normalized_qv[0]))
 
-    def delete(self, ids: List[str]) -> None:
+    def delete(self, ids: list[str]) -> None:
         """
         Deletes entries by their IDs.
         """
@@ -383,7 +385,7 @@ class SimpleChromaVDB:
         with self._lock:
             self._collection.delete(ids=ids)
 
-    def update(self, ids: List[str], vectors: Optional[np.ndarray] = None, metadatas: Optional[List[Dict[str, Any]]] = None) -> None:
+    def update(self, ids: list[str], vectors: np.ndarray | None = None, metadatas: list[dict[str, Any]] | None = None) -> None:
         """
         Updates entries by their IDs. Can update vectors, metadatas, or both.
         """
@@ -409,7 +411,7 @@ class SimpleChromaVDB:
                 metadatas=serialized_metadatas
             )
 
-    def rebuild(self, all_vectors: np.ndarray, all_metadatas: List[Dict[str, Any]]) -> None:
+    def rebuild(self, all_vectors: np.ndarray, all_metadatas: list[dict[str, Any]]) -> None:
         """Replace the collection contents with a complete new snapshot of vectors."""
         assert all_vectors.shape[0] == len(all_metadatas)
         assert all_vectors.shape[1] == self.dim
@@ -428,7 +430,6 @@ class SimpleChromaVDB:
     def save(self) -> None:
         """Provide a compatibility no-op because PersistentClient saves automatically."""
         # ChromaDB with PersistentClient persists automatically. This method is for API compatibility.
-        pass
 
     def close(self) -> None:
         """Release the underlying ChromaDB PersistentClient and its SQLite connections."""
@@ -455,7 +456,6 @@ class SimpleChromaVDB:
 
     def load(self) -> None:
         """No-op: PersistentClient loads on open. Kept for FAISS API parity."""
-        pass
 
     def export_metadatas_jsonl(self, output_path: str) -> int:
         """Dump every record's metadata to JSONL, one object per line.
@@ -504,12 +504,10 @@ class EntitiesVDB(SimpleChromaVDB):
     entity-specific behaviour has somewhere to live.
     """
 
-    pass
 
 class RelationshipsVDB(SimpleChromaVDB):
     """Vector store for relationship descriptions. See `EntitiesVDB`."""
 
-    pass
 
 class SummariesVDB(SimpleChromaVDB):
     """Vector store for per-turn dialogue summaries.
@@ -521,7 +519,7 @@ class SummariesVDB(SimpleChromaVDB):
     which is what lets the evidence stage fetch neighbouring turns.
     """
 
-    def add_summary(self, session_id: int, message_id: int, summary_text: str, dialogue_datetime: Optional[str] = None, raw_text: Optional[str] = None) -> str:
+    def add_summary(self, session_id: int, message_id: int, summary_text: str, dialogue_datetime: str | None = None, raw_text: str | None = None) -> str:
         """Embed and store one turn's summary.
 
         Only `summary_text` is embedded. `raw_text` rides along as metadata so
@@ -560,7 +558,7 @@ class SummariesVDB(SimpleChromaVDB):
         message_id: int,
         user_text: str,
         assistant_summary: str,
-        dialogue_datetime: Optional[str] = None,
+        dialogue_datetime: str | None = None,
     ) -> None:
         """Store a turn as two entries: ":u" user raw, ":a" assistant summary.
 
@@ -591,7 +589,7 @@ class SummariesVDB(SimpleChromaVDB):
                 meta["dialogue_datetime"] = dialogue_datetime
             self.add(vec, [meta])
 
-    def get_text_by_entry_id(self, entry_id: str) -> Optional[str]:
+    def get_text_by_entry_id(self, entry_id: str) -> str | None:
         """Return the text stored for a split entry (e.g. session:msg:u or :a)."""
         eid = str(entry_id).strip()
         if not eid:
@@ -602,7 +600,7 @@ class SummariesVDB(SimpleChromaVDB):
             return (results["metadatas"][0].get("text") or "").strip() or None
         return None
 
-    def get_raw_turn_text_by_id(self, summary_id: str) -> Optional[str]:
+    def get_raw_turn_text_by_id(self, summary_id: str) -> str | None:
         """Return the raw (pre-compression) turn text for a summary ID, or None if not stored."""
         sid = str(summary_id).strip()
         if not sid:
@@ -613,7 +611,7 @@ class SummariesVDB(SimpleChromaVDB):
             return (results["metadatas"][0].get("raw_text") or "").strip() or None
         return None
 
-    def get_summary_text_by_id(self, summary_id: str) -> Optional[str]:
+    def get_summary_text_by_id(self, summary_id: str) -> str | None:
         """Return the summary_text metadata for an entry (legacy artifacts that
         predate the text/raw_text keys store only summary_text)."""
         sid = str(summary_id).strip()

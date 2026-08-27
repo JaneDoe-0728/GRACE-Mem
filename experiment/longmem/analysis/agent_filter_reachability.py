@@ -48,15 +48,7 @@ CATEGORIES = [
 
 # A compact list of English stopwords plus interrogative function words. The goal
 # is not linguistic completeness but removing words that cannot serve as a grep anchor.
-_STOPWORDS = frozenset("""
-a an the and or but if then else so of in on at to from by with without for as is are was were be
-been being am do does did done have has had having will would shall should can could may might must
-i me my mine you your yours he him his she her hers it its we us our ours they them their theirs
-this that these those there here what which who whom whose when where why how whats
-not no nor only own same too very just also than more most much many some any all both each few
-about into over under again further once during before after above below up down out off between
-tell say said asked ask know remember mentioned mention talk talked told
-""".split())
+_STOPWORDS = frozenset(["a", "an", "the", "and", "or", "but", "if", "then", "else", "so", "of", "in", "on", "at", "to", "from", "by", "with", "without", "for", "as", "is", "are", "was", "were", "be", "been", "being", "am", "do", "does", "did", "done", "have", "has", "had", "having", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "i", "me", "my", "mine", "you", "your", "yours", "he", "him", "his", "she", "her", "hers", "it", "its", "we", "us", "our", "ours", "they", "them", "their", "theirs", "this", "that", "these", "those", "there", "here", "what", "which", "who", "whom", "whose", "when", "where", "why", "how", "whats", "not", "no", "nor", "only", "own", "same", "too", "very", "just", "also", "than", "more", "most", "much", "many", "some", "any", "all", "both", "each", "few", "about", "into", "over", "under", "again", "further", "once", "during", "before", "after", "above", "below", "up", "down", "out", "off", "between", "tell", "say", "said", "asked", "ask", "know", "remember", "mentioned", "mention", "talk", "talked", "told"])
 
 _WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9'-]*")
 
@@ -85,7 +77,7 @@ def analyze_question(src_csv: Path, *, max_df: int) -> dict | None:
     df.columns = [c.lstrip("\ufeff") for c in df.columns]
     if "has_answer" not in df.columns or "content" not in df.columns:
         return None
-    gold_mask = df["has_answer"] == True  # noqa: E712
+    gold_mask = df["has_answer"] == True
     if not gold_mask.any():
         return None
 
@@ -112,21 +104,21 @@ def analyze_question(src_csv: Path, *, max_df: int) -> dict | None:
         r_useful = any(len(q_hits[w]) <= max_df for w in matched)
         r_pair = len(matched) >= 2
         r_ans = any(p.search(text) for p in a_pats)
-        per_gold.append(dict(r_any=r_any, r_useful=r_useful, r_pair=r_pair, r_ans=r_ans))
+        per_gold.append({"r_any": r_any, "r_useful": r_useful, "r_pair": r_pair, "r_ans": r_ans})
 
     n = len(per_gold)
-    return dict(
-        name=src_csv.stem,
-        n_gold=n,
-        n_turns=len(turns),
-        any=sum(g["r_any"] for g in per_gold),
-        useful=sum(g["r_useful"] for g in per_gold),
-        pair=sum(g["r_pair"] for g in per_gold),
-        ans=sum(g["r_ans"] for g in per_gold),
-        all_any=all(g["r_any"] for g in per_gold),
-        all_useful=all(g["r_useful"] for g in per_gold),
-        all_useful_or_ans=all(g["r_useful"] or g["r_ans"] for g in per_gold),
-    )
+    return {
+        "name": src_csv.stem,
+        "n_gold": n,
+        "n_turns": len(turns),
+        "any": sum(g["r_any"] for g in per_gold),
+        "useful": sum(g["r_useful"] for g in per_gold),
+        "pair": sum(g["r_pair"] for g in per_gold),
+        "ans": sum(g["r_ans"] for g in per_gold),
+        "all_any": all(g["r_any"] for g in per_gold),
+        "all_useful": all(g["r_useful"] for g in per_gold),
+        "all_useful_or_ans": all(g["r_useful"] or g["r_ans"] for g in per_gold),
+    }
 
 
 def main() -> None:
@@ -136,9 +128,9 @@ def main() -> None:
     ap.add_argument("--per-question-csv", default=None, help="path to write the per-question detail CSV")
     args = ap.parse_args()
 
-    agg: dict[str, dict] = defaultdict(lambda: dict(
-        n_q=0, n_gold=0, any=0, useful=0, pair=0, ans=0,
-        all_any=0, all_useful=0, all_useful_or_ans=0))
+    agg: dict[str, dict] = defaultdict(lambda: {
+        "n_q": 0, "n_gold": 0, "any": 0, "useful": 0, "pair": 0, "ans": 0,
+        "all_any": 0, "all_useful": 0, "all_useful_or_ans": 0})
     rows = []
 
     for cat in CATEGORIES:
@@ -167,7 +159,7 @@ def main() -> None:
               f"{'all any':>7} {'all useful':>10} {'all use|ans':>11}")
     print(header)
     print("-" * len(header))
-    tot = dict(n_q=0, n_gold=0, any=0, useful=0, pair=0, ans=0, all_any=0, all_useful=0, all_useful_or_ans=0)
+    tot = {"n_q": 0, "n_gold": 0, "any": 0, "useful": 0, "pair": 0, "ans": 0, "all_any": 0, "all_useful": 0, "all_useful_or_ans": 0}
     for cat in CATEGORIES:
         d = agg.get(cat)
         if not d:

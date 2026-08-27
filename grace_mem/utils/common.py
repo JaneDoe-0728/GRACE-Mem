@@ -21,13 +21,15 @@ a whole corpus, so a parser that raised on the first malformed record would
 lose the run. Every tolerated deformation there is one observed in practice.
 """
 
-from pathlib import Path
-import pickle, logging
-from typing import Any
-from typing import Callable, Optional, List
-import re, unicodedata
-from pydantic import BaseModel
+import logging
+import pickle
+import re
+import unicodedata
 from enum import Enum
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -205,8 +207,8 @@ class ExtractionResult(BaseModel):
     back-channel ("sure", "ok") and contain no facts at all.
     """
 
-    entities: List[Entity] = []
-    relationships: List[Relationship] = []
+    entities: list[Entity] = []
+    relationships: list[Relationship] = []
 
 class KeywordExtractionResult(BaseModel):
     """Query keywords, split by how they will be used in retrieval.
@@ -215,8 +217,8 @@ class KeywordExtractionResult(BaseModel):
     lists and why one call produces both.
     """
 
-    high_level_keywords: List[str] = []
-    low_level_keywords: List[str] = []
+    high_level_keywords: list[str] = []
+    low_level_keywords: list[str] = []
 
 # --- JSON Schemas passed to the LLM via response_format ------------------
 #
@@ -440,8 +442,6 @@ def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, co
         )
     return ExtractionResult(entities=ent_list, relationships=rel_list)
 
-import re
-from typing import List, Set
 
 # Strip generation artefacts from the tail only, so real content is never damaged
 _TAIL_GARBAGE_PATTERNS = [
@@ -629,7 +629,7 @@ def _try_lenient_entity_parse(
     return None
 
 
-def parse_entities_only(raw: str, tuple_delim: str, record_delim: str, completion_token: str) -> List[Entity]:
+def parse_entities_only(raw: str, tuple_delim: str, record_delim: str, completion_token: str) -> list[Entity]:
     """Parse only entity rows from the model output and drop malformed entries."""
     if not raw:
         logger.warning("parse_entities_only: Empty raw input")
@@ -641,8 +641,8 @@ def parse_entities_only(raw: str, tuple_delim: str, record_delim: str, completio
     # Guard 2: split on the record delimiter, tolerating blank runs
     parts = [p.strip() for p in (raw.split(record_delim) if record_delim else raw.splitlines()) if p and p.strip()]
 
-    ent_list: List[Entity] = []
-    parsing_errors: List[str] = []
+    ent_list: list[Entity] = []
+    parsing_errors: list[str] = []
 
     for part in parts:
         line = _strip_outer_parens_tolerant(part)
@@ -698,8 +698,8 @@ def parse_relationships_only(
     tuple_delim: str,
     record_delim: str,
     completion_token: str,
-    valid_entity_names: Set[str]
-) -> List[Relationship]:
+    valid_entity_names: set[str]
+) -> list[Relationship]:
     """Parse only relationship rows and keep only ones whose endpoints are valid."""
     if not raw:
         logger.warning("parse_relationships_only: Empty raw input")
@@ -708,9 +708,9 @@ def parse_relationships_only(
     raw = raw.split(completion_token)[0] if completion_token else raw
     parts = [p.strip() for p in (raw.split(record_delim) if record_delim else raw.splitlines()) if p and p.strip()]
 
-    rel_list: List[Relationship] = []
-    parsing_errors: List[str] = []
-    orphaned_rels: List[tuple] = []
+    rel_list: list[Relationship] = []
+    parsing_errors: list[str] = []
+    orphaned_rels: list[tuple] = []
 
     for part in parts:
         line = _strip_outer_parens_tolerant(part)
@@ -777,7 +777,7 @@ def _parse_entity_ops_block(text: str) -> dict[str, list[dict[str, str | None]]]
     Line format:
     input_name||input_type||action||target_existing_id_or_NULL||canonical_name||canonical_type||merged_description
     """
-    m = re.search(r"===BEGIN===\s*(.*?)\s*===END===", text, flags=re.S)
+    m = re.search(r"===BEGIN===\s*(.*?)\s*===END===", text, flags=re.DOTALL)
     if not m:
         return {"results": []}
     lines = [ln.strip() for ln in m.group(1).splitlines() if ln.strip()]
@@ -803,8 +803,7 @@ def _parse_entity_ops_block(text: str) -> dict[str, list[dict[str, str | None]]]
 
 # Prefer NLTK's word_tokenize; fall back to a regex if the resources or the
 # install are missing
-import nltk
-from nltk import word_tokenize, pos_tag
+from nltk import pos_tag, word_tokenize
 
 # Extend as needed
 EN_STOPWORDS = {

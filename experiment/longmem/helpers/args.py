@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 
-
 VALID_STAGES = ("ingest", "qa_eval", "judge")
 DEFAULT_STAGES = VALID_STAGES
 RETRIEVAL_ONLY_STAGES = tuple(stage for stage in VALID_STAGES if stage != "ingest")

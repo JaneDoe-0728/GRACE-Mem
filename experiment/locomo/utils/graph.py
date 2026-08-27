@@ -20,10 +20,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from grace_mem.storage.paths import resolve_artifacts_dir
 from experiment.locomo.utils.log import log_event
+from grace_mem.storage.paths import resolve_artifacts_dir
 
 # Working VDB dir, honoring KG_ARTIFACTS_DIR for per-process isolation. Resolved
 # at import time; each process must set the env var before it starts.
@@ -51,7 +51,7 @@ def validate_graph_export(path: Path) -> None:
         )
 
 
-def write_graph_export(path: Path, graph, *, validate: bool = False) -> Optional[dict[str, Any]]:
+def write_graph_export(path: Path, graph, *, validate: bool = False) -> dict[str, Any] | None:
     """Export graph state to path. Returns the export payload, or None if export failed."""
     export_data = export_graph(graph)
     if export_data is None:
@@ -108,12 +108,12 @@ def validate_vdb_artifacts(base_dir: Path) -> None:
         )
 
 
-def export_graph(graph) -> Optional[dict[str, Any]]:
+def export_graph(graph) -> dict[str, Any] | None:
     """Export FalkorDB graph state. Returns None if FalkorDB is unreachable."""
     return _export_graph(graph)
 
 
-def _export_graph(graph) -> Optional[dict[str, Any]]:
+def _export_graph(graph) -> dict[str, Any] | None:
     """Export all Entity nodes and KG_REL relationships as plain dicts."""
     label = graph.cfg.entity_label
     rel = graph.cfg.rel_type

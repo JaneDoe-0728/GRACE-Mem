@@ -45,7 +45,7 @@ def _gold_sids(src: Path) -> set[str]:
     if "has_answer" not in df.columns:
         return set()
     out = set()
-    for _, r in df[df["has_answer"] == True].iterrows():  # noqa: E712
+    for _, r in df[df["has_answer"] == True].iterrows():
         t = int(r["turn_index"]); role = str(r["role"]).strip().lower()
         mid = t + 1 if role == "user" else t
         out.add(f"{str(r['session_id']).strip()}:{mid}:{'u' if role == 'user' else 'a'}")
@@ -143,9 +143,9 @@ def main() -> None:
     print("  NON-GOLD              :", _stats(nongold_scores))
     print(f"\n[ALL retrieved]  range [{lo:.2f}, {hi:.2f}]")
     print(_hist(all_scores, lo, hi))
-    print(f"\n[GOLD retrieved]")
+    print("\n[GOLD retrieved]")
     print(_hist(gold_scores, lo, hi))
-    print(f"\n[NON-GOLD]")
+    print("\n[NON-GOLD]")
     print(_hist(nongold_scores, lo, hi))
 
 

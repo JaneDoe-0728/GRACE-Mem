@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Optional
 
 from .classifier import classify_single_expression, classify_temporal_matches
 from .resolver import resolve_match
@@ -14,7 +13,6 @@ from .types import (
     TimeContext,
     TimeGranularity,
 )
-
 
 _TIME_REWRITE_ABLATION_ENV_VARS = (
     "KG_ABLATION_NO_TIME_REWRITE",
@@ -33,11 +31,11 @@ def time_rewrite_ablation_enabled() -> bool:
 def build_time_context(
     *,
     reference_dt: datetime,
-    reference_time_str: Optional[str] = None,
+    reference_time_str: str | None = None,
     timezone: str = "Asia/Taipei",
-    source: Optional[str] = None,
+    source: str | None = None,
     last_weekday_policy: str = "nearest_previous",
-    daypart_anchor_times: Optional[dict[str, str]] = None,
+    daypart_anchor_times: dict[str, str] | None = None,
 ) -> TimeContext:
     """Construct the reference frame relative expressions resolve against.
 

@@ -27,6 +27,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 _ROOT = Path(__file__).resolve().parents[2]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
@@ -38,7 +39,11 @@ from experiment.agent_filter.corpus import Corpus, Turn
 from experiment.agent_filter.harness import refine_context
 from experiment.agent_filter.ledger import append_ledger, compile_table
 from experiment.agent_filter.skills import SKILLS as _SKILLS
-_TEMPORAL_DET = dict((n, d) for n, d, _ in _SKILLS)["temporal-computation"]
+
+if TYPE_CHECKING:
+    from grace_mem.llm import LLMClient
+
+_TEMPORAL_DET = {n: d for n, d, _ in _SKILLS}["temporal-computation"]
 
 DATA_JSON = _ROOT / "experiment" / "locomo" / "data" / "locomo10.json"
 OUT_ROOT = _ROOT / "experiment" / "locomo" / "output" / "standard"
@@ -230,18 +235,18 @@ def main():
         lock = threading.Lock()
         t0 = time.time()
         results = [None] * len(rows)
-        with open(out_dir / "_grep_traces.jsonl", "w") as tf:
-            with ThreadPoolExecutor(max_workers=args.workers) as ex:
+        with (
+            open(out_dir / "_grep_traces.jsonl", "w") as tf,
+            ThreadPoolExecutor(max_workers=args.workers) as ex,
+        ):
                 futs = {ex.submit(process_row, r, corpus, params, tf, lock, args.ledger,
                                   artifact_dir): i
                         for i, r in enumerate(rows)}
-                done = 0
-                for fut in as_completed(futs):
+                for done, fut in enumerate(as_completed(futs), start=1):
                     i = futs[fut]
-                    done += 1
                     try:
                         results[i] = fut.result()
-                    except Exception as e:  # noqa: BLE001
+                    except Exception as e:
                         r = dict(rows[i]); r["model_answer"] = f"(grep replay error: {e})"
                         results[i] = r
                     if done % 25 == 0 or done == len(rows):

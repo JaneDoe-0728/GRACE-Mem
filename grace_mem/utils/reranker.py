@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Literal
 
 from dotenv import load_dotenv
 
@@ -27,7 +27,7 @@ _DEFAULT_BATCH = int(os.environ.get("KG_RERANKER_BATCH_SIZE") or 8)
 
 DocType = Literal["entity", "relationship"]
 
-INSTRUCTIONS: Dict[str, str] = {
+INSTRUCTIONS: dict[str, str] = {
     "entity": (
         "You are reranking candidate entities for long-term memory question answering. "
         "Judge whether the candidate entity is useful for retrieving evidence needed to answer the query. "
@@ -188,10 +188,10 @@ class APIPointwiseReranker:
             return 1.0 if text.startswith("yes") else -1.0
 
     def _score_all(
-        self, query: str, docs: List[str], doc_type: DocType, max_workers: int
-    ) -> List[float]:
+        self, query: str, docs: list[str], doc_type: DocType, max_workers: int
+    ) -> list[float]:
         instruction = INSTRUCTIONS[doc_type]
-        scores: List[float] = [0.0] * len(docs)
+        scores: list[float] = [0.0] * len(docs)
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             future_to_idx = {
                 pool.submit(self._score_one, query, doc, instruction): i
@@ -204,10 +204,10 @@ class APIPointwiseReranker:
     def rerank(
         self,
         query: str,
-        docs: List[str],
+        docs: list[str],
         batch_size: int = _DEFAULT_BATCH,
         doc_type: DocType = "entity",
-    ) -> List[Tuple[int, float]]:
+    ) -> list[tuple[int, float]]:
         """Score documents against a query and return them ordered, best first."""
         scores = self._score_all(query, docs, doc_type=doc_type, max_workers=batch_size)
         results = list(enumerate(scores))
@@ -217,10 +217,10 @@ class APIPointwiseReranker:
     def rank_pairs(
         self,
         query: str,
-        texts: List[str],
-        threshold: Optional[float] = None,
+        texts: list[str],
+        threshold: float | None = None,
         doc_type: DocType = "entity",
-    ) -> List[Tuple[int, float]]:
+    ) -> list[tuple[int, float]]:
         """Score explicit (query, document) pairs, returning scores in input order.
 
         Unlike `rerank`, input order is preserved rather than sorted, so callers can
@@ -263,7 +263,7 @@ class LLMPointwiseReranker:
         print(f"[Reranker] {name} not found locally, loading it as an HF repo id")
         return name
 
-    def __init__(self, model_name: Optional[str] = None, device: Optional[str] = None) -> None:
+    def __init__(self, model_name: str | None = None, device: str | None = None) -> None:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -321,14 +321,14 @@ class LLMPointwiseReranker:
         return logits[0, yes_id].item() - logits[0, no_id].item()
 
     def _score_batch(
-        self, query: str, docs: List[str], batch_size: int = _DEFAULT_BATCH, doc_type: DocType = "entity"
-    ) -> List[float]:
+        self, query: str, docs: list[str], batch_size: int = _DEFAULT_BATCH, doc_type: DocType = "entity"
+    ) -> list[float]:
         """Batch scoring with automatic OOM retry (halves batch_size each attempt)."""
         import torch
         instruction = INSTRUCTIONS[doc_type]
         yes_id = self.tokenizer.encode("yes", add_special_tokens=False)[0]
         no_id = self.tokenizer.encode("no", add_special_tokens=False)[0]
-        all_scores: List[float] = []
+        all_scores: list[float] = []
 
         i = 0
         current_batch_size = batch_size
@@ -384,8 +384,8 @@ class LLMPointwiseReranker:
         return logits[0, yes_id].item() - logits[0, no_id].item()
 
     def rerank(
-        self, query: str, docs: List[str], batch_size: int = _DEFAULT_BATCH, doc_type: DocType = "entity"
-    ) -> List[Tuple[int, float]]:
+        self, query: str, docs: list[str], batch_size: int = _DEFAULT_BATCH, doc_type: DocType = "entity"
+    ) -> list[tuple[int, float]]:
         """Score documents against a query and return them ordered, best first."""
         scores = self._score_batch(query, docs, batch_size=batch_size, doc_type=doc_type)
         results = list(enumerate(scores))
@@ -395,10 +395,10 @@ class LLMPointwiseReranker:
     def rank_pairs(
         self,
         query: str,
-        texts: List[str],
-        threshold: Optional[float] = None,
+        texts: list[str],
+        threshold: float | None = None,
         doc_type: DocType = "entity",
-    ) -> List[Tuple[int, float]]:
+    ) -> list[tuple[int, float]]:
         """Score explicit (query, document) pairs, returning scores in input order."""
         if not texts:
             return []
@@ -412,18 +412,18 @@ class LLMPointwiseReranker:
 # Public type alias
 # ---------------------------------------------------------------------------
 
-Reranker = Union[APIPointwiseReranker, LLMPointwiseReranker]
+Reranker = APIPointwiseReranker | LLMPointwiseReranker
 
 # ---------------------------------------------------------------------------
 # Singleton factory
 # ---------------------------------------------------------------------------
 
-_reranker_instance: Optional[Reranker] = None
+_reranker_instance: Reranker | None = None
 
 
 def get_reranker(
-    model_name: Optional[str] = None,
-    device: Optional[str] = None,
+    model_name: str | None = None,
+    device: str | None = None,
     force_reload: bool = False,
 ) -> Reranker:
     """

@@ -127,7 +127,7 @@ class Corpus:
         except re.error:
             pat = re.compile(re.escape(pattern), re.IGNORECASE)
 
-        def _scan(p: re.Pattern) -> list[tuple["Turn", re.Match, str]]:
+        def _scan(p: re.Pattern) -> list[tuple[Turn, re.Match, str]]:
             found = []
             for t in self.turns:
                 # Date stamps are searchable too (GREP 2023/03 finds March's turns)

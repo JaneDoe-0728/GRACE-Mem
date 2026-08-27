@@ -73,7 +73,7 @@ class PipelineRuntime(Mapping[str, Any]):
         if first_error is not None:
             raise first_error
 
-    def __enter__(self) -> "PipelineRuntime":
+    def __enter__(self) -> PipelineRuntime:
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
@@ -82,13 +82,13 @@ class PipelineRuntime(Mapping[str, Any]):
 
 def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRuntime:
     """Open connections and return the constructed pipeline runtime."""
-    from grace_mem.pipeline.retriever import Retriever
-    from grace_mem.pipeline.ingestor import Ingestor
-    from grace_mem.storage import MGR
-    from grace_mem.llm import LLMClient
-    from grace_mem.graph.falkordb import graph_from_env
     from grace_mem.embeddings import embedder
-    from grace_mem.services import EntityManager, RelationshipManager, Provenance
+    from grace_mem.graph.falkordb import graph_from_env
+    from grace_mem.llm import LLMClient
+    from grace_mem.pipeline.ingestor import Ingestor
+    from grace_mem.pipeline.retriever import Retriever
+    from grace_mem.services import EntityManager, Provenance, RelationshipManager
+    from grace_mem.storage import MGR
 
     global_cache = MGR.cache
     llm = LLMClient()

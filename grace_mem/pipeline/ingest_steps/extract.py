@@ -1,6 +1,6 @@
 """EntityExtractor and RelationshipExtractor: LLM-driven two-step extraction."""
 import threading
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from grace_mem.utils.common import (
     is_context_length_exceeded_error,
@@ -27,11 +27,11 @@ class EntityExtractor:
         prompt_template: str,
         request_id: str,
         *,
-        tuple_delim: Optional[str] = None,
-        record_delim: Optional[str] = None,
-        completion_delim: Optional[str] = None,
+        tuple_delim: str | None = None,
+        record_delim: str | None = None,
+        completion_delim: str | None = None,
         max_retries: int = 2,
-    ) -> Tuple[bool, Any]:
+    ) -> tuple[bool, Any]:
         """Extract entities from summary text. Returns (success, entities_list or error_msg)."""
         tuple_delimiter_val = tuple_delim or prompt_vars.get("tuple_delimiter", self._cfg.llm_tuple_delim)
         record_delimiter_val = record_delim or prompt_vars.get("record_delimiter", self._cfg.llm_record_delim)
@@ -93,14 +93,14 @@ class RelationshipExtractor:
         self,
         prompt_vars: dict,
         prompt_template: str,
-        extracted_entities: List[Any],
+        extracted_entities: list[Any],
         request_id: str,
         *,
-        tuple_delim: Optional[str] = None,
-        record_delim: Optional[str] = None,
-        completion_delim: Optional[str] = None,
+        tuple_delim: str | None = None,
+        record_delim: str | None = None,
+        completion_delim: str | None = None,
         max_retries: int = 2,
-    ) -> Tuple[bool, Any]:
+    ) -> tuple[bool, Any]:
         """Extract relationships using already-extracted entities. Returns (success, rels or error)."""
         tuple_delimiter_val = tuple_delim or prompt_vars.get("tuple_delimiter", self._cfg.llm_tuple_delim)
         record_delimiter_val = record_delim or prompt_vars.get("record_delimiter", self._cfg.llm_record_delim)

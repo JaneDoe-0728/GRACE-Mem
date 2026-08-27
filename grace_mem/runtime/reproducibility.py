@@ -6,10 +6,10 @@ import json
 import logging
 import os
 import random
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

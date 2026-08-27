@@ -12,9 +12,10 @@ Usage:
     python tools/refresh_system.py
 """
 
-import sys
 import shutil
+import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -27,9 +28,9 @@ load_dotenv(dotenv_path=ENV_PATH)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from grace_mem.graph.falkordb import graph_from_env
 from grace_mem.storage import MGR
 from grace_mem.storage.paths import resolve_artifacts_dir
-from grace_mem.graph.falkordb import graph_from_env
 
 
 def refresh_system():

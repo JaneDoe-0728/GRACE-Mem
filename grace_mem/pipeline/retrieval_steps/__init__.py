@@ -1,21 +1,21 @@
 """Retrieval-step submodules for Knowledge Graph context building."""
-from .search import EntityRelationshipSearcher
-from .temporal import TemporalRelevanceCalculator
 from .evidence import EvidenceBuilder
 from .filtering import ContextFilter
-from .spreading_activation import SpreadingActivationEngine, SAConfig
 from .pagerank import SubgraphPageRank
-from .summary_scoring import ScoringWeights, SummaryScore, SummaryRRFScore
+from .search import EntityRelationshipSearcher
+from .spreading_activation import SAConfig, SpreadingActivationEngine
+from .summary_scoring import ScoringWeights, SummaryRRFScore, SummaryScore
+from .temporal import TemporalRelevanceCalculator
 
 __all__ = [
-    "EntityRelationshipSearcher",
-    "TemporalRelevanceCalculator",
-    "EvidenceBuilder",
     "ContextFilter",
-    "SpreadingActivationEngine",
+    "EntityRelationshipSearcher",
+    "EvidenceBuilder",
     "SAConfig",
-    "SubgraphPageRank",
     "ScoringWeights",
-    "SummaryScore",
+    "SpreadingActivationEngine",
+    "SubgraphPageRank",
     "SummaryRRFScore",
+    "SummaryScore",
+    "TemporalRelevanceCalculator",
 ]

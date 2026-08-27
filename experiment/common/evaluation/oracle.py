@@ -17,10 +17,11 @@ import re
 import subprocess
 import sys
 import threading
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[3]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
@@ -28,7 +29,6 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from grace_mem.llm import LLMClient
 from experiment.agent_filter.corpus import Corpus, load_corpus
 from experiment.common.evaluation.judge import (
     DEFAULT_BASE_URL,
@@ -43,6 +43,7 @@ from experiment.locomo.helpers.dataset import (
     normalize_qa_item,
 )
 from experiment.longmem.stages.qa_eval import QAEvalStage
+from grace_mem.llm import LLMClient
 
 LOCOMO_DATA = _ROOT / "experiment" / "locomo" / "data" / "locomo10.json"
 LOCOMO_OUTPUT = _ROOT / "experiment" / "locomo" / "output" / "standard"

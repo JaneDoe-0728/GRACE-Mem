@@ -12,14 +12,15 @@ REWRITE TRIGGER:
   - Capped at 2 passes total; pass-2 uses relaxed thresholds.
   - Uses diagnosis-driven LLM rewrite, not generic paraphrase.
 """
+import logging
 import os
 import re
 import time
-import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from dotenv import load_dotenv
+
 from grace_mem.llm.prompts import (
     ADAPTIVE_REWRITE_SYSTEM,
     ADAPTIVE_REWRITE_SYSTEM_MULTIHOP,
@@ -53,7 +54,7 @@ def build_adaptive_graph() -> Any:
     gname = os.getenv("GRAPH_NAME", "memory")
 
     if not uri:
-        raise EnvironmentError(
+        raise OSError(
             "NEO4J_URI is not set. Set it in .env before using adaptive re-search."
         )
 

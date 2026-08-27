@@ -4,7 +4,8 @@ Context filtering, intersection, and reranking logic.
 import csv
 import os
 import time
-from typing import Any, Dict, List, Set, Tuple, Optional
+from typing import Any
+
 from grace_mem.storage import build_id_to_meta_maps
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
 
@@ -39,7 +40,7 @@ class ContextFilter:
     Handles filtering and reranking of context entities and relationships.
     """
 
-    def __init__(self, vector_db_manager: Any, cache: Dict[str, Any]) -> None:
+    def __init__(self, vector_db_manager: Any, cache: dict[str, Any]) -> None:
         """
         Args:
             vector_db_manager: Manager for accessing vector databases
@@ -48,7 +49,7 @@ class ContextFilter:
         self.vector_db_manager = vector_db_manager
         self.cache = cache
 
-    def _entity_names_from_ids(self, entity_ids: Set[str] | List[str]) -> List[str]:
+    def _entity_names_from_ids(self, entity_ids: set[str] | list[str]) -> list[str]:
         """Resolve entity IDs into readable names."""
         ent_id2meta, _ = build_id_to_meta_maps(self.cache)
         names: list[str] = []
@@ -61,7 +62,7 @@ class ContextFilter:
                 seen.add(name)
         return names
 
-    def _relationship_names_from_ids(self, relationship_ids: Set[str] | List[str]) -> List[str]:
+    def _relationship_names_from_ids(self, relationship_ids: set[str] | list[str]) -> list[str]:
         """Resolve relationship IDs into readable source->target labels."""
         ent_id2meta, rel_id2meta = build_id_to_meta_maps(self.cache)
         labels: list[str] = []
@@ -95,8 +96,8 @@ class ContextFilter:
         node_subgraph: dict,
         edge_subgraph: list,
         use_union: bool = True,
-        request_id: Optional[str] = None,
-    ) -> Tuple[Set[str], Set[str]]:
+        request_id: str | None = None,
+    ) -> tuple[set[str], set[str]]:
         """
         Compute intersection (or union) of entity/relationship IDs from local and global subgraphs.
 
@@ -169,15 +170,15 @@ class ContextFilter:
 
     def filter_by_similarity(
         self,
-        entity_ids: Set[str],
-        relationship_ids: Set[str],
+        entity_ids: set[str],
+        relationship_ids: set[str],
         query_vec: Any,
         filter_entity_threshold: float,
         filter_relationship_threshold: float,
-        filter_entity_top_k: Optional[int] = None,
-        filter_relationship_top_k: Optional[int] = None,
-        request_id: Optional[str] = None,
-    ) -> Tuple[List[str], List[str]]:
+        filter_entity_top_k: int | None = None,
+        filter_relationship_top_k: int | None = None,
+        request_id: str | None = None,
+    ) -> tuple[list[str], list[str]]:
         """
         Filter entities and relationships by similarity to query vector.
 
@@ -241,7 +242,7 @@ class ContextFilter:
                 score=float(res[1]) if res is not None else None,
             )
             if res is not None:
-                meta, score = res
+                _, score = res
                 entity_candidates.append((entity_id, score))
 
         # Sort by similarity descending, tie-break by ID for determinism
@@ -285,7 +286,7 @@ class ContextFilter:
                 score=float(res[1]) if res is not None else None,
             )
             if res is not None:
-                meta, score = res
+                _meta, score = res
                 relationship_candidates.append((relationship_id, score))
 
         # Sort by similarity descending, tie-break by ID for determinism
@@ -322,12 +323,12 @@ class ContextFilter:
 
     def compute_cosine_scores(
         self,
-        entity_ids: Set[str] | List[str],
+        entity_ids: set[str] | list[str],
         query_vec: Any,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Return raw cosine scores for all entity_ids (no threshold)."""
         entity_vdb = self.vector_db_manager.get_entities_vdb(0)
-        scores: Dict[str, float] = {}
+        scores: dict[str, float] = {}
         for eid in entity_ids:
             s = entity_vdb.compare_by_id_raw(eid, query_vec)
             if s is not None:
@@ -336,20 +337,20 @@ class ContextFilter:
 
     def filter_by_rrf(
         self,
-        entity_ids: Set[str],
-        relationship_ids: Set[str],
+        entity_ids: set[str],
+        relationship_ids: set[str],
         query_vec: Any,
         rrf_k: float,
         filter_entity_top_k: int,
         filter_relationship_top_k: int,
-        entity_emb_scores: Dict[str, float],
-        entity_bm25_scores: Dict[str, float],
-        rel_endpoint_scores: Dict[str, float],
-        rel_emb_scores: Dict[str, float],
-        node_subgraph_rel_ids: Set[str],
+        entity_emb_scores: dict[str, float],
+        entity_bm25_scores: dict[str, float],
+        rel_endpoint_scores: dict[str, float],
+        rel_emb_scores: dict[str, float],
+        node_subgraph_rel_ids: set[str],
         filter_method: str = "rrf",
-        request_id: Optional[str] = None,
-    ) -> Tuple[List[str], List[str], Dict[str, float]]:
+        request_id: str | None = None,
+    ) -> tuple[list[str], list[str], dict[str, float]]:
         """
         Filter entities and relationships using Reciprocal Rank Fusion over multiple signals.
 
@@ -369,7 +370,7 @@ class ContextFilter:
         """
         timer = _StepTimer()
 
-        def _scores_to_ranks(scores: Dict[str, float]) -> Dict[str, int]:
+        def _scores_to_ranks(scores: dict[str, float]) -> dict[str, int]:
             sorted_ids = sorted(scores, key=lambda x: scores[x], reverse=True)
             return {eid: i + 1 for i, eid in enumerate(sorted_ids)}
 
@@ -396,12 +397,12 @@ class ContextFilter:
 
         # ── Entity RRF ─────────────────────────────────────────────────────────
         if filter_method == "similarity" and entity_vdb is not None:
-            cosine_scores: Dict[str, float] = {}
+            cosine_scores: dict[str, float] = {}
             for eid in entity_ids:
                 s = entity_vdb.compare_by_id_raw(eid, query_vec)
                 if s is not None:
                     cosine_scores[eid] = s
-            cosine_ranks: Dict[str, int] = _scores_to_ranks(cosine_scores)
+            cosine_ranks: dict[str, int] = _scores_to_ranks(cosine_scores)
         else:
             cosine_ranks = {}
 
@@ -410,7 +411,7 @@ class ContextFilter:
         endpoint_ranks = _scores_to_ranks(rel_endpoint_scores)
         entity_rank_dicts = [d for d in [cosine_ranks, emb_ranks, bm25_ranks, endpoint_ranks] if d]
 
-        entity_rrf_scores: Dict[str, float] = {}
+        entity_rrf_scores: dict[str, float] = {}
         for eid in entity_ids:
             active = [rd for rd in entity_rank_dicts if eid in rd]
             if active:
@@ -443,7 +444,7 @@ class ContextFilter:
         )
 
         # ── Relation RRF ───────────────────────────────────────────────────────
-        cosine_scores_rel: Dict[str, float] = {}
+        cosine_scores_rel: dict[str, float] = {}
         for rid in relationship_ids:
             s = rel_vdb.compare_by_id_raw(rid, query_vec)
             if s is not None:
@@ -451,12 +452,12 @@ class ContextFilter:
 
         cosine_ranks_rel = _scores_to_ranks(cosine_scores_rel)
         emb_ranks_rel = _scores_to_ranks(rel_emb_scores)
-        node_presence_ranks: Dict[str, int] = {
+        node_presence_ranks: dict[str, int] = {
             rid: 1 for rid in node_subgraph_rel_ids if rid in relationship_ids
         }
         rel_rank_dicts = [cosine_ranks_rel, emb_ranks_rel, node_presence_ranks]
 
-        rel_rrf_scores: Dict[str, float] = {}
+        rel_rrf_scores: dict[str, float] = {}
         for rid in relationship_ids:
             rel_rrf_scores[rid] = sum(
                 1.0 / (rrf_k + rd[rid]) for rd in rel_rank_dicts if rid in rd
@@ -491,14 +492,14 @@ class ContextFilter:
     def rerank_and_recover(
         self,
         question: str,
-        all_entity_ids: Set[str],
-        all_relationship_ids: Set[str],
-        filtered_entity_ids: Set[str],
-        filtered_relationship_ids: Set[str],
+        all_entity_ids: set[str],
+        all_relationship_ids: set[str],
+        filtered_entity_ids: set[str],
+        filtered_relationship_ids: set[str],
         reranker_threshold: float,
         reranker_top_k: int,
-        request_id: Optional[str] = None,
-    ) -> Tuple[Set[str], Set[str]]:
+        request_id: str | None = None,
+    ) -> tuple[set[str], set[str]]:
         """
         Use reranker to recover filtered-out entities and relationships.
 
@@ -715,13 +716,13 @@ class ContextFilter:
     def rerank_filter(
         self,
         question: str,
-        entity_ids: Set[str],
-        relationship_ids: Set[str],
+        entity_ids: set[str],
+        relationship_ids: set[str],
         entity_top_k: int,
         relationship_top_k: int,
         threshold: float,
-        request_id: Optional[str] = None,
-    ) -> Tuple[List[str], List[str]]:
+        request_id: str | None = None,
+    ) -> tuple[list[str], list[str]]:
         """Primary reranker filter: score all candidates, keep top-K above threshold.
 
         Returns ordered lists (reranker rank order, deduplicated) rather than
@@ -762,8 +763,8 @@ class ContextFilter:
 
         # Ordered list preserving reranker rank order; a set tracks membership
         # for dedup so the final context ordering is deterministic across runs.
-        selected_entity_ids: List[str] = []
-        _seen_entity_ids: Set[str] = set()
+        selected_entity_ids: list[str] = []
+        _seen_entity_ids: set[str] = set()
         if entity_texts:
             # Fetch all scores without threshold so every candidate is logged.
             all_entity_results = reranker.rank_pairs(query=question, texts=entity_texts, threshold=None, doc_type="entity")
@@ -826,8 +827,8 @@ class ContextFilter:
             relationship_texts.append(text)
             relationship_ids_list.append(relationship_id)
 
-        selected_relationship_ids: List[str] = []
-        _seen_relationship_ids: Set[str] = set()
+        selected_relationship_ids: list[str] = []
+        _seen_relationship_ids: set[str] = set()
         if relationship_texts:
             all_rel_results = reranker.rank_pairs(query=question, texts=relationship_texts, threshold=None, doc_type="relationship")
             passing = [(i, s) for i, s in all_rel_results if s >= threshold]

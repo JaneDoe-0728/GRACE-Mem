@@ -18,7 +18,11 @@ _ROOT = Path(__file__).resolve().parents[3]
 if __package__ in (None, "") and str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from experiment.longmem.helpers.analysis_cases import DEFAULT_ANALYSIS_ROOT, analysis_dir_for, scenario_alias
+from experiment.longmem.helpers.analysis_cases import (
+    DEFAULT_ANALYSIS_ROOT,
+    analysis_dir_for,
+    scenario_alias,
+)
 from experiment.longmem.helpers.analysis_summary import summarize_cases
 
 

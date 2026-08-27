@@ -9,8 +9,9 @@ everything here is keyed by category rather than by run.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -38,12 +39,12 @@ class DatasetConfig:
     use_split_summary: bool = True
 
     question_column: str = "question"
-    output_path: Optional[str] = None
-    artifacts_dir: Optional[str] = None
+    output_path: str | None = None
+    artifacts_dir: str | None = None
 
     resume: bool = True
     checkpoint_every_n_sessions: int = 5
-    checkpoint_path: Optional[str] = None
+    checkpoint_path: str | None = None
 
     @classmethod
     def from_params(
@@ -54,7 +55,7 @@ class DatasetConfig:
         ingest_params: Mapping[str, Any],
         retrieval_params: Mapping[str, Any],
         **overrides: Any,
-    ) -> "DatasetConfig":
+    ) -> DatasetConfig:
         """Build a LongMem config from shared experiment parameter mappings."""
         values = {
             "ingest_mode": ingest_params["ingest_mode"],

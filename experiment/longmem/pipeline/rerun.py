@@ -16,21 +16,33 @@ import gc
 from pathlib import Path
 from typing import Any
 
-from experiment.experiment_config import INGEST_PARAMS, RETRIEVAL_PARAMS, RERANKER_PARAMS
+from experiment.experiment_config import (
+    INGEST_PARAMS,
+    RERANKER_PARAMS,
+    RETRIEVAL_PARAMS,
+)
 
 # LongMem-only: must match the value used when these artifacts were ingested.
 USE_SPLIT_SUMMARY = bool(INGEST_PARAMS.get("use_split_summary", True))
-from experiment.longmem.pipeline.aggregate import update_all_answers_csv, update_progress_rows
-from experiment.longmem.helpers.args import add_data_args, add_rerun_args, add_run_args, resolve_stages
+from experiment.longmem.artifacts.snapshot import restore_graph_from_cache
+from experiment.longmem.helpers.args import (
+    add_data_args,
+    add_rerun_args,
+    add_run_args,
+    resolve_stages,
+)
 from experiment.longmem.helpers.datasets import get_question_info, select_dataset_names
 from experiment.longmem.helpers.rerun_support import (
+    rerun_accuracy,
+    resolve_artifact_dir,
     retrieval_datasets,
     retrieval_datasets_from_artifacts,
-    resolve_artifact_dir,
-    rerun_accuracy,
     setup_retrieval_loggers,
 )
-from experiment.longmem.artifacts.snapshot import restore_graph_from_cache
+from experiment.longmem.pipeline.aggregate import (
+    update_all_answers_csv,
+    update_progress_rows,
+)
 from experiment.longmem.stages.judge import JudgeStage
 from experiment.longmem.stages.qa_eval import QAEvalStage
 from experiment.longmem.utils.io import append_type_subdir, ensure_dir, read_csv_frame
@@ -65,7 +77,7 @@ class LongMemRerun:
         self._closed = False
 
     @classmethod
-    def from_env(cls) -> "LongMemRerun":
+    def from_env(cls) -> LongMemRerun:
         """Create a rerun runtime and roll back partially opened resources."""
         from grace_mem.graph.falkordb import graph_from_env
         from grace_mem.llm import LLMClient
@@ -106,7 +118,7 @@ class LongMemRerun:
         if cleanup_error is not None:
             raise cleanup_error
 
-    def __enter__(self) -> "LongMemRerun":
+    def __enter__(self) -> LongMemRerun:
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
@@ -144,10 +156,10 @@ class LongMemRerun:
         if artifacts_dir is None:
             raise FileNotFoundError(f"artifacts dir not found for dataset: {dataset_name}")
 
+        from grace_mem.embeddings import embedder
         from grace_mem.llm import token_tracker
         from grace_mem.pipeline.retriever import Retriever, RetrieverConfig
         from grace_mem.storage import VDBManager
-        from grace_mem.embeddings import embedder
 
         mgr = None
         retriever = None

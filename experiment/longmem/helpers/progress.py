@@ -13,14 +13,18 @@ that was never done.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 import pandas as pd
 
-from experiment.longmem.utils.io import ensure_dir, file_lock, read_csv_frame, write_csv_frame
-
+from experiment.longmem.utils.io import (
+    ensure_dir,
+    file_lock,
+    read_csv_frame,
+    write_csv_frame,
+)
 
 PROGRESS_COLUMNS = [
     "dataset",

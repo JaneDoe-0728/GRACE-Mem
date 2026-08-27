@@ -15,8 +15,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from experiment.longmem.utils.io import ensure_dir, read_csv_frame, read_jsonl_file, write_json_file
-
+from experiment.longmem.utils.io import (
+    ensure_dir,
+    read_csv_frame,
+    read_jsonl_file,
+    write_json_file,
+)
 
 LONGMEM_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCRIPT_DATA_ROOT = LONGMEM_ROOT / "script_data"
@@ -134,9 +138,7 @@ def step2_ingest(log_dir: Path, target_turns: list[dict]) -> dict:
         if record.get("request_id") not in request_ids:
             continue
         event = record.get("event", "")
-        if any(token in event.lower() for token in ("fail", "error", "exception")):
-            fail_events.append(event)
-        elif record.get("success") is False:
+        if any(token in event.lower() for token in ("fail", "error", "exception")) or record.get("success") is False:
             fail_events.append(event)
 
     return {

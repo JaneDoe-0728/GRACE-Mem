@@ -48,3 +48,23 @@ markers = [
     "integration: needs a live FalkorDB, an LLM endpoint and the downloaded models; skips itself when they are absent",
     "slow: spawns a subprocess (e.g. a pipeline --help) and takes seconds rather than milliseconds",
 ]
+
+[tool.ruff.lint]
+ignore = [
+    # Pipeline boundaries deliberately catch third-party/runtime failures so a
+    # single backend or cleanup error does not abort an experiment batch.
+    "BLE001",
+    "S110",
+    "S112",
+    # Dataset timestamps are intentionally timezone-naive for compatibility
+    # with the source CSV/JSON formats and existing experiment artifacts.
+    "DTZ001",
+    "DTZ003",
+    "DTZ005",
+    "DTZ007",
+    # Keep payload-validation exception types and Python 3.10-compatible
+    # context-manager annotations stable as part of the existing API.
+    "PYI034",
+    "PYI036",
+    "TRY004",
+]

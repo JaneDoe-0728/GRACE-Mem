@@ -17,16 +17,21 @@ disappears from those reports.
 """
 
 import logging
-import os, time, requests
+import os
+import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
+
+import httpx
+import requests
 from dotenv import load_dotenv
 from openai import OpenAI
-import httpx
-from grace_mem.utils.common import SCHEMA_keyword
+
 from grace_mem.llm.token_tracking import token_tracker
-from grace_mem.services.entity_manager import EntityOpsProcessor, EntityOpsConfig
 from grace_mem.runtime.reproducibility import get_runtime_reproducibility
+from grace_mem.services.entity_manager import EntityOpsConfig, EntityOpsProcessor
+from grace_mem.utils.common import SCHEMA_keyword
 
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
@@ -172,15 +177,15 @@ class LLMClient:
             Raw SDK chunks. Only the last carries `usage`.
         """
         t0 = time.perf_counter()
-        payload = dict(
-            model=self.model_name,
-            messages=messages,
-            stream=True,
-            stream_options={"include_usage": True},
-            max_tokens=max_tokens,
-            temperature=temperature,
-            seed=self.seed,
-        )
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "seed": self.seed,
+        }
         try:
             stream = self.client.chat.completions.create(**payload)
             self._log_seed_state("accepted", f"seed={self.seed}")

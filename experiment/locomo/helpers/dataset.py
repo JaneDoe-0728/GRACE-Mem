@@ -13,7 +13,7 @@ questions conflates "retrieved the wrong thing" with "correctly found nothing";
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from experiment.locomo.utils.io import load_json_records
 
@@ -77,7 +77,7 @@ def resolve_dataset_path(
     return None
 
 
-def load_raw_samples(path: str | Path) -> List[Dict[str, Any]]:
+def load_raw_samples(path: str | Path) -> list[dict[str, Any]]:
     return load_json_records(path)
 
 
@@ -100,7 +100,7 @@ def is_adversarial_category(value: Any) -> bool:
     return category_to_label(value).strip().lower() == "adversarial"
 
 
-def normalize_qa_item(item: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_qa_item(item: dict[str, Any]) -> dict[str, Any]:
     """Normalize one question record into the shape the pipeline expects.
 
     The field names differ across dataset variants and across their revisions --
@@ -121,7 +121,7 @@ def normalize_qa_item(item: Dict[str, Any]) -> Dict[str, Any]:
     category = item.get("category")
 
     if evidence in (None, ""):
-        evidence_list: List[str] = []
+        evidence_list: list[str] = []
     elif isinstance(evidence, list):
         evidence_list = [str(x).strip() for x in evidence if str(x).strip()]
     else:
@@ -138,13 +138,13 @@ def normalize_qa_item(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def is_adversarial_item(item: Dict[str, Any]) -> bool:
+def is_adversarial_item(item: dict[str, Any]) -> bool:
     if "category_label" in item:
         return str(item.get("category_label", "")).strip().lower() == "adversarial"
     return is_adversarial_category(item.get("category"))
 
 
-def load_qa_items(path: str | Path, *, sample_index: int, include_adversarial: bool = True) -> List[Dict[str, Any]]:
+def load_qa_items(path: str | Path, *, sample_index: int, include_adversarial: bool = True) -> list[dict[str, Any]]:
     """Load one sample's questions, normalized, optionally dropping adversarial ones.
 
     Args:
@@ -168,7 +168,7 @@ def load_qa_items(path: str | Path, *, sample_index: int, include_adversarial: b
     )
 
 
-def get_sample_conversation(sample: Dict[str, Any]) -> Dict[str, Any]:
+def get_sample_conversation(sample: dict[str, Any]) -> dict[str, Any]:
     """Return one standard LoCoMo sample's structured conversation."""
     if "conversation" in sample and isinstance(sample["conversation"], dict):
         return sample["conversation"]
@@ -178,11 +178,11 @@ def get_sample_conversation(sample: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def get_sample_speakers(conversation: Dict[str, Any]) -> tuple[str | None, str | None]:
+def get_sample_speakers(conversation: dict[str, Any]) -> tuple[str | None, str | None]:
     return conversation.get("speaker_a"), conversation.get("speaker_b")
 
 
-def build_session_records_from_json(path: str | Path) -> List[Dict[str, Any]]:
+def build_session_records_from_json(path: str | Path) -> list[dict[str, Any]]:
     """Turn a raw sample into per-session records ready for ingestion.
 
     Sessions are emitted in numeric order, not the dict order of the source
@@ -191,7 +191,7 @@ def build_session_records_from_json(path: str | Path) -> List[Dict[str, Any]]:
     conversation never had.
     """
     samples = load_raw_samples(path)
-    records: List[Dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
     for sample_index, sample in enumerate(samples):
         conv = get_sample_conversation(sample)
         speaker_a, speaker_b = get_sample_speakers(conv)
@@ -224,7 +224,7 @@ def build_session_records_from_json(path: str | Path) -> List[Dict[str, Any]]:
     return records
 
 
-def find_evidence_turns_from_sample(sample: Dict[str, Any], question: str) -> List[str]:
+def find_evidence_turns_from_sample(sample: dict[str, Any], question: str) -> list[str]:
     """Resolve a question's evidence ids to the turns they name."""
     normalized = [normalize_qa_item(item) for item in load_qa_items_from_sample(sample)]
     question_norm = question.strip()
@@ -234,7 +234,7 @@ def find_evidence_turns_from_sample(sample: Dict[str, Any], question: str) -> Li
     return []
 
 
-def load_qa_items_from_sample(sample: Dict[str, Any]) -> List[Dict[str, Any]]:
+def load_qa_items_from_sample(sample: dict[str, Any]) -> list[dict[str, Any]]:
     """Normalize an already-loaded sample's questions, without re-reading the file."""
     if "qa" in sample and isinstance(sample["qa"], list):
         return [item for item in sample["qa"] if isinstance(item, dict)]

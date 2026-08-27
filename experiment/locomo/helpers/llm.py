@@ -19,11 +19,11 @@ import sys
 import time
 from pathlib import Path
 
-import experiment.locomo.prompts.judge as judge_prompts
-import experiment.locomo.prompts.open_domain as open_domain_prompts
 import requests
 from dotenv import load_dotenv
 
+import experiment.locomo.prompts.judge as judge_prompts
+import experiment.locomo.prompts.open_domain as open_domain_prompts
 from experiment.common.reproducibility import get_runtime_reproducibility
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")

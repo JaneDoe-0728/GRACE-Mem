@@ -20,55 +20,72 @@ Shared across datasets:
 
 import gc
 import logging
-import pandas as pd
-from pathlib import Path
-from typing import Any, Optional, Dict, List, Set
 import traceback
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
-from grace_mem.storage import VDBManager
-from grace_mem.pipeline.ingestor import Ingestor
-from grace_mem.pipeline.retriever import Retriever, RetrieverConfig
+import pandas as pd
+
 from experiment.experiment_config import RERANKER_PARAMS
-from grace_mem.llm import LLMClient, token_tracker
-from grace_mem.graph.falkordb import graph_from_env
-from grace_mem.embeddings import embedder
-from grace_mem.services import EntityManager, RelationshipManager, Provenance
-from grace_mem.utils.logger_config import make_module_jlog
-from experiment.longmem.pipeline import decision
-from experiment.longmem.pipeline.aggregate import update_all_answers_csv
+from experiment.longmem.artifacts.snapshot import restore_graph_from_cache
 from experiment.longmem.helpers.checkpoints import (
     load_checkpoint as shared_load_checkpoint,
+)
+from experiment.longmem.helpers.checkpoints import (
     save_checkpoint as shared_save_checkpoint,
 )
-from experiment.longmem.helpers.rerun_support import cleanup_retrieval_loggers
 from experiment.longmem.helpers.progress import (
     append_stuck_history as shared_append_stuck_history,
+)
+from experiment.longmem.helpers.progress import (
     init_progress_rows as shared_init_progress_rows,
+)
+from experiment.longmem.helpers.progress import (
     load_progress as shared_load_progress,
+)
+from experiment.longmem.helpers.progress import (
     progress_path as shared_progress_path,
+)
+from experiment.longmem.helpers.progress import (
     save_progress_row as shared_save_progress_row,
 )
+from experiment.longmem.helpers.rerun_support import cleanup_retrieval_loggers
 from experiment.longmem.models import DatasetConfig
-from experiment.longmem.artifacts.snapshot import restore_graph_from_cache
+from experiment.longmem.pipeline import decision
+from experiment.longmem.pipeline.aggregate import update_all_answers_csv
 from experiment.longmem.pipeline.stage_adapter import (
     rewrite_temporal_question as shared_rewrite_temporal_question,
+)
+from experiment.longmem.pipeline.stage_adapter import (
     single_result_frame,
 )
 from experiment.longmem.stages import IngestStage, JudgeStage, QAEvalStage
-from experiment.longmem.utils.io import append_jsonl, ensure_dir, read_csv_frame, write_csv_frame
+from experiment.longmem.utils.io import (
+    append_jsonl,
+    ensure_dir,
+    read_csv_frame,
+    write_csv_frame,
+)
+from grace_mem.embeddings import embedder
+from grace_mem.graph.falkordb import graph_from_env
+from grace_mem.llm import LLMClient, token_tracker
+from grace_mem.pipeline.ingestor import Ingestor
+from grace_mem.pipeline.retriever import Retriever, RetrieverConfig
+from grace_mem.services import EntityManager, Provenance, RelationshipManager
+from grace_mem.storage import VDBManager
 from grace_mem.utils.error_analysis import (
     append_analysis_record,
     append_pretty_block,
+    build_bridge_label,
     build_top_miss_snapshot,
     coerce_float,
     derive_anomaly_flags,
     derive_drop_reasons,
     derive_failure_type,
-    build_bridge_label,
     render_failure_digest,
 )
-
+from grace_mem.utils.logger_config import make_module_jlog
 
 logger = logging.getLogger(__name__)
 
@@ -97,11 +114,11 @@ class MultiDatasetProcessor:
         self._logger_bindings: list[tuple[Any, str, Any]] = []
 
         # Dataset-specific components (reinitialized per dataset)
-        self.current_mgr: Optional[VDBManager] = None
-        self.current_ingestor: Optional[Ingestor] = None
-        self.current_retriever: Optional[Retriever] = None
-        self.current_ent: Optional[EntityManager] = None
-        self.current_rel: Optional[RelationshipManager] = None
+        self.current_mgr: VDBManager | None = None
+        self.current_ingestor: Ingestor | None = None
+        self.current_retriever: Retriever | None = None
+        self.current_ent: EntityManager | None = None
+        self.current_rel: RelationshipManager | None = None
         self._current_mgr_read_only = False
         self.ingest_stage = IngestStage()
         self.qa_stage = QAEvalStage()
@@ -216,12 +233,12 @@ class MultiDatasetProcessor:
         self,
         df: pd.DataFrame,
         config: DatasetConfig,
-    ) -> Dict:
+    ) -> dict:
         """Ingest data as user-assistant turn pairs"""
         data = self._normalize_sessions(df)
         report = {}
         checkpoint = self._load_checkpoint(config)
-        processed = set(str(s) for s in checkpoint.get("processed_session_ids", []))
+        processed = {str(s) for s in checkpoint.get("processed_session_ids", [])}
         total_sessions = len(data.groupby("session_id"))
 
         print(f"\n[INGEST] Processing {len(data.groupby('session_id'))} sessions as turn pairs...")
@@ -293,12 +310,12 @@ class MultiDatasetProcessor:
         self,
         df: pd.DataFrame,
         config: DatasetConfig,
-    ) -> Dict:
+    ) -> dict:
         """Ingest entire session as one turn"""
         data = self._normalize_sessions(df)
         results = {}
         checkpoint = self._load_checkpoint(config)
-        processed = set(str(s) for s in checkpoint.get("processed_session_ids", []))
+        processed = {str(s) for s in checkpoint.get("processed_session_ids", [])}
         total_sessions = len(data.groupby("session_id"))
 
         print(f"\n[INGEST] Processing {len(data.groupby('session_id'))} sessions as whole conversations...")
@@ -518,7 +535,7 @@ class MultiDatasetProcessor:
             original_answer = str(df["answer"].dropna().iloc[0])
 
         # ========== BASE RETRIEVER ==========
-        print(f"\n[QA] Running retriever...")
+        print("\n[QA] Running retriever...")
         ctx_base = self._build_context(rewritten_q, config, query_time=question_date)
         ctx_base = self._maybe_refine_with_grep_agent(
             question=rewritten_q,
@@ -577,7 +594,7 @@ class MultiDatasetProcessor:
         # Update checkpoint stage after QA
         if config.resume:
             checkpoint = self._load_checkpoint(config)
-            processed = set(str(s) for s in checkpoint.get("processed_session_ids", []))
+            processed = {str(s) for s in checkpoint.get("processed_session_ids", [])}
             total_sessions = checkpoint.get("total_sessions", None)
             self._save_checkpoint(
                 config,
@@ -670,14 +687,14 @@ class MultiDatasetProcessor:
 
         # Monkey-patch the _jlog functions to use dataset-specific loggers
         # This overrides the module-level _jlog defined at import time
-        import grace_mem.pipeline.ingestor as ingestor_module
-        import grace_mem.pipeline.retriever as retriever_module
-        import grace_mem.pipeline.ingest_steps.sync as sync_step_module
         import grace_mem.graph.falkordb as falkordb_module
-        import grace_mem.pipeline.retrieval_steps.search as search_module
-        import grace_mem.pipeline.retrieval_steps.filtering as filtering_module
-        import grace_mem.pipeline.retrieval_steps.temporal as temporal_module
+        import grace_mem.pipeline.ingest_steps.sync as sync_step_module
+        import grace_mem.pipeline.ingestor as ingestor_module
         import grace_mem.pipeline.retrieval_steps.evidence as evidence_module
+        import grace_mem.pipeline.retrieval_steps.filtering as filtering_module
+        import grace_mem.pipeline.retrieval_steps.search as search_module
+        import grace_mem.pipeline.retrieval_steps.temporal as temporal_module
+        import grace_mem.pipeline.retriever as retriever_module
         self._bind_module_logger(ingestor_module, ingestor_jlog)
         self._bind_module_logger(sync_step_module, ingestor_jlog)
         self._bind_module_logger(
@@ -722,7 +739,7 @@ class MultiDatasetProcessor:
             ),
         )
 
-        print(f"[INIT] Ingestor and Retriever initialized with per-dataset logs")
+        print("[INIT] Ingestor and Retriever initialized with per-dataset logs")
 
     def _build_retriever(self, config: DatasetConfig) -> Retriever:
         """Build the retriever for this dataset from the run's retrieval parameters."""
@@ -755,7 +772,7 @@ class MultiDatasetProcessor:
         cleanup_error: Exception | None = None
 
         if self.current_mgr:
-            print(f"\n[CLEANUP] Persisting VDB changes...")
+            print("\n[CLEANUP] Persisting VDB changes...")
             try:
                 self.current_mgr.close(
                     persist=not self._current_mgr_read_only,
@@ -765,7 +782,7 @@ class MultiDatasetProcessor:
                 cleanup_error = exc
 
         if self.graph is not None:
-            print(f"[CLEANUP] Clearing graph database...")
+            print("[CLEANUP] Clearing graph database...")
             try:
                 self.graph.clear_all()
             except Exception as exc:
@@ -786,7 +803,7 @@ class MultiDatasetProcessor:
         if log_dir is not None:
             cleanup_retrieval_loggers(Path(log_dir))
         gc.collect()
-        print(f"[CLEANUP] Memory released (gc.collect done)")
+        print("[CLEANUP] Memory released (gc.collect done)")
         if cleanup_error is not None:
             raise cleanup_error
 
@@ -796,7 +813,7 @@ class MultiDatasetProcessor:
         return Path(config.output_path)
 
     @staticmethod
-    def _read_answer_data(output_path: Path) -> Dict:
+    def _read_answer_data(output_path: Path) -> dict:
         """Read back a previously written answer, for resume and rerun paths."""
         if not output_path.exists():
             raise FileNotFoundError(f"Output CSV not found: {output_path}")
@@ -818,14 +835,14 @@ class MultiDatasetProcessor:
         out_df["correctness"] = correctness
         write_csv_frame(out_df, output_path)
 
-    def _load_checkpoint(self, config: DatasetConfig) -> Dict:
+    def _load_checkpoint(self, config: DatasetConfig) -> dict:
         return shared_load_checkpoint(self.base_output_dir, config)
 
     def _save_checkpoint(
         self,
         config: DatasetConfig,
-        processed: Set[str],
-        total_sessions: Optional[int] = None,
+        processed: set[str],
+        total_sessions: int | None = None,
         stage: str = "ingest_in_progress",
     ):
         """Persist ingest progress so an interrupted dataset can resume."""
@@ -843,7 +860,7 @@ class MultiDatasetProcessor:
         *,
         run_ingest: bool = True,
         run_qa: bool = True,
-    ) -> Dict:
+    ) -> dict:
         """
         Process a single dataset:
         1. Setup VDB manager
@@ -864,14 +881,14 @@ class MultiDatasetProcessor:
             self._append_stuck_history(config.name, processed, total)
             self._save_checkpoint(
                 config,
-                set(str(s) for s in checkpoint.get("processed_session_ids", [])),
+                {str(s) for s in checkpoint.get("processed_session_ids", [])},
                 total_sessions=checkpoint.get("total_sessions"),
                 stage="ingest_in_progress",
             )
 
         output_path = self._output_path(config)
         should_setup_runtime = run_ingest or run_qa
-        df: Optional[pd.DataFrame] = None
+        df: pd.DataFrame | None = None
 
         try:
             if should_setup_runtime:
@@ -1139,7 +1156,7 @@ class MultiDatasetProcessor:
             **row,
         )
 
-    def _init_progress_rows(self, configs: List[DatasetConfig]):
+    def _init_progress_rows(self, configs: list[DatasetConfig]):
         shared_init_progress_rows(self.base_output_dir, [cfg.name for cfg in configs])
 
     def _append_stuck_history(self, dataset: str, processed: int, total) -> None:
@@ -1159,7 +1176,7 @@ class MultiDatasetProcessor:
     # Main loop
     # =====================================================================
 
-    def process_all(self, configs: List[DatasetConfig], run_judge: bool = True, stages: Optional[Set[str]] = None) -> List[Dict]:
+    def process_all(self, configs: list[DatasetConfig], run_judge: bool = True, stages: set[str] | None = None) -> list[dict]:
         """Process multiple datasets sequentially and create one merged CSV.
 
         Args:
@@ -1187,7 +1204,7 @@ class MultiDatasetProcessor:
         self._init_progress_rows(configs)
 
         print(f"\n{'#'*60}")
-        print(f"# Multi-Dataset Processing")
+        print("# Multi-Dataset Processing")
         print(f"# Total datasets: {len(configs)}")
         print(f"# Output directory: {self.base_output_dir}")
         print(f"# Progress tracker: {self._progress_path()}")
@@ -1309,7 +1326,7 @@ class MultiDatasetProcessor:
 
         # Summary
         print(f"\n\n{'#'*60}")
-        print(f"# Processing Complete!")
+        print("# Processing Complete!")
         print(f"{'#'*60}")
 
         successful = [r for r in results if "error" not in r]

@@ -31,10 +31,9 @@ import re
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
-from grace_mem.utils.temporal.normalizer import build_time_context
 from grace_mem.utils.temporal.classifier import classify_single_expression
+from grace_mem.utils.temporal.normalizer import build_time_context
 from grace_mem.utils.temporal.resolver import resolve_match
 from grace_mem.utils.temporal.types import ResolutionStatus
 
@@ -109,7 +108,7 @@ def _preprocess(text: str) -> str:
 # weekday-before-date (not in the main parser)
 # ---------------------------------------------------------------------------
 
-def _parse_date_parts(day: str, month: str, year: str) -> Optional[date]:
+def _parse_date_parts(day: str, month: str, year: str) -> date | None:
     """Extract (day, month, year) from a date written either day- or month-first.
 
     Both orders are present in the corpus, so which capture groups matched is
@@ -125,7 +124,7 @@ def _parse_date_parts(day: str, month: str, year: str) -> Optional[date]:
         return None
 
 
-def _weekday_before(anchor: date, weekday_name: str) -> Optional[date]:
+def _weekday_before(anchor: date, weekday_name: str) -> date | None:
     """Resolve "the <weekday> before <date>" to an absolute date.
 
     Strictly before: when the anchor date is itself that weekday, the previous
@@ -142,7 +141,7 @@ def _weekday_before(anchor: date, weekday_name: str) -> Optional[date]:
     return None
 
 
-def _try_weekday_before(raw: str) -> Optional[dict]:
+def _try_weekday_before(raw: str) -> dict | None:
     """Return a norm dict if raw matches '[weekday] before [date]', else None."""
     m = _WD_BEFORE_RE.search(raw)
     if not m:
@@ -170,7 +169,7 @@ def _try_weekday_before(raw: str) -> Optional[dict]:
 # delegate to the project temporal parser
 # ---------------------------------------------------------------------------
 
-def _try_parser(text: str) -> Optional[dict]:
+def _try_parser(text: str) -> dict | None:
     """Try the project temporal parser; return norm dict on success."""
     m = classify_single_expression(text)
     res = resolve_match(m.text, m.span, m.category, _CTX)

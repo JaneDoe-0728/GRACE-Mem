@@ -11,7 +11,18 @@ All exports maintain backward compatibility with the original flat prompts.py st
 """
 
 # Configuration
+# Adaptive retrieval
+from .adaptive import (
+    ADAPTIVE_REWRITE_SYSTEM,
+    ADAPTIVE_REWRITE_SYSTEM_MULTIHOP,
+)
 from .config import EXTRA_KWARGS
+
+# Entity operations
+from .entity_ops import (
+    ENTITY_OPS_FEW_SHOT,
+    ENTITY_OPS_RULES_V2,
+)
 
 # Extraction prompts - most commonly used
 from .extraction import (
@@ -22,34 +33,18 @@ from .extraction import (
 # Keyword extraction
 from .keyword import KEYWORD_EXTRACTION_PROMPT
 
-# Adaptive retrieval
-from .adaptive import (
-    ADAPTIVE_REWRITE_SYSTEM,
-    ADAPTIVE_REWRITE_SYSTEM_MULTIHOP,
-)
-
-# Entity operations
-from .entity_ops import (
-    ENTITY_OPS_RULES_V2,
-    ENTITY_OPS_FEW_SHOT,
-)
-
 __all__ = [
-    # Config
-    "EXTRA_KWARGS",
-
-    # Extraction
-    "entity_extraction_only",
-    "relationship_extraction_only",
-
-    # Keyword
-    "KEYWORD_EXTRACTION_PROMPT",
-
     # Adaptive retrieval
     "ADAPTIVE_REWRITE_SYSTEM",
     "ADAPTIVE_REWRITE_SYSTEM_MULTIHOP",
-
+    "ENTITY_OPS_FEW_SHOT",
     # Entity Ops
     "ENTITY_OPS_RULES_V2",
-    "ENTITY_OPS_FEW_SHOT",
+    # Config
+    "EXTRA_KWARGS",
+    # Keyword
+    "KEYWORD_EXTRACTION_PROMPT",
+    # Extraction
+    "entity_extraction_only",
+    "relationship_extraction_only",
 ]

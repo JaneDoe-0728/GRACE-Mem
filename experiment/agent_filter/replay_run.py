@@ -27,10 +27,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from grace_mem.llm import LLMClient
 from experiment.agent_filter.harness import refine_context
 from experiment.common.paths import REPO_ROOT
 from experiment.longmem.stages.qa_eval import QAEvalStage
+from grace_mem.llm import LLMClient
 
 OUTPUT_ROOT = REPO_ROOT / "experiment" / "longmem" / "output"
 DATA_ROOT = REPO_ROOT / "experiment" / "longmem" / "script_data"
@@ -212,7 +212,7 @@ def main() -> None:
             done += 1
             try:
                 msg = fut.result()
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 msg = f"{futs[fut].stem}: ERR {e}"
             if done % 10 == 0 or done == len(jobs):
                 rate = done / max(time.time() - t0, 1)

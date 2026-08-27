@@ -29,8 +29,8 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from grace_mem.llm import LLMClient
 from experiment.longmem.stages.qa_eval import QAEvalStage
+from grace_mem.llm import LLMClient
 
 OUTPUT_ROOT = _ROOT / "experiment" / "longmem" / "output"
 
@@ -109,7 +109,7 @@ def main() -> None:
             done += 1
             try:
                 msg = fut.result()
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 msg = f"{futs[fut].stem}: ERR {e}"
             if done % 10 == 0 or done == len(jobs):
                 rate = done / max(time.time() - t0, 1)

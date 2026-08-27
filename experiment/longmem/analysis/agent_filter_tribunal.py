@@ -38,16 +38,14 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 from rank_bm25 import BM25Okapi
 
-from grace_mem.llm import LLMClient
 from experiment.agent_filter.corpus import load_corpus
+from grace_mem.llm import LLMClient
 
 DATA = _ROOT / "experiment" / "longmem" / "script_data"
 OUTPUT = _ROOT / "experiment" / "longmem" / "output"
 
 TOK = re.compile(r"[a-z0-9][a-z0-9'-]*")
-STOP = set("a an the and or but of in on at to from by with for as is are was were be been am "
-           "do does did have has had i me my you your he she it we they this that what when where "
-           "who whom how why not no yes if then so there here also just about".split())
+STOP = {"a", "an", "the", "and", "or", "but", "of", "in", "on", "at", "to", "from", "by", "with", "for", "as", "is", "are", "was", "were", "be", "been", "am", "do", "does", "did", "have", "has", "had", "i", "me", "my", "you", "your", "he", "she", "it", "we", "they", "this", "that", "what", "when", "where", "who", "whom", "how", "why", "not", "no", "yes", "if", "then", "so", "there", "here", "also", "just", "about"}
 
 VERIFIER_SYSTEM = """You are an evidence auditor. Given a QUESTION, a CANDIDATE ANSWER, and
 EVIDENCE excerpts from the user's conversation history, judge whether the evidence
@@ -103,12 +101,12 @@ def load_run(run: str) -> dict:
         try:
             df = pd.read_csv(f)
             r = df.iloc[0]
-            out[(p.parent.name, p.stem)] = dict(
-                ok=float(r.get("correctness_4o")) == 1.0,
-                answer=str(r.get("Generated_Answer") or "").strip(),
-                question=str(r.get("question") or "").strip(),
-                qdate=str(r.get("question_date") or "").strip(),
-            )
+            out[(p.parent.name, p.stem)] = {
+                "ok": float(r.get("correctness_4o")) == 1.0,
+                "answer": str(r.get("Generated_Answer") or "").strip(),
+                "question": str(r.get("question") or "").strip(),
+                "qdate": str(r.get("question_date") or "").strip(),
+            }
         except Exception:
             continue
     return out
@@ -257,7 +255,7 @@ def main():
                 done += 1
                 try:
                     ok, detail = fut.result()
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     ok, detail = default[k]["ok"], {"error": str(e)[:200]}
                 picked[k] = ok
                 fh.write(json.dumps({"key": list(k), "picked_ok": ok, **detail}) + "\n")

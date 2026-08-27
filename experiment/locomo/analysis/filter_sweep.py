@@ -44,43 +44,43 @@ REPO_ROOT = EXPERIMENT_ROOT.parent                     # repo root
 # These are used to build a custom experiment_config.py for each sweep config.
 # Update these if experiment_config.py defaults change.
 
-BASE_INGEST_PARAMS = dict(
-    ingest_mode="turn_pairs",
-    prev_k=2,
-    entity_sim_topk=3,
-    entity_sim_threshold=0.6,
-)
+BASE_INGEST_PARAMS = {
+    "ingest_mode": "turn_pairs",
+    "prev_k": 2,
+    "entity_sim_topk": 3,
+    "entity_sim_threshold": 0.6,
+}
 
-BASE_RETRIEVAL_PARAMS = dict(
-    ent_topk=20,
-    rel_topk=10,
-    ent_threshold=0.2,
-    rel_threshold=0.2,
-    filter_ent_topk=10,
-    filter_rel_topk=10,
-    filter_ent_threshold=0.4,
-    filter_rel_threshold=0.4,
-    summary_topk_per_item=8,
-    summary_vec_threshold=0.4,
-)
+BASE_RETRIEVAL_PARAMS = {
+    "ent_topk": 20,
+    "rel_topk": 10,
+    "ent_threshold": 0.2,
+    "rel_threshold": 0.2,
+    "filter_ent_topk": 10,
+    "filter_rel_topk": 10,
+    "filter_ent_threshold": 0.4,
+    "filter_rel_threshold": 0.4,
+    "summary_topk_per_item": 8,
+    "summary_vec_threshold": 0.4,
+}
 
-BASE_RERANKER_PARAMS = dict(
-    use_reranker=True,
-    reranker_threshold=-3.0,
-    reranker_topk=5,
-    use_spreading_activation=False,
-    sa_max_hops=2,
-    sa_rescale_c=0.4,
-    sa_tau_a=0.5,
-    sa_max_activated=20,
+BASE_RERANKER_PARAMS = {
+    "use_reranker": True,
+    "reranker_threshold": -3.0,
+    "reranker_topk": 5,
+    "use_spreading_activation": False,
+    "sa_max_hops": 2,
+    "sa_rescale_c": 0.4,
+    "sa_tau_a": 0.5,
+    "sa_max_activated": 20,
     # Filter method (new fields added by RRF/PPR implementation)
-    filter_method="similarity",    # baseline: preserves old cosine-threshold behavior
-    rrf_k=60.0,
-    rrf_candidate_k=50,
-    ppr_alpha=0.85,
-    ppr_top_k=10,
-    ppr_inverse_degree=False,
-)
+    "filter_method": "similarity",    # baseline: preserves old cosine-threshold behavior
+    "rrf_k": 60.0,
+    "rrf_candidate_k": 50,
+    "ppr_alpha": 0.85,
+    "ppr_top_k": 10,
+    "ppr_inverse_degree": False,
+}
 
 # Keys that belong to RETRIEVAL_PARAMS (call-time args to build_kg_context).
 # All other non-underscore keys go into RERANKER_PARAMS (init-time RetrieverConfig).
@@ -169,7 +169,7 @@ def _run_config(
             print(config_src)
             return True
 
-        result = subprocess.run(cmd, env=env, cwd=str(REPO_ROOT), timeout=timeout)
+        result = subprocess.run(cmd, env=env, cwd=str(REPO_ROOT), timeout=timeout, check=False)
         success = result.returncode == 0
         if not success:
             print(f"[WARN] Config '{cfg['_label']}' exited with code {result.returncode}")
