@@ -17,7 +17,6 @@ other's extractions.
 """
 
 import logging
-import os
 import pickle
 from pathlib import Path
 from typing import Any
@@ -137,36 +136,6 @@ class CacheStore:
         cache.get("entities_full", {}).clear()
         cache.get("relationships", {}).clear()
         cache.get("relationships_full", {}).clear()
-
-    @staticmethod
-    def reset(cache: dict[str, dict], cache_dir: Path | None = None) -> None:
-        """Clear memory and delete the cache files, forcing a full re-extraction.
-
-        Both halves are cleared before either file is removed, so an
-        interrupted reset leaves the caller with an empty cache and at worst a
-        stale file -- never a populated cache pointing at deleted state.
-
-        Args:
-            cache: The cache dict to empty in place.
-            cache_dir: Per-dataset cache directory. None targets the shared
-                vdb_cache/ (deprecated).
-        """
-        CacheStore.clear(cache)
-
-        if cache_dir is None:
-            files_to_delete = (ENT_FILE, REL_FILE)
-        else:
-            cache_dir = Path(cache_dir)
-            files_to_delete = (
-                cache_dir / "entities_cache.pkl",
-                cache_dir / "relationships_cache.pkl"
-            )
-
-        for p in files_to_delete:
-            try:
-                os.remove(p)
-            except FileNotFoundError:
-                pass  # already absent is the desired end state
 
 def build_id_to_meta_maps(cache: dict[str, dict]) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     """Invert the cache into id -> metadata lookups.

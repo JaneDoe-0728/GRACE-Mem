@@ -19,7 +19,6 @@ disappears from those reports.
 import logging
 import os
 import time
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -160,51 +159,6 @@ class LLMClient:
             return False
         return "seed" in text or "extra fields not permitted" in text or "unknown field" in text
     
-    def stream_chat(self, messages: list[dict[str, Any]], temperature: float = 0.6, max_tokens: int = 2048) -> Iterator[Any]:
-        """Yield streamed completion chunks, recording usage from the final one.
-
-        `stream_options={"include_usage": True}` is what makes the token counts
-        arrive at all -- without it a streamed response carries no usage block
-        and the call vanishes from cost accounting.
-
-        Args:
-            messages: Chat messages in OpenAI wire format.
-            temperature: Defaults higher than the other methods because this
-                path serves generation rather than extraction, where varied
-                phrasing is wanted and exact reproducibility is not.
-
-        Yields:
-            Raw SDK chunks. Only the last carries `usage`.
-        """
-        t0 = time.perf_counter()
-        payload = {
-            "model": self.model_name,
-            "messages": messages,
-            "stream": True,
-            "stream_options": {"include_usage": True},
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "seed": self.seed,
-        }
-        try:
-            stream = self.client.chat.completions.create(**payload)
-            self._log_seed_state("accepted", f"seed={self.seed}")
-        except Exception as exc:
-            if "seed" not in str(exc).lower():
-                raise
-            self._log_seed_state("unsupported", "retrying stream request without seed")
-            payload.pop("seed", None)
-            stream = self.client.chat.completions.create(**payload)
-        for chunk in stream:
-            if chunk.usage:
-                token_tracker.record(
-                    "stream_chat",
-                    chunk.usage.prompt_tokens,
-                    chunk.usage.completion_tokens,
-                    time.perf_counter() - t0,
-                )
-            yield chunk
-
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Send one non-streaming request, retrying unseeded if the seed is rejected.
 
@@ -295,25 +249,6 @@ class LLMClient:
         usage = data.get("usage", {})
         if usage:
             token_tracker.record("generate_llm_keyword", usage["prompt_tokens"], usage["completion_tokens"], elapsed)
-        return data["choices"][0]["message"]["content"], elapsed
-
-    def generate_llm_dynamic_plan(self, system_prompt: str, user_prompt: str,
-                                  max_tokens: int = 512, temperature: float = 0) -> tuple[str, float]:
-        """Run dynamic retrieval planning and return guidance text plus latency."""
-        t0 = time.perf_counter()
-        data = self._post({
-            "model": self.model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        })
-        elapsed = time.perf_counter() - t0
-        usage = data.get("usage", {})
-        if usage:
-            token_tracker.record("generate_llm_dynamic_plan", usage["prompt_tokens"], usage["completion_tokens"], elapsed)
         return data["choices"][0]["message"]["content"], elapsed
 
     def generate_llm_hyde(self, system_prompt: str, user_prompt: str,

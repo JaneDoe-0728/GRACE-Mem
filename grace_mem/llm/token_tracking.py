@@ -13,7 +13,6 @@ _METHOD_LABELS = {
     "chat": "qa_answer",
     "generate_llm_extract": "entity_extraction",
     "generate_llm_keyword": "keyword_extraction",
-    "generate_llm_dynamic_plan": "dynamic_planning",
     "generate_llm_hyde": "hyde_generation",
 }
 

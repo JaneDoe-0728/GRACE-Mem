@@ -22,11 +22,9 @@ lose the run. Every tolerated deformation there is one observed in practice.
 """
 
 import logging
-import pickle
 import re
 import unicodedata
 from enum import Enum
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
@@ -64,28 +62,6 @@ def is_context_length_exceeded_error(error: Any) -> bool:
             return True
 
     return False
-
-# ---------- Pickle ----------
-def pickle_dump(path: str | Path, obj: Any) -> None:
-    """Serialize an object to pickle, logging instead of raising on failure."""
-    try:
-        with open(path, "wb") as f:
-            pickle.dump(obj, f)
-    except Exception as e:
-        logger.error("Pickle dump failed: %s → %s", path, e)
-
-
-def pickle_load(path: str | Path, default: Any = None) -> Any:
-    """Load a pickle file and return a fallback value when it is unavailable."""
-    try:
-        with open(path, "rb") as f:
-            return pickle.load(f)
-    except FileNotFoundError:
-        return default
-    except Exception as e:
-        logger.error("Pickle load failed: %s → %s", path, e)
-        return default
-
 
 # --- Identity: ids and cache keys ---------------------------------------
 
