@@ -3,7 +3,7 @@
 An accuracy number says a run went wrong; it does not say where. Retrieval
 passes a candidate set through many narrowing stages -- search, filtering,
 reranking, evidence selection -- and a wrong answer usually means the right
-evidence was dropped at exactly one of them. This module records enough per
+evidence was dropped at exactly one of them. This module derives enough per
 stage to identify which.
 
 The core idea is differential: `derive_drop_reasons` diffs the candidate set
@@ -13,11 +13,9 @@ without every stage having to report its own losses.
 that scored well and still lost, which is where a threshold set slightly wrong
 shows up.
 
-Everything is appended as JSONL, one file per artifact type (see
-`_JSONL_FILES`), because the analysis scripts load these into dataframes and
-join them on request_id. Records are appended and never rewritten: writes come
-from concurrent workers, and append is the only operation that stays coherent
-without coordination.
+Both benchmarks use this identically, which is what makes it common/. The
+append-only writers it hands results to live in `grace_mem.runtime.analysis_log`,
+because the ingestion pipeline writes those artifacts too.
 """
 
 from __future__ import annotations
@@ -26,39 +24,34 @@ import csv
 import json
 import re
 from collections.abc import Iterable
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-_JSONL_FILES = {
-    "ingest_delta": "error_analysis_ingest_delta.jsonl",
-    "retrieval_summary": "error_analysis_retrieval_summary.jsonl",
-    "failure_verdict": "error_analysis_failure_verdicts.jsonl",
-    "drop_reasons": "error_analysis_drop_reasons.jsonl",
-    "top_miss": "error_analysis_top_miss_candidates.jsonl",
-    "anomaly_flags": "error_analysis_anomaly_flags.jsonl",
-    "evidence_bridge": "error_analysis_evidence_bridge.jsonl",
-    "grep_agent": "error_analysis_grep_agent.jsonl",
-}
+from grace_mem.runtime.analysis_log import (
+    append_analysis_record,
+    append_pretty_block,
+    timestamp_now,
+)
+
+__all__ = [
+    "append_analysis_record",
+    "append_pretty_block",
+    "build_bridge_label",
+    "build_top_miss_snapshot",
+    "coerce_bool",
+    "coerce_float",
+    "compact_json",
+    "derive_anomaly_flags",
+    "derive_drop_reasons",
+    "derive_failure_type",
+    "extract_context_session_ids",
+    "is_temporal_question",
+    "read_reranker_rows",
+    "render_failure_digest",
+    "timestamp_now",
+]
 
 
-# ---------- IO helpers ----------
-
-def _ensure_dir(path: Path) -> Path:
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _append_jsonl_record(path: Path, record: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
-def _append_text(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(text)
 
 
 # utf-8-sig, not utf-8: these CSVs are routinely opened and re-saved in Excel,
@@ -67,49 +60,6 @@ def _append_text(path: Path, text: str) -> None:
 def _load_csv_rows(path: Path, *, encoding: str = "utf-8-sig") -> list[dict[str, Any]]:
     with path.open("r", encoding=encoding, newline="") as fh:
         return list(csv.DictReader(fh))
-
-
-# ---------- Public API ----------
-
-def timestamp_now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
-
-def append_analysis_record(log_dir: str | Path, artifact: str, record: dict[str, Any]) -> Path:
-    """Append one record to the JSONL file for `artifact`.
-
-    Args:
-        artifact: Key into `_JSONL_FILES`. Deliberately a closed set rather
-            than a free filename -- the analysis scripts read these by name, so
-            a typo would create an orphan file that silently never gets read.
-
-    Returns:
-        The file written to.
-
-    Raises:
-        KeyError: If `artifact` is not a known artifact type.
-    """
-    target_dir = _ensure_dir(Path(log_dir))
-    filename = _JSONL_FILES[artifact]
-    payload = {"logged_at": timestamp_now(), **record}
-    path = target_dir / filename
-    _append_jsonl_record(path, payload)
-    return path
-
-
-def append_pretty_block(log_dir: str | Path, filename: str, text: str) -> Path:
-    """Append a human-readable block, blank-line separated from the previous one.
-
-    The separator is only written when the file is non-empty, so the file never
-    opens with a stray blank line -- these are read by eye, and consistent
-    block boundaries are what make them scannable.
-    """
-    target_dir = _ensure_dir(Path(log_dir))
-    path = target_dir / filename
-    if path.exists() and path.stat().st_size > 0:
-        _append_text(path, "\n")
-    _append_text(path, text.rstrip() + "\n")
-    return path
 
 
 def read_reranker_rows(log_dir: str | Path, *, request_id: str) -> list[dict[str, Any]]:

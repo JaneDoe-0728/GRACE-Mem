@@ -19,6 +19,16 @@ import json
 import os
 from pathlib import Path
 
+from experiment.common.error_analysis import (
+    append_analysis_record,
+    append_pretty_block,
+    build_bridge_label,
+    build_top_miss_snapshot,
+    coerce_float,
+    derive_anomaly_flags,
+    derive_failure_type,
+    render_failure_digest,
+)
 from experiment.locomo.helpers.sample_hooks import (
     artifact_dir_for_sample,
     ensure_worker_repo_path,
@@ -33,16 +43,6 @@ from experiment.locomo.pipeline.stage_adapter import (
     configure_retriever,
     run_judge_stage,
     skipped_judge_stats,
-)
-from experiment.locomo.utils.error_analysis import (
-    append_analysis_record,
-    append_pretty_block,
-    build_bridge_label,
-    build_top_miss_snapshot,
-    coerce_float,
-    derive_anomaly_flags,
-    derive_failure_type,
-    render_failure_digest,
 )
 from experiment.locomo.utils.io import (
     backup_artifacts_and_logs,

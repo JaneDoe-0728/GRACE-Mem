@@ -27,6 +27,17 @@ from typing import Any
 
 import pandas as pd
 
+from experiment.common.error_analysis import (
+    append_analysis_record,
+    append_pretty_block,
+    build_bridge_label,
+    build_top_miss_snapshot,
+    coerce_float,
+    derive_anomaly_flags,
+    derive_drop_reasons,
+    derive_failure_type,
+    render_failure_digest,
+)
 from experiment.experiment_config import RERANKER_PARAMS
 from experiment.longmem.artifacts.snapshot import restore_graph_from_cache
 from experiment.longmem.helpers.checkpoints import (
@@ -74,17 +85,6 @@ from grace_mem.pipeline.ingestor import Ingestor
 from grace_mem.pipeline.retriever import Retriever, RetrieverConfig
 from grace_mem.services import EntityManager, Provenance, RelationshipManager
 from grace_mem.storage import VDBManager
-from grace_mem.utils.error_analysis import (
-    append_analysis_record,
-    append_pretty_block,
-    build_bridge_label,
-    build_top_miss_snapshot,
-    coerce_float,
-    derive_anomaly_flags,
-    derive_drop_reasons,
-    derive_failure_type,
-    render_failure_digest,
-)
 from grace_mem.utils.logger_config import make_module_jlog
 
 logger = logging.getLogger(__name__)

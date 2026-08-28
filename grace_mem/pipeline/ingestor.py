@@ -49,6 +49,7 @@ from grace_mem.pipeline.ingest_steps.extract import (
     RelationshipExtractor,
 )
 from grace_mem.pipeline.ingest_steps.sync import ExtractionSyncer
+from grace_mem.runtime.analysis_log import append_analysis_record
 from grace_mem.utils.common import (
     Entity,
     EntityType,
@@ -56,7 +57,6 @@ from grace_mem.utils.common import (
     Relationship,
     is_context_length_exceeded_error,
 )
-from grace_mem.utils.error_analysis import append_analysis_record
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
 from grace_mem.utils.query_time_parser import parse_query_time
 from grace_mem.utils.temporal import (

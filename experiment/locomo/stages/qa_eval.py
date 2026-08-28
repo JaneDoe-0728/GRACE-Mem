@@ -56,12 +56,12 @@ except Exception as e:
         f"Failed to import GRACE-Mem modules. Ensure PYTHONPATH includes your project root. Original error: {e!r}"
     )
 
-from experiment.locomo.helpers.llm import llm_post
-from experiment.locomo.utils.error_analysis import (
+from experiment.common.error_analysis import (
     append_analysis_record,
     compact_json,
     derive_drop_reasons,
 )
+from experiment.locomo.helpers.llm import llm_post
 from experiment.locomo.utils.io import EVAL_COLUMNS
 
 # retriever is set by the caller (e.g. locomo_pipeline.py) after build_pipeline().

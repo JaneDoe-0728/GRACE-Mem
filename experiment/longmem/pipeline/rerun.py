@@ -24,6 +24,17 @@ from experiment.experiment_config import (
 
 # LongMem-only: must match the value used when these artifacts were ingested.
 USE_SPLIT_SUMMARY = bool(INGEST_PARAMS.get("use_split_summary", True))
+from experiment.common.error_analysis import (
+    append_analysis_record,
+    append_pretty_block,
+    build_bridge_label,
+    build_top_miss_snapshot,
+    coerce_float,
+    derive_anomaly_flags,
+    derive_drop_reasons,
+    derive_failure_type,
+    render_failure_digest,
+)
 from experiment.longmem.artifacts.snapshot import restore_graph_from_cache
 from experiment.longmem.helpers.args import (
     add_data_args,
@@ -46,17 +57,6 @@ from experiment.longmem.pipeline.aggregate import (
 from experiment.longmem.stages.judge import JudgeStage
 from experiment.longmem.stages.qa_eval import QAEvalStage
 from experiment.longmem.utils.io import append_type_subdir, ensure_dir, read_csv_frame
-from grace_mem.utils.error_analysis import (
-    append_analysis_record,
-    append_pretty_block,
-    build_bridge_label,
-    build_top_miss_snapshot,
-    coerce_float,
-    derive_anomaly_flags,
-    derive_drop_reasons,
-    derive_failure_type,
-    render_failure_digest,
-)
 
 
 class LongMemRerun:
