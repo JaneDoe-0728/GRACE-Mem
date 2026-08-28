@@ -100,13 +100,13 @@ def main() -> None:
         print("ERROR:", trace["error"])
 
     final = trace.get("final_sids", [])
-    ctx_sids = trace.get("context_sids", final)
+    evidence_sids = trace.get("context_sids", final)
     gold_set = set(gold)
     print("\n=== SCORE ===")
     print(f"final sids ({len(final)}): {final}")
-    print(f"context sids ({len(ctx_sids)}): {ctx_sids}")
-    print(f"gold in context : {len(set(ctx_sids) & gold_set)}/{len(gold)}")
-    print(f"non-gold in context: {len([s for s in ctx_sids if s not in gold_set])}")
+    print(f"context sids ({len(evidence_sids)}): {evidence_sids}")
+    print(f"gold in context : {len(set(evidence_sids) & gold_set)}/{len(gold)}")
+    print(f"non-gold in context: {len([s for s in evidence_sids if s not in gold_set])}")
 
 
 if __name__ == "__main__":

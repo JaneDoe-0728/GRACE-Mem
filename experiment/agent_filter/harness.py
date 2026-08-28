@@ -1038,14 +1038,14 @@ def refine_context(
                 trace["fallback"] = "no_addition"
                 return context, trace
             lines = ["", "### Additional Evidence (agent-retrieved)"]
-            ctx_sids = list(seed_norm)
+            evidence_sids = list(seed_norm)
             for s in trace["added"]:
                 t = corpus.resolve(s)[0]
                 entry = corpus.display_entry(s)
                 dt = f"[{t.date}]" if t.date else ""
                 lines.append(f"  • {dt}[sid={s}][score=--] {entry} ")
-                ctx_sids.append(s)
-            trace["context_sids"] = ctx_sids
+                evidence_sids.append(s)
+            trace["context_sids"] = evidence_sids
             return context.rstrip("\n") + "\n".join(lines), trace
 
         refined, context_sids = _rebuild_context(
@@ -1174,14 +1174,14 @@ def finalize_from_raw(
             trace["fallback"] = "no_addition"
             return context, trace
         lines = ["", "### Additional Evidence (agent-retrieved)"]
-        ctx_sids = list(seed_norm)
+        evidence_sids = list(seed_norm)
         for s in trace["added"]:
             t = corpus.resolve(s)[0]
             entry = corpus.display_entry(s)
             dt = f"[{t.date}]" if t.date else ""
             lines.append(f"  • {dt}[sid={s}][score=--] {entry} ")
-            ctx_sids.append(s)
-        trace["context_sids"] = ctx_sids
+            evidence_sids.append(s)
+        trace["context_sids"] = evidence_sids
         return context.rstrip("\n") + "\n".join(lines), trace
 
     refined, context_sids = _rebuild_context(

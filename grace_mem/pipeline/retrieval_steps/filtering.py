@@ -35,7 +35,7 @@ def _append_reranker_scores(
         writer.writerows(rows)
 
 
-class ContextFilter:
+class EvidenceFilter:
     """
     Handles filtering and reranking of context entities and relationships.
     """

@@ -13,9 +13,9 @@ from grace_mem.llm.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
 
 # Import modular components
 from grace_mem.pipeline.retrieval_steps import (
-    ContextFilter,
     EntityRelationshipSearcher,
     EvidenceBuilder,
+    EvidenceFilter,
     SAConfig,
     SpreadingActivationEngine,
     SubgraphPageRank,
@@ -349,7 +349,7 @@ class Retriever:
     - EntityRelationshipSearcher: Hybrid entity/relationship search
     - TemporalRelevanceCalculator: Temporal relevance scoring
     - EvidenceBuilder: Evidence block building
-    - ContextFilter: Filtering and reranking
+    - EvidenceFilter: Filtering and reranking
     """
 
     # Class-level default configuration
@@ -405,7 +405,7 @@ class Retriever:
             cache=self.cache,
             raw_context_lookup=raw_context_lookup,
         )
-        self.context_filter = ContextFilter(
+        self.evidence_filter = EvidenceFilter(
             vector_db_manager=self.MGR,
             cache=self.cache
         )
@@ -1331,7 +1331,7 @@ class Retriever:
         )
 
         # 2) Compute intersection (using union for now as per original code)
-        intersect_entity_ids, intersect_rel_ids = self.context_filter.compute_subgraph_intersection(
+        intersect_entity_ids, intersect_rel_ids = self.evidence_filter.compute_subgraph_intersection(
             node_subgraph=node_subgraph,
             edge_subgraph=edge_subgraph,
             use_union=True,  # Original code uses union
@@ -1382,7 +1382,7 @@ class Retriever:
         }
 
         if self.cfg.filter_method == "similarity":
-            filtered_entity_ids, filtered_rel_ids = self.context_filter.filter_by_similarity(
+            filtered_entity_ids, filtered_rel_ids = self.evidence_filter.filter_by_similarity(
                 entity_ids=intersect_entity_ids,
                 relationship_ids=intersect_rel_ids,
                 query_vec=query_vec,
@@ -1399,7 +1399,7 @@ class Retriever:
                 if self.cfg.filter_method == "rrf"
                 else self.cfg.rrf_candidate_k
             )
-            filtered_entity_ids, filtered_rel_ids, rrf_scores = self.context_filter.filter_by_rrf(
+            filtered_entity_ids, filtered_rel_ids, rrf_scores = self.evidence_filter.filter_by_rrf(
                 entity_ids=intersect_entity_ids,
                 relationship_ids=intersect_rel_ids,
                 query_vec=query_vec,
@@ -1449,7 +1449,7 @@ class Retriever:
                 )
 
         elif self.cfg.filter_method == "ppr":
-            cosine_scores_ppr = self.context_filter.compute_cosine_scores(
+            cosine_scores_ppr = self.evidence_filter.compute_cosine_scores(
                 intersect_entity_ids, query_vec
             )
             _, rel_id2meta_pp = build_id_to_meta_maps(self.cache)
@@ -1550,7 +1550,7 @@ class Retriever:
         filtered_rel_ids_set: list[str] | None
         if self.cfg.filter_method == "reranker_only":
             # reranker IS the filter — score all candidates, select top-K
-            filtered_entity_ids_set, filtered_rel_ids_set = self.context_filter.rerank_filter(
+            filtered_entity_ids_set, filtered_rel_ids_set = self.evidence_filter.rerank_filter(
                 question=question,
                 entity_ids=intersect_entity_ids,
                 relationship_ids=intersect_rel_ids,
@@ -1560,7 +1560,7 @@ class Retriever:
                 request_id=request_id,
             )
         elif self.cfg.use_reranker:
-            recovered_entity_ids, recovered_rel_ids = self.context_filter.rerank_and_recover(
+            recovered_entity_ids, recovered_rel_ids = self.evidence_filter.rerank_and_recover(
                 question=question,
                 all_entity_ids=intersect_entity_ids,
                 all_relationship_ids=intersect_rel_ids,
@@ -1836,9 +1836,9 @@ class Retriever:
         self,
         *,
         question: str,
-        ctx_entities: list[dict],
-        ctx_rels: list[dict],
-        ctx_text: str,
+        evidence_entities: list[dict],
+        evidence_rels: list[dict],
+        evidence_text: str,
         query_vec: np.ndarray,
         request_id: str | None,
         ent_topk: int,
@@ -1875,15 +1875,15 @@ class Retriever:
             "adaptive_research_start",
             request_id,
             step="2b",
-            entity_count=len(ctx_entities),
-            relationship_count=len(ctx_rels),
+            entity_count=len(evidence_entities),
+            relationship_count=len(evidence_rels),
             tau_confidence=self.cfg.tau_confidence,
             adaptive_threshold_scale=self.cfg.adaptive_threshold_scale,
         )
 
         # --- Pass-1 confidence ---
-        ent_ids_1 = [e["id"] for e in ctx_entities]
-        rel_ids_1 = [r["rel_id"] for r in ctx_rels]
+        ent_ids_1 = [e["id"] for e in evidence_entities]
+        rel_ids_1 = [r["rel_id"] for r in evidence_rels]
         conf_1 = compute_confidence(ent_ids_1, rel_ids_1, query_vec, self.MGR)
 
         _jlog(
@@ -1914,13 +1914,13 @@ class Retriever:
                 conf_pass1=conf_1,
                 conf_final=conf_1,
             )
-            return ctx_entities, ctx_rels, ctx_text, query_vec
+            return evidence_entities, evidence_rels, evidence_text, query_vec
 
         # --- Rewrite query ---
         try:
             rewrite_llm = build_adaptive_llm_client()
             rewritten_q, rewrite_latency = rewrite_query(
-                question, ctx_entities, ctx_rels, conf_1, rewrite_llm
+                question, evidence_entities, evidence_rels, conf_1, rewrite_llm
             )
             _jlog(
                 "adaptive_query_rewrite",
@@ -1947,7 +1947,7 @@ class Retriever:
                 rewritten_query=rewritten_q,
                 adaptive_skip_reason="rewrite_identical",
             )
-            return ctx_entities, ctx_rels, ctx_text, query_vec
+            return evidence_entities, evidence_rels, evidence_text, query_vec
 
         # --- Pass-2 graph ---
         local_graph = None
@@ -1973,7 +1973,7 @@ class Retriever:
                 filter_rel_threshold_scaled=filter_rel_threshold * scale,
                 graph_override=bool(local_graph is not None),
             )
-            ctx2_entities, ctx2_rels, ctx2_text, query_vec2 = self.assemble_context_from_query(
+            evidence2_entities, evidence2_rels, evidence2_text, query_vec2 = self.assemble_context_from_query(
                 question=rewritten_q,
                 low_level_keywords=kw2.low_level_keywords,
                 high_level_keywords=kw2.high_level_keywords,
@@ -1993,8 +1993,8 @@ class Retriever:
             if local_graph is not None:
                 local_graph.close()
 
-        ent_ids_2 = [e["id"] for e in ctx2_entities]
-        rel_ids_2 = [r["rel_id"] for r in ctx2_rels]
+        ent_ids_2 = [e["id"] for e in evidence2_entities]
+        rel_ids_2 = [r["rel_id"] for r in evidence2_rels]
         conf_2 = compute_confidence(ent_ids_2, rel_ids_2, query_vec, self.MGR)
 
         _jlog(
@@ -2012,17 +2012,17 @@ class Retriever:
             step="2b",
             entity_count=len(ent_ids_2),
             relationship_count=len(rel_ids_2),
-            context_length=len(ctx2_text),
+            context_length=len(evidence2_text),
             query_vec_dim=int(query_vec2.shape[0]) if hasattr(query_vec2, "shape") else None,
             elapsed_sec=timer_p2.sec(),
         )
 
         # --- Additive merge: keep all pass-1 context, append only novel pass-2 items ---
         merged_entities, merged_rels, merged_text, conf_merged = self._additive_merge(
-            entities_1=ctx_entities,
-            rels_1=ctx_rels,
-            entities_2=ctx2_entities,
-            rels_2=ctx2_rels,
+            entities_1=evidence_entities,
+            rels_1=evidence_rels,
+            entities_2=evidence2_entities,
+            rels_2=evidence2_rels,
             request_id=request_id,
             conf_1=conf_1,
             conf_2=conf_2,
@@ -2248,7 +2248,7 @@ class Retriever:
 
             # 2) Assemble context (entities, relationships, text)
             timer_context = _StepTimer()
-            ctx_entities, ctx_rels, ctx_text, query_vec = self.assemble_context_from_query(
+            evidence_entities, evidence_rels, evidence_text, query_vec = self.assemble_context_from_query(
                 question=rewritten_question,
                 low_level_keywords=kw.low_level_keywords,
                 high_level_keywords=kw.high_level_keywords,
@@ -2267,19 +2267,19 @@ class Retriever:
                 "context_build_done",
                 request_id,
                 step="2",
-                entity_count=len(ctx_entities),
-                relationship_count=len(ctx_rels),
-                has_context=bool(ctx_text),
+                entity_count=len(evidence_entities),
+                relationship_count=len(evidence_rels),
+                has_context=bool(evidence_text),
                 elapsed_sec=timer_context.sec(),
             )
 
             # 2b) Adaptive re-search (pass 2) — off by default
             if self.cfg.enable_adaptive_search:
-                ctx_entities, ctx_rels, ctx_text, query_vec = self._adaptive_research(
+                evidence_entities, evidence_rels, evidence_text, query_vec = self._adaptive_research(
                     question=question,
-                    ctx_entities=ctx_entities,
-                    ctx_rels=ctx_rels,
-                    ctx_text=ctx_text,
+                    evidence_entities=evidence_entities,
+                    evidence_rels=evidence_rels,
+                    evidence_text=evidence_text,
                     query_vec=query_vec,
                     request_id=request_id,
                     ent_topk=ent_topk,
@@ -2296,7 +2296,7 @@ class Retriever:
                 _jlog("adaptive_research_skipped", request_id, step="2b", reason="disabled")
 
             # 2.9b) Ablation J: KG_ABLATION_NO_KG_TEXT=1 -> remove only the entity/
-            # relationship text blocks from the context. ctx_entities/ctx_rels are
+            # relationship text blocks from the context. evidence_entities/evidence_rels are
             # kept (the evidence provenance channel is untouched), so the answering
             # model sees the Evidence block alone.
             if _env_flag_enabled("KG_ABLATION_NO_KG_TEXT"):
@@ -2304,9 +2304,9 @@ class Retriever:
                     "ablation_no_kg_text_applied",
                     request_id,
                     step="2.9",
-                    dropped_ctx_text_chars=len(ctx_text or ""),
+                    dropped_ctx_text_chars=len(evidence_text or ""),
                 )
-                ctx_text = ""
+                evidence_text = ""
 
             # 2.9) Ablation B2 (no-KG baseline): drop the graph channel entirely --
             # the evidence pool is left with direct vector search alone, and the
@@ -2318,11 +2318,11 @@ class Retriever:
                     "ablation_no_graph_applied",
                     request_id,
                     step="2.9",
-                    dropped_entities=len(ctx_entities),
-                    dropped_rels=len(ctx_rels),
-                    dropped_ctx_text_chars=len(ctx_text or ""),
+                    dropped_entities=len(evidence_entities),
+                    dropped_rels=len(evidence_rels),
+                    dropped_ctx_text_chars=len(evidence_text or ""),
                 )
-                ctx_entities, ctx_rels, ctx_text = [], [], ""
+                evidence_entities, evidence_rels, evidence_text = [], [], ""
 
             # 3) Build evidence block
             timer_evidence = _StepTimer()
@@ -2354,8 +2354,8 @@ class Retriever:
                     summary_direct_vector_min_score=self.cfg.summary_direct_vector_min_score,
                 )
             evidence_block = self.evidence_builder.build_evidence_block(
-                context_entities=ctx_entities,
-                context_relationships=ctx_rels,
+                context_entities=evidence_entities,
+                context_relationships=evidence_rels,
                 summary_topk_global=summary_topk_per_item,
                 query_vec=query_vec,
                 summary_vec_threshold=summary_vec_threshold,
@@ -2407,10 +2407,10 @@ class Retriever:
                 "final_context_assembly_start",
                 request_id,
                 step="4",
-                context_text_length=len(ctx_text or ""),
+                context_text_length=len(evidence_text or ""),
                 evidence_length=len(evidence_block or ""),
             )
-            base_text = ctx_text or "(no KG context)"
+            base_text = evidence_text or "(no KG context)"
             kg_context = f"{base_text}\n\n{evidence_block}" if evidence_block else base_text
             _jlog(
                 "final_context_assembly_complete",
@@ -2451,20 +2451,20 @@ class Retriever:
                 "conf_pass2": adaptive_trace.get("conf_pass2"),
                 "conf_final": adaptive_trace.get("conf_final"),
                 "tau_confidence": adaptive_trace.get("tau_confidence", self.cfg.tau_confidence),
-                "pass1_entity_ids": adaptive_trace.get("pass1_entity_ids", [entity["id"] for entity in ctx_entities]),
+                "pass1_entity_ids": adaptive_trace.get("pass1_entity_ids", [entity["id"] for entity in evidence_entities]),
                 "pass2_entity_ids": adaptive_trace.get("pass2_entity_ids", []),
-                "pass1_relation_ids": adaptive_trace.get("pass1_relation_ids", [relationship["rel_id"] for relationship in ctx_rels]),
+                "pass1_relation_ids": adaptive_trace.get("pass1_relation_ids", [relationship["rel_id"] for relationship in evidence_rels]),
                 "pass2_relation_ids": adaptive_trace.get("pass2_relation_ids", []),
                 "entity_overlap_count": adaptive_trace.get("entity_overlap_count", 0),
                 "entity_overlap_pct": adaptive_trace.get("entity_overlap_pct"),
                 "relation_overlap_count": adaptive_trace.get("relation_overlap_count", 0),
                 "relation_overlap_pct": adaptive_trace.get("relation_overlap_pct"),
-                "final_entity_ids": [entity["id"] for entity in ctx_entities],
-                "final_entity_names": [entity.get("name") or entity.get("id") for entity in ctx_entities],
-                "final_relationship_ids": [relationship["rel_id"] for relationship in ctx_rels],
-                "final_relationship_names": self._relationship_names_from_ids([relationship["rel_id"] for relationship in ctx_rels]),
-                "final_entity_count": len(ctx_entities),
-                "final_relationship_count": len(ctx_rels),
+                "final_entity_ids": [entity["id"] for entity in evidence_entities],
+                "final_entity_names": [entity.get("name") or entity.get("id") for entity in evidence_entities],
+                "final_relationship_ids": [relationship["rel_id"] for relationship in evidence_rels],
+                "final_relationship_names": self._relationship_names_from_ids([relationship["rel_id"] for relationship in evidence_rels]),
+                "final_entity_count": len(evidence_entities),
+                "final_relationship_count": len(evidence_rels),
                 "selected_evidence_count": evidence_trace.get("selected_evidence_count", 0),
                 "selected_evidence": evidence_trace.get("selected_evidence", []),
                 "evidence_score_pass_count": evidence_trace.get("score_pass_count", 0),
