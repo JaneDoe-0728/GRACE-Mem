@@ -37,7 +37,7 @@ import pandas as pd
 
 DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
 
-CATEGORIES = [
+QUESTION_CATEGORIES = [
     "single_session_user",
     "single_session_assistant",
     "multi_session",
@@ -133,7 +133,7 @@ def main() -> None:
         "all_any": 0, "all_useful": 0, "all_useful_or_ans": 0})
     rows = []
 
-    for cat in CATEGORIES:
+    for cat in QUESTION_CATEGORIES:
         cdir = DATA_ROOT / cat
         if not cdir.exists():
             continue
@@ -160,7 +160,7 @@ def main() -> None:
     print(header)
     print("-" * len(header))
     tot = {"n_q": 0, "n_gold": 0, "any": 0, "useful": 0, "pair": 0, "ans": 0, "all_any": 0, "all_useful": 0, "all_useful_or_ans": 0}
-    for cat in CATEGORIES:
+    for cat in QUESTION_CATEGORIES:
         d = agg.get(cat)
         if not d:
             continue

@@ -39,7 +39,7 @@ OUTPUT_ROOT = _ROOT / "experiment" / "longmem" / "output"
 DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
 TEMPLATE = Path(__file__).with_name("template.html")
 
-CATEGORIES = [
+QUESTION_CATEGORIES = [
     "single_session_user", "single_session_assistant", "multi_session",
     "single_session_preference", "temporal_reasoning", "knowledge_update",
 ]
@@ -258,7 +258,7 @@ def collect(out_root: Path, data_root: Path, run_tag: str) -> list[dict]:
     """
     run_dir = out_root / run_tag
     rows: list[dict] = []
-    for cat in CATEGORIES:
+    for cat in QUESTION_CATEGORIES:
         tp = run_dir / cat / "_grep_agent_traces.jsonl"
         if not tp.exists():
             continue

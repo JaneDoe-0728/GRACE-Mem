@@ -35,7 +35,7 @@ from grace_mem.llm import LLMClient
 OUTPUT_ROOT = REPO_ROOT / "experiment" / "longmem" / "output"
 DATA_ROOT = REPO_ROOT / "experiment" / "longmem" / "script_data"
 
-CATEGORIES = [
+QUESTION_CATEGORIES = [
     "single_session_user",
     "single_session_assistant",
     "multi_session",
@@ -165,7 +165,7 @@ def main() -> None:
     src_root = (Path(args.source_root).resolve() / args.source_run
                 if args.source_root else OUTPUT_ROOT / args.source_run)
     jobs: list[tuple[Path, Path, Path, str]] = []
-    for cat in CATEGORIES:
+    for cat in QUESTION_CATEGORIES:
         if args.category and cat != args.category:
             continue
         cdir = src_root / cat

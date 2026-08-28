@@ -24,7 +24,7 @@ import pandas as pd
 
 DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
 OUTPUT_ROOT = _ROOT / "experiment" / "longmem" / "output"
-CATEGORIES = [
+QUESTION_CATEGORIES = [
     "single_session_user", "single_session_assistant", "multi_session",
     "single_session_preference", "temporal_reasoning", "knowledge_update",
 ]
@@ -115,7 +115,7 @@ def main() -> None:
     gold_scores: list[float] = []
     nongold_scores: list[float] = []
 
-    for cat in CATEGORIES:
+    for cat in QUESTION_CATEGORIES:
         if args.exclude_ku and cat == "knowledge_update":
             continue
         cdir = run_root / cat

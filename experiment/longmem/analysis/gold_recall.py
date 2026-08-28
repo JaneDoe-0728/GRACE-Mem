@@ -47,7 +47,7 @@ from experiment.common.recall import RecallStats, format_ratio
 DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
 OUTPUT_ROOT = _ROOT / "experiment" / "longmem" / "output"
 
-CATEGORIES = [
+QUESTION_CATEGORIES = [
     "single_session_user",
     "single_session_assistant",
     "multi_session",
@@ -119,7 +119,7 @@ def main() -> None:
     missing_src = 0
     per_cat: dict[str, RecallStats] = {}
 
-    for cat in CATEGORIES:
+    for cat in QUESTION_CATEGORIES:
         cdir = run_root / cat
         if not cdir.exists():
             continue

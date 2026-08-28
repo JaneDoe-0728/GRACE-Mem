@@ -65,7 +65,7 @@ class ScoredItem:
 
 
 @dataclass(frozen=True)
-class CategoryScore:
+class QuestionCategoryScore:
     """Correct and total for one question category."""
     correct: int
     total: int
@@ -102,7 +102,7 @@ class RunScore:
     correct: int
     total: int
     accuracy_percent: float | None
-    by_category: dict[str, CategoryScore]
+    by_category: dict[str, QuestionCategoryScore]
     lexical: LexicalScore
     agent: dict[str, object] | None
 
@@ -390,7 +390,7 @@ def score_run(
     for item in items:
         grouped[item.category].append(item.verdict)
     by_category = {
-        category: CategoryScore(
+        category: QuestionCategoryScore(
             correct=sum(verdicts),
             total=len(verdicts),
             accuracy_percent=round(100 * sum(verdicts) / len(verdicts), 2),
