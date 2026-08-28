@@ -34,6 +34,12 @@ dependencies = [
     "transformers>=4.41.0",
 ]
 
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "ruff>=0.16.4",
+]
+
 [[tool.uv.index]]
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
@@ -53,7 +59,21 @@ markers = [
     "slow: spawns a subprocess (e.g. a pipeline --help) and takes seconds rather than milliseconds",
 ]
 
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
 [tool.ruff.lint]
+# Keep the initial CI gate on rule families that have a clean repository-wide
+# baseline. The remaining families can be enabled as the existing findings are
+# paid down without making every main-branch build fail on day one.
+select = [
+    "E9",
+    "F",
+    "I",
+    "N",
+    "PLE",
+]
 ignore = [
     # Pipeline boundaries deliberately catch third-party/runtime failures so a
     # single backend or cleanup error does not abort an experiment batch.
@@ -72,3 +92,18 @@ ignore = [
     "PYI036",
     "TRY004",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["grace_mem"]
+check_untyped_defs = true
+no_implicit_optional = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = false
+disallow_any_generics = false
+disable_error_code = ["import-untyped"]

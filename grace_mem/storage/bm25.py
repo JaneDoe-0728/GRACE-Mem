@@ -89,6 +89,8 @@ class EntitiesBM25:
         """
         if not self._bm25_name or not self._bm25_desc:
             self.build()
+        assert self._bm25_name is not None
+        assert self._bm25_desc is not None
         name_scores = self._bm25_name.get_scores(q_tokens)
         desc_scores = self._bm25_desc.get_scores(q_tokens)
         return name_scores, desc_scores

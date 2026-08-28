@@ -79,7 +79,12 @@ class CacheStore:
 
         ent = _load(ent_file)
         rel = _load(rel_file)
-        cache = {"entities":{}, "entities_full":{}, "relationships":{}, "relationships_full":{}}
+        cache: dict[str, dict] = {
+            "entities": {},
+            "entities_full": {},
+            "relationships": {},
+            "relationships_full": {},
+        }
         cache.update(ent)
         cache.update(rel)
         return cache

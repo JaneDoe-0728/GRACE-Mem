@@ -278,8 +278,9 @@ class EvidenceBuilder:
         ev_source: dict[int, str] = {}
 
         for ent in (context_entities or []):
-            entity_id = ent.get("id")
-            meta = entity_id2meta.get(entity_id, {}) or {}
+            entity_id_value = ent.get("id")
+            entity_id = entity_id_value if isinstance(entity_id_value, str) else None
+            meta = entity_id2meta.get(entity_id, {}) if entity_id is not None else {}
             events = sorted(
                 Provenance.prov_to_events(meta.get("prov") or {}),
                 key=lambda e: e.get("ts", 0),
@@ -311,8 +312,9 @@ class EvidenceBuilder:
                 stage_stats["score_pass"] += 1
 
         for rel in (context_relationships or []):
-            relationship_id = rel.get("rel_id")
-            meta = relationship_id2meta.get(relationship_id, {}) or {}
+            relationship_id_value = rel.get("rel_id")
+            relationship_id = relationship_id_value if isinstance(relationship_id_value, str) else None
+            meta = relationship_id2meta.get(relationship_id, {}) if relationship_id is not None else {}
             events = sorted(
                 Provenance.prov_to_events(meta.get("prov") or {}),
                 key=lambda e: e.get("ts", 0),
@@ -370,42 +372,46 @@ class EvidenceBuilder:
                 summaries_vdb=self.summaries_vdb,
                 topk=topk,
             )
-            reranked: list[tuple[float, dict]] = []
+            weighted_reranked: list[tuple[float, dict]] = []
             for sc, ev in graph_ranked:
-                reranked.append((sc.final_score, ev))
+                weighted_reranked.append((sc.final_score, ev))
                 _jlog(
                     "summary_graph_scored",
                     request_id,
                     step="3.3",
                     **sc.to_log_dict(_weights, summary_filter_mode),
                 )
-            scored_events = reranked
+            scored_events = weighted_reranked
         elif summary_filter_mode in _RRF_MODES:
-            rrf_kwargs = {
-                "scored_events": scored_events,
-                "context_entities": context_entities,
-                "context_relationships": context_relationships,
-                "cache": self.cache,
-                "weights": _weights,
-                "topk": topk,
-            }
             if summary_filter_mode == "graph_rrf_mmr":
                 rrf_ranked = select_summaries_rrf_mmr(
-                    **rrf_kwargs,
+                    scored_events=scored_events,
+                    context_entities=context_entities,
+                    context_relationships=context_relationships,
+                    cache=self.cache,
+                    weights=_weights,
                     summaries_vdb=self.summaries_vdb,
+                    topk=topk,
                 )
             else:
-                rrf_ranked = select_summaries_rrf(**rrf_kwargs)
-            reranked = []
-            for sc, ev in rrf_ranked:
-                reranked.append((sc.final_score, ev))
+                rrf_ranked = select_summaries_rrf(
+                    scored_events=scored_events,
+                    context_entities=context_entities,
+                    context_relationships=context_relationships,
+                    cache=self.cache,
+                    weights=_weights,
+                    topk=topk,
+                )
+            rrf_reranked: list[tuple[float, dict]] = []
+            for rrf_score, ev in rrf_ranked:
+                rrf_reranked.append((rrf_score.final_score, ev))
                 _jlog(
                     "summary_rrf_scored",
                     request_id,
                     step="3.3",
-                    **sc.to_log_dict(_weights, summary_filter_mode),
+                    **rrf_score.to_log_dict(_weights, summary_filter_mode),
                 )
-            scored_events = reranked
+            scored_events = rrf_reranked
         else:
             # Semantic mode: stable descending sort by cosine score
             scored_events.sort(key=lambda x: x[0], reverse=True)
@@ -446,13 +452,13 @@ class EvidenceBuilder:
                 fill_events.sort(key=lambda x: x[0], reverse=True)
                 used_keys = {key_of(ev) for _, ev in scored_events}
                 n_filled = 0
-                for sc, ev in fill_events:
+                for fill_score, ev in fill_events:
                     if len(scored_events) >= topk:
                         break
                     k = key_of(ev)
                     if k in used_keys:
                         continue
-                    scored_events.append((sc, ev))
+                    scored_events.append((fill_score, ev))
                     used_keys.add(k)
                     n_filled += 1
                 _jlog(
@@ -518,6 +524,8 @@ class EvidenceBuilder:
                         raise RuntimeError("use_raw_context=True but raw_context_lookup is not configured (set raw_context_data_dir)")
                     session_id = ev.get("session_id")
                     message_id = ev.get("message_id")
+                    if message_id is None:
+                        raise ValueError("Evidence event is missing message_id")
                     snippet = self.raw_context_lookup.get(str(session_id), int(message_id))
                     _jlog(
                         "evidence_raw_context_fetch",

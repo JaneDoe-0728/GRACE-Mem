@@ -131,8 +131,8 @@ def _make_result(
     start: datetime | None,
     end: datetime | None,
     operator: str | None,
+    validation_result: ValidationResult,
     display_value: str | None = None,
-    validation_result: ValidationResult = None,
 ) -> ResolvedTimeRange:
     """Assemble a ResolvedTimeRange with its validation applied.
 

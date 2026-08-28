@@ -176,7 +176,18 @@ class RelationshipManager:
                       missing_side="source" if not src_meta else "target")
                 continue
 
-            sid, tid = src_meta.get("id"), tgt_meta.get("id")
+            sid_value, tid_value = src_meta.get("id"), tgt_meta.get("id")
+            if not isinstance(sid_value, str) or not isinstance(tid_value, str):
+                skipped += 1
+                _jlog(
+                    "relationship_skipped",
+                    request_id,
+                    source_entity=r.source_entity,
+                    target_entity=r.target_entity,
+                    missing_side="invalid_entity_id",
+                )
+                continue
+            sid, tid = sid_value, tid_value
             src_type, tgt_type = src_meta.get("type"), tgt_meta.get("type")
 
             key_st: RelKeyST = (sid, tid)
@@ -189,10 +200,10 @@ class RelationshipManager:
             if key_st in self._processed:
                 existing = self._processed[key_st]
 
-                merged_desc = existing.get("description") or ""
+                merged_desc = str(existing.get("description") or "")
                 if r.relationship_description and r.relationship_description not in merged_desc:
                     merged_desc = f"{merged_desc}; {r.relationship_description}" if merged_desc else r.relationship_description
-                merged_kw = existing.get("keywords") or ""
+                merged_kw = str(existing.get("keywords") or "")
                 if r.relationship_keywords and r.relationship_keywords not in merged_kw:
                     merged_kw = f"{merged_kw}, {r.relationship_keywords}" if merged_kw else r.relationship_keywords
 

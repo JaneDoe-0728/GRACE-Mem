@@ -184,13 +184,11 @@ class EntityRelationshipSearcher:
             max_score = float(scores.max()) if scores.size > 0 else 0.0
             bm25_threshold = round(0.6 * max_score, 1)
             strong_mask = (scores >= bm25_threshold) if max_score > 0 else np.zeros_like(scores, dtype=bool)
-            idxs = np.where(strong_mask)[0]
-
-            idxs = list(idxs)[::-1]  # Reverse scan
+            ranked_indexes = np.where(strong_mask)[0][::-1].tolist()
             keyword_hits: dict[str, tuple[dict[str, Any], float]] = {}
             hit_debug: list[dict] = []
 
-            for idx in idxs:
+            for idx in ranked_indexes:
                 meta = metas[idx]
                 if not meta:
                     continue
@@ -227,7 +225,7 @@ class EntityRelationshipSearcher:
                 keyword=str(keyword),
                 bm25_threshold=round(bm25_threshold, 4),
                 max_score=round(max_score, 4),
-                candidate_count=len(idxs),
+                candidate_count=len(ranked_indexes),
                 hit_count=len(keyword_hits),
                 sample_hits=hit_debug[:10],
                 elapsed_sec=timer_kw.sec(),

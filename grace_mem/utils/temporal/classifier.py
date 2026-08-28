@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -25,7 +26,7 @@ class TemporalMatch:
     priority: int
 
 
-_PATTERN_SPECS: tuple[tuple[object, TimeCategory, ResolutionStatus, int], ...] = (
+_PATTERN_SPECS: tuple[tuple[re.Pattern[str], TimeCategory, ResolutionStatus, int], ...] = (
     (patterns.BOUNDARY_RE, TimeCategory.BOUNDARY, ResolutionStatus.RESOLVED, 100),
     (patterns.MONTH_WEEK_RANGE_RE, TimeCategory.MONTH_WEEK_RANGE, ResolutionStatus.RESOLVED, 90),
     (patterns.ABSOLUTE_DATE_RE, TimeCategory.ABSOLUTE_DATE, ResolutionStatus.RESOLVED, 80),

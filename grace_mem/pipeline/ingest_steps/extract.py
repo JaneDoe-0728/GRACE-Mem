@@ -79,6 +79,8 @@ class EntityExtractor:
                         print(f"Entity parse failed: {parse_error}")
                         return (False, f"validation_error: {parse_error}")
 
+        raise RuntimeError("Entity extraction retry loop ended without a result")
+
 
 class RelationshipExtractor:
     """Wraps extract_relationships_only with retry logic. Receives _lock from caller."""
@@ -157,3 +159,5 @@ class RelationshipExtractor:
                     else:
                         print(f"Relationship parse failed: {parse_error}")
                         return (False, f"validation_error: {parse_error}")
+
+        raise RuntimeError("Relationship extraction retry loop ended without a result")

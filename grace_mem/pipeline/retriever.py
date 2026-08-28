@@ -473,16 +473,20 @@ class Retriever:
             if not meta:
                 label = relationship_id
             else:
+                source_id = meta.get("source_id")
+                target_id = meta.get("target_id")
+                source_meta = ent_id2meta.get(source_id, {}) if isinstance(source_id, str) else {}
+                target_meta = ent_id2meta.get(target_id, {}) if isinstance(target_id, str) else {}
                 src_name = (
                     meta.get("source_entity")
-                    or (ent_id2meta.get(meta.get("source_id"), {}) or {}).get("name")
-                    or meta.get("source_id")
+                    or source_meta.get("name")
+                    or source_id
                     or "?"
                 )
                 tgt_name = (
                     meta.get("target_entity")
-                    or (ent_id2meta.get(meta.get("target_id"), {}) or {}).get("name")
-                    or meta.get("target_id")
+                    or target_meta.get("name")
+                    or target_id
                     or "?"
                 )
                 desc = (meta.get("description") or "").strip()
@@ -501,15 +505,19 @@ class Retriever:
             meta = rel_id2meta.get(relationship_id, {}) or {}
             if not meta:
                 continue
+            source_id = meta.get("source_id")
+            target_id = meta.get("target_id")
+            source_meta = ent_id2meta.get(source_id, {}) if isinstance(source_id, str) else {}
+            target_meta = ent_id2meta.get(target_id, {}) if isinstance(target_id, str) else {}
             src_name = (
                 meta.get("source_entity")
-                or (ent_id2meta.get(meta.get("source_id"), {}) or {}).get("name")
-                or meta.get("source_id")
+                or source_meta.get("name")
+                or source_id
             )
             tgt_name = (
                 meta.get("target_entity")
-                or (ent_id2meta.get(meta.get("target_id"), {}) or {}).get("name")
-                or meta.get("target_id")
+                or target_meta.get("name")
+                or target_id
             )
             for name in (src_name, tgt_name):
                 if name and name not in seen:
@@ -1522,8 +1530,8 @@ class Retriever:
                 # Get source and target entity info
                 src_id = meta.get("source_id")
                 tgt_id = meta.get("target_id")
-                src_meta = ent_id2meta.get(src_id, {})
-                tgt_meta = ent_id2meta.get(tgt_id, {})
+                src_meta = ent_id2meta.get(src_id, {}) if isinstance(src_id, str) else {}
+                tgt_meta = ent_id2meta.get(tgt_id, {}) if isinstance(tgt_id, str) else {}
 
                 filtered_rels.append({
                     "rel_id": rid,
@@ -1538,6 +1546,8 @@ class Retriever:
                 })
 
         # 4) Optional reranker recovery / reranker-only selection
+        filtered_entity_ids_set: list[str] | None
+        filtered_rel_ids_set: list[str] | None
         if self.cfg.filter_method == "reranker_only":
             # reranker IS the filter — score all candidates, select top-K
             filtered_entity_ids_set, filtered_rel_ids_set = self.context_filter.rerank_filter(
@@ -1550,7 +1560,7 @@ class Retriever:
                 request_id=request_id,
             )
         elif self.cfg.use_reranker:
-            filtered_entity_ids_set, filtered_rel_ids_set = self.context_filter.rerank_and_recover(
+            recovered_entity_ids, recovered_rel_ids = self.context_filter.rerank_and_recover(
                 question=question,
                 all_entity_ids=intersect_entity_ids,
                 all_relationship_ids=intersect_rel_ids,
@@ -1560,11 +1570,13 @@ class Retriever:
                 reranker_top_k=self.cfg.reranker_topk,
                 request_id=request_id,
             )
+            filtered_entity_ids_set = sorted(recovered_entity_ids)
+            filtered_rel_ids_set = sorted(recovered_rel_ids)
         else:
             filtered_entity_ids_set = None
             filtered_rel_ids_set = None
 
-        if filtered_entity_ids_set is not None:
+        if filtered_entity_ids_set is not None and filtered_rel_ids_set is not None:
             # Re-convert IDs to metadata dicts after reranker or reranker_only
             filtered_entities = []
             for eid in filtered_entity_ids_set:
@@ -1583,8 +1595,8 @@ class Retriever:
                 if meta:
                     src_id = meta.get("source_id")
                     tgt_id = meta.get("target_id")
-                    src_meta = ent_id2meta.get(src_id, {})
-                    tgt_meta = ent_id2meta.get(tgt_id, {})
+                    src_meta = ent_id2meta.get(src_id, {}) if isinstance(src_id, str) else {}
+                    tgt_meta = ent_id2meta.get(tgt_id, {}) if isinstance(tgt_id, str) else {}
 
                     filtered_rels.append({
                         "rel_id": rid,

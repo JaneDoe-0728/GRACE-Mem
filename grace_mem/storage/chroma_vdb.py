@@ -24,7 +24,8 @@ import json
 import os
 import threading
 import uuid
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
 
 import chromadb
 import numpy as np
@@ -36,6 +37,9 @@ _debug_jlog = make_module_jlog(
     name="grace_mem.Storage.ChromaVDB",
     filename="kg_chroma_debug.jsonl",
 )
+
+ChromaScalar = str | int | float | bool | None
+ChromaMetadata = dict[str, ChromaScalar]
 
 def normalize_l2(vectors: np.ndarray) -> np.ndarray:
     """Scale each row to unit L2 norm.
@@ -55,12 +59,12 @@ def normalize_l2(vectors: np.ndarray) -> np.ndarray:
     return vectors / norm
 
 
-def _serialize_metadata(meta: dict[str, Any]) -> dict[str, Any]:
+def _serialize_metadata(meta: dict[str, Any]) -> ChromaMetadata:
     """
     Serialize nested metadata values to JSON strings for ChromaDB compatibility.
     ChromaDB only accepts str, int, float, bool, or None as metadata values.
     """
-    result = {}
+    result: ChromaMetadata = {}
     for k, v in meta.items():
         if isinstance(v, (dict, list)):
             result[k] = json.dumps(v)
@@ -69,7 +73,7 @@ def _serialize_metadata(meta: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _deserialize_metadata(meta: dict[str, Any]) -> dict[str, Any]:
+def _deserialize_metadata(meta: Mapping[str, ChromaScalar] | None) -> dict[str, Any]:
     """Restore JSON-encoded metadata values written by `_serialize_metadata`.
 
     Which values were encoded is not recorded, so this infers it: a string
@@ -81,8 +85,8 @@ def _deserialize_metadata(meta: dict[str, Any]) -> dict[str, Any]:
     forever.
     """
     if meta is None:
-        return None
-    result = {}
+        return {}
+    result: dict[str, Any] = {}
     for k, v in meta.items():
         if isinstance(v, str) and v.startswith('{') or isinstance(v, str) and v.startswith('['):
             try:
@@ -165,9 +169,9 @@ class SimpleChromaVDB:
         # Within-batch dedup on id, keeping the copy with the most provenance
         # events. The same rule as the read path in `search`, so a duplicate
         # resolves the same way whichever side it is caught on.
-        dedup_map = {}  # id -> (index, prov_len)
+        dedup_map: dict[str, tuple[int, int]] = {}  # id -> (index, prov_len)
         for i, meta in enumerate(metadatas):
-            mid = meta.get("id") or str(uuid.uuid4())
+            mid = str(meta.get("id") or uuid.uuid4())
             prov_len = len((meta.get("prov") or {}).get("events", []))
             prev = dedup_map.get(mid)
             if prev is None or prov_len > prev[1]:
@@ -176,9 +180,11 @@ class SimpleChromaVDB:
         dedup_indices = [idx for idx, _ in dedup_map.values()]
         dedup_vectors = vectors[dedup_indices]
         dedup_metadatas = [metadatas[i] for i in dedup_indices]
-        dedup_ids = [m.get("id") or str(uuid.uuid4()) for m in dedup_metadatas]
+        dedup_ids = [str(m.get("id") or uuid.uuid4()) for m in dedup_metadatas]
 
-        serialized_metadatas = [_serialize_metadata(m) for m in dedup_metadatas]
+        serialized_metadatas: list[Mapping[str, ChromaScalar]] = [
+            _serialize_metadata(m) for m in dedup_metadatas
+        ]
 
         normalized_vectors = normalize_l2(dedup_vectors.astype(np.float32))
 
@@ -219,15 +225,20 @@ class SimpleChromaVDB:
                 n_results=top_k,
             )
 
-        hits = []
-        if results and results['ids']:
-            for i in range(len(results['ids'][0])):
+        hits: list[tuple[dict[str, Any], float]] = []
+        ids_batches = results.get("ids") or []
+        distance_batches = results.get("distances") or []
+        metadata_batches = results.get("metadatas") or []
+        if ids_batches and distance_batches and metadata_batches:
+            for _, distance, raw_meta in zip(
+                ids_batches[0], distance_batches[0], metadata_batches[0]
+            ):
                 # Chroma reports the 'ip' space as a distance, 1 - inner_product.
                 # Inverting recovers the similarity, which on unit vectors is
                 # cosine -- the scale every caller and threshold assumes.
-                score = 1.0 - results['distances'][0][i]
+                score = 1.0 - distance
                 if threshold is None or score >= threshold:
-                    meta = _deserialize_metadata(results['metadatas'][0][i])
+                    meta = _deserialize_metadata(raw_meta)
                     hits.append((meta, float(score)))
 
         # Same id can appear more than once; keep the richest copy. Ranked on
@@ -235,7 +246,7 @@ class SimpleChromaVDB:
         # copies of one entity, the one citing more source turns is preferred
         # even at a slightly lower score, since the score reflects the shared
         # embedding while provenance reflects real evidence.
-        filtered = {}
+        filtered: dict[str, tuple[dict[str, Any], float, int]] = {}
         for meta, score in hits:
             mid = meta.get("id")
             if not mid:
@@ -270,14 +281,19 @@ class SimpleChromaVDB:
                 n_results=top_k,
             )
 
+        ids_batches = results.get("ids") or []
+        distance_batches = results.get("distances") or []
+        metadata_batches = results.get("metadatas") or []
         out: list[list[tuple[dict[str, Any], float]]] = []
         for qi in range(n):
-            hits = []
-            if results and results.get("ids") and qi < len(results["ids"]):
-                for j in range(len(results["ids"][qi])):
-                    score = 1.0 - results["distances"][qi][j]
+            hits: list[tuple[dict[str, Any], float]] = []
+            if qi < min(len(ids_batches), len(distance_batches), len(metadata_batches)):
+                for _, distance, raw_meta in zip(
+                    ids_batches[qi], distance_batches[qi], metadata_batches[qi]
+                ):
+                    score = 1.0 - distance
                     if threshold is None or score >= threshold:
-                        meta = _deserialize_metadata(results["metadatas"][qi][j])
+                        meta = _deserialize_metadata(raw_meta)
                         hits.append((meta, float(score)))
 
             filtered: dict[str, tuple[dict[str, Any], float, int]] = {}
@@ -314,11 +330,13 @@ class SimpleChromaVDB:
         with self._lock:
             res = self._collection.get(ids=[mid], include=['embeddings', 'metadatas'])
         
-        if not res or not res['ids']:
+        embeddings = cast(Any, res.get("embeddings"))
+        metadatas = res.get("metadatas")
+        if not res or not res['ids'] or embeddings is None or metadatas is None:
             return None
 
-        stored_vec = np.array(res['embeddings'][0])
-        target_meta = _deserialize_metadata(res['metadatas'][0])
+        stored_vec = np.array(embeddings[0])
+        target_meta = _deserialize_metadata(metadatas[0])
         
         # Stored vectors are already normalized
         score = float(np.dot(stored_vec, normalized_qv[0]))
@@ -361,7 +379,10 @@ class SimpleChromaVDB:
             if not retry_hit:
                 return None
 
-            stored_vec = np.array(retry_res['embeddings'][0])
+            retry_embeddings = cast(Any, retry_res.get("embeddings"))
+            if retry_embeddings is None:
+                return None
+            stored_vec = np.array(retry_embeddings[0])
             retry_score = float(np.dot(stored_vec, normalized_qv[0]))
             _debug_jlog(
                 "compare_by_id_raw_retry_hit",
@@ -373,7 +394,10 @@ class SimpleChromaVDB:
                 **(debug_context or {}),
             )
             return retry_score
-        stored_vec = np.array(res['embeddings'][0])
+        embeddings = cast(Any, res.get("embeddings"))
+        if embeddings is None:
+            return None
+        stored_vec = np.array(embeddings[0])
         return float(np.dot(stored_vec, normalized_qv[0]))
 
     def delete(self, ids: list[str]) -> None:
@@ -400,7 +424,7 @@ class SimpleChromaVDB:
             embeddings_list = normalized_vectors.tolist()
 
         # Serialize nested metadata values for ChromaDB compatibility
-        serialized_metadatas = None
+        serialized_metadatas: list[Mapping[str, ChromaScalar]] | None = None
         if metadatas is not None:
             serialized_metadatas = [_serialize_metadata(m) for m in metadatas]
 
@@ -451,8 +475,8 @@ class SimpleChromaVDB:
                         sys_obj.stop()
                 except Exception:
                     pass
-            self._collection = None
-            self._client = None
+            self._collection = cast(Any, None)
+            self._client = cast(Any, None)
 
     def load(self) -> None:
         """No-op: PersistentClient loads on open. Kept for FAISS API parity."""
@@ -536,7 +560,7 @@ class SummariesVDB(SimpleChromaVDB):
         """
         vec = embedder.embed([summary_text])
         summary_id = f"{session_id}:{message_id}"
-        meta = {
+        meta: dict[str, Any] = {
             "id": summary_id,
             "summary_id": summary_id,
             "session_id": session_id,
@@ -550,7 +574,7 @@ class SummariesVDB(SimpleChromaVDB):
             meta["raw_text"] = raw_text
 
         self.add(vec, [meta])
-        return meta["summary_id"]
+        return summary_id
 
     def add_split_turns(
         self,
@@ -597,7 +621,7 @@ class SummariesVDB(SimpleChromaVDB):
         with self._lock:
             results = self._collection.get(ids=[eid], include=["metadatas"])
         if results and results["metadatas"]:
-            return (results["metadatas"][0].get("text") or "").strip() or None
+            return str(results["metadatas"][0].get("text") or "").strip() or None
         return None
 
     def get_raw_turn_text_by_id(self, summary_id: str) -> str | None:
@@ -608,7 +632,7 @@ class SummariesVDB(SimpleChromaVDB):
         with self._lock:
             results = self._collection.get(ids=[sid], include=["metadatas"])
         if results and results["metadatas"]:
-            return (results["metadatas"][0].get("raw_text") or "").strip() or None
+            return str(results["metadatas"][0].get("raw_text") or "").strip() or None
         return None
 
     def get_summary_text_by_id(self, summary_id: str) -> str | None:
@@ -620,7 +644,7 @@ class SummariesVDB(SimpleChromaVDB):
         with self._lock:
             results = self._collection.get(ids=[sid], include=["metadatas"])
         if results and results["metadatas"]:
-            return (results["metadatas"][0].get("summary_text") or "").strip() or None
+            return str(results["metadatas"][0].get("summary_text") or "").strip() or None
         return None
 
     def get_summaries_by_ids(self, summary_ids: list[str], max_len: int = 3000, top_n: int = 10) -> list[str]:
@@ -635,7 +659,7 @@ class SummariesVDB(SimpleChromaVDB):
         out = []
         if results and results['metadatas']:
             for m in results['metadatas']:
-                t = (m.get("summary_text") or "").strip()
+                t = str(m.get("summary_text") or "").strip()
                 if not t:
                     continue
                 out.append(t if len(t) <= max_len else t[:max_len] + "…")

@@ -72,16 +72,20 @@ class ContextFilter:
             if not meta:
                 label = relationship_id
             else:
+                source_id = meta.get("source_id")
+                target_id = meta.get("target_id")
+                source_meta = ent_id2meta.get(source_id, {}) if isinstance(source_id, str) else {}
+                target_meta = ent_id2meta.get(target_id, {}) if isinstance(target_id, str) else {}
                 src_name = (
                     meta.get("source_entity")
-                    or (ent_id2meta.get(meta.get("source_id"), {}) or {}).get("name")
-                    or meta.get("source_id")
+                    or source_meta.get("name")
+                    or source_id
                     or "?"
                 )
                 tgt_name = (
                     meta.get("target_entity")
-                    or (ent_id2meta.get(meta.get("target_id"), {}) or {}).get("name")
-                    or meta.get("target_id")
+                    or target_meta.get("name")
+                    or target_id
                     or "?"
                 )
                 desc = (meta.get("description") or "").strip()

@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from dotenv import load_dotenv
 
@@ -166,7 +166,10 @@ class APIPointwiseReranker:
                 top_logprobs=20,
                 temperature=0,
             )
-            lps = resp.choices[0].logprobs.content[0].top_logprobs
+            choice_logprobs = resp.choices[0].logprobs
+            if choice_logprobs is None or not choice_logprobs.content:
+                raise ValueError("Reranker API response did not include token logprobs")
+            lps = choice_logprobs.content[0].top_logprobs
             yes_lp = next(
                 (lp.logprob for lp in lps if lp.token.lower().strip("▁ ") == "yes"),
                 -100.0,
@@ -283,9 +286,8 @@ class LLMPointwiseReranker:
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path, trust_remote_code=True, padding_side="left"
         )
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_path, trust_remote_code=True
-        ).to(self.device)
+        model: Any = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True)
+        self.model = model.to(self.device)
         if self.tokenizer.pad_token is None and self.tokenizer.eos_token is not None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         if self.model.config.pad_token_id is None and self.tokenizer.pad_token_id is not None:

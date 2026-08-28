@@ -81,7 +81,7 @@ class RateLimiter:
         """Initialize the call budget and tracking state for rate limiting."""
         self.max_calls = max_calls
         self.period = period
-        self.calls = []
+        self.calls: list[float] = []
         self.lock = threading.Lock()
 
     def wait_if_needed(self) -> None:
@@ -147,7 +147,7 @@ class EntityOpsProcessor:
     concurrency and retry machinery around it.
     """
 
-    def __init__(self, generate_fn: Callable[..., Any], config: EntityOpsConfig = None) -> None:
+    def __init__(self, generate_fn: Callable[..., Any], config: EntityOpsConfig | None = None) -> None:
         """Configure the batch entity-op generator and its rate limiter."""
         self.generate_fn = generate_fn
         self.config = config or EntityOpsConfig()
@@ -188,7 +188,7 @@ class EntityOpsProcessor:
                 executor.submit(self._process_with_retry, e, similar_map, ctx_dataset, ctx_stage): i
                 for i, e in enumerate(entities)
             }
-            results = [None] * len(entities)
+            results: list[EntityOp] = [self._create_fallback_result(entity) for entity in entities]
             for future in as_completed(futures):
                 idx = futures[future]
                 try:
@@ -211,6 +211,8 @@ class EntityOpsProcessor:
                 wait = 2 ** attempt
                 print(f"Retry {attempt+1}/{self.config.max_retries} for {entity['entity_name']}, wait {wait}s")
                 time.sleep(wait)
+
+        raise RuntimeError("Entity operation retry loop ended without a result")
 
     def _process_single(self, entity: "EntityInput", similar_map: "SimilarMap") -> "EntityOp":
         """Run one entity through prompt construction, LLM generation, and validation."""
@@ -354,10 +356,7 @@ class EntityManager:
             name = getattr(e, "entity_name", None) or getattr(e, "name", None)
             type_val = getattr(e, "entity_type", None) or getattr(e, "type", None)
             desc = getattr(e, "entity_description", None) or getattr(e, "description", None) or ""
-        if hasattr(type_val, "value"):
-            type_str = type_val.value
-        else:
-            type_str = str(type_val) if type_val is not None else ""
+        type_str = str(getattr(type_val, "value", type_val) or "")
         type_str = canonicalize_entity_type_label(type_str)
         return (name or "").strip(), (type_str or "").strip(), (desc or "").strip()
 
@@ -500,13 +499,11 @@ class EntityManager:
                     max_score = float(scores.max()) if scores.size else 0.0
                     bm25_threshold = round(0.6 * max_score, 1)
                     strong_mask = (scores >= bm25_threshold) if max_score > 0 else np.zeros_like(scores, dtype=bool)
-                    idxs = np.where(strong_mask)[0]
-
-                    idxs = list(idxs)[::-1]
+                    ranked_indexes = np.where(strong_mask)[0][::-1].tolist()
 
                     bm25_best: dict[str, tuple[float, int]] = {}
 
-                    for idx in idxs:
+                    for idx in ranked_indexes:
                         meta_i = metas[idx]
                         if not meta_i:
                             continue
@@ -572,7 +569,13 @@ class EntityManager:
 
         return out
     
-    def apply_ops(self, ops_results: dict[str, Any], provenance: dict[str, Any] | None = None, *, request_id: str = "UNKNOWN") -> tuple[dict[KeyNameType, Meta], dict[KeyNameType, Meta], dict[str, int]]:
+    def apply_ops(
+        self,
+        ops_results: dict[str, Any],
+        provenance: dict[str, Any] | None = None,
+        *,
+        request_id: str = "UNKNOWN",
+    ) -> tuple[dict[str, Meta], dict[KeyNameType, Meta], dict[str, int]]:
         """
         - read every action in ops_results['results']
         - ADD: build a new meta, embed it, write it to the VDB, refresh the
@@ -585,7 +588,7 @@ class EntityManager:
         added = updated = 0
         texts: list[str] = []
         metas: list[Meta] = []
-        entity_idx: dict[KeyNameType, Meta] = {}
+        entity_idx: dict[str, Meta] = {}
         input2resolved: dict[KeyNameType, Meta] = {}
 
         for r in (ops_results or {}).get("results", []):

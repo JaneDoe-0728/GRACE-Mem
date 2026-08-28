@@ -7,6 +7,7 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 SID_RE = re.compile(r"\[sid=([^\]]+)\]")
 SPEAKER_LINE_RE = re.compile(r"^\s*([A-Za-z][A-Za-z ._'’-]{0,60}|user|assistant)\s*:\s*(.*)$", re.IGNORECASE)
@@ -263,11 +264,12 @@ def enrich_evidence_summary(
                 current_block.append(line)
             continue
 
-        if not SID_RE.search(line):
+        sid_match = SID_RE.search(line)
+        if sid_match is None:
             enriched_lines.append(line)
             continue
 
-        sid = SID_RE.search(line).group(1).strip()
+        sid = sid_match.group(1).strip()
         raw_text = raw_for_sid(sid)
         if raw_text:
             speakers = infer_speakers(line, raw_text, min_score=min_score, max_speakers=max_speakers)
@@ -297,7 +299,7 @@ def build_raw_map_from_rows(rows: Iterable[Mapping[str, object]]) -> dict[str, s
 
     raw_by_sid: dict[str, str] = {}
     for sid, items in grouped.items():
-        normalized = []
+        normalized: list[dict[str, Any]] = []
         for row in items:
             try:
                 turn_index = int(float(str(row.get("turn_index", "0")).strip() or "0"))

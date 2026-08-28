@@ -400,7 +400,7 @@ def _repair_temporal_entities(
         # skip if normalized_time present but granularity says day — time wins
         if hint.get("normalized_time") and etype == EntityType.Date:
             etype = EntityType.Time
-        inj_meta: dict = {
+        fallback_meta: dict = {
             "temporal": {
                 "display_value": hint.get("display_value") or hint.get("resolved_to"),
                 "normalized_time": hint.get("normalized_time"),
@@ -413,8 +413,15 @@ def _repair_temporal_entities(
                 "confidence": hint.get("confidence"),
             }
         }
-        inj_desc = _temporal_anchor_description(candidate, etype, inj_meta)
-        repaired.append(Entity(entity_name=candidate, entity_type=etype, entity_description=inj_desc, entity_metadata=inj_meta))
+        inj_desc = _temporal_anchor_description(candidate, etype, fallback_meta)
+        repaired.append(
+            Entity(
+                entity_name=candidate,
+                entity_type=etype,
+                entity_description=inj_desc,
+                entity_metadata=fallback_meta,
+            )
+        )
         _covered_names_lower.add(candidate.lower())
         _jlog("temporal_entity_hint_fallback_injected", "repair",
               entity_name=candidate, entity_type=etype.value, original_phrase=hint.get("original"))
@@ -606,7 +613,7 @@ class Ingestor:
             failure_type = "ingest_zero_entities"
         elif entities_added == 0 and entities_updated == 0 and relationships_added == 0:
             failure_type = "ingest_zero_delta"
-        delta = {
+        delta: dict[str, Any] = {
             "request_id": request_id,
             "session_id": str(session_id),
             "message_id": message_id,

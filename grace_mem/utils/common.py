@@ -250,7 +250,11 @@ def parse_delimited_extraction(raw: str, tuple_delim: str, record_delim: str, co
 
     # Accumulated rather than raised, then logged as a summary at the end: one
     # log line per malformed record would swamp the run.
-    parsing_errors = {"entity_errors": [], "relationship_errors": [], "skipped_lines": []}
+    parsing_errors: dict[str, list[Any]] = {
+        "entity_errors": [],
+        "relationship_errors": [],
+        "skipped_lines": [],
+    }
 
     def _clean(s: str) -> str:
         """Trim a raw extracted field and remove one pair of wrapping quotes."""

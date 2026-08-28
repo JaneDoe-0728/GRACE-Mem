@@ -561,7 +561,7 @@ RETURN 1 AS ct"""
         Clear the entire graph.
         If we hit a connection error, reconnect once and retry.
         """
-        last_exc = None
+        last_exc: Exception | None = None
         for _ in range(2):
             try:
                 self._run_write("MATCH (n) DETACH DELETE n", {})
@@ -666,13 +666,13 @@ RETURN 1 AS ct"""
         result_set = getattr(query_result, "result_set", None) or []
         if not header:
             return []
-        out: list[dict[str, Any]] = []
+        object_rows: list[dict[str, Any]] = []
         for row in result_set:
             d = {}
             for i, col in enumerate(header):
                 d[col] = row[i] if i < len(row) else None
-            out.append(d)
-        return out
+            object_rows.append(d)
+        return object_rows
 
     # ---------- raw GRAPH.QUERY helpers (bypass falkordb-py query wrapper bug) ----------
     @staticmethod
@@ -706,12 +706,13 @@ RETURN 1 AS ct"""
         Returns raw Redis reply: [header, rows, stats]
         """
         self._ensure_open()
-        if not hasattr(self._db, "execute_command"):
+        db = self._db
+        if db is None or not hasattr(db, "execute_command"):
             raise RuntimeError("Underlying redis client does not support execute_command")
 
         full_query = self._build_cypher_prefix(params) + query
         cmd = "GRAPH.RO_QUERY" if readonly else "GRAPH.QUERY"
-        return self._db.execute_command(cmd, self.cfg.graph_name, full_query)
+        return db.execute_command(cmd, self.cfg.graph_name, full_query)
 
     # ---------- FalkorDB-specific helpers ----------
     def _connect(self) -> FalkorDB:
@@ -728,7 +729,8 @@ RETURN 1 AS ct"""
         GRAPH.CONSTRAINT CREATE <graph> UNIQUE NODE <label> PROPERTIES <n> <prop...>
         """
         self._ensure_open()
-        if not hasattr(self._db, "execute_command"):
+        db = self._db
+        if db is None or not hasattr(db, "execute_command"):
             raise RuntimeError("Underlying client does not support execute_command")
 
         args: list[Any] = [
@@ -742,14 +744,15 @@ RETURN 1 AS ct"""
             str(len(props)),
             *props,
         ]
-        return self._db.execute_command(*args)
+        return db.execute_command(*args)
 
     def _create_unique_constraint_rel(self, rel_type: str, props: list[str]) -> Any:
         """
         GRAPH.CONSTRAINT CREATE <graph> UNIQUE RELATIONSHIP <type> PROPERTIES <n> <prop...>
         """
         self._ensure_open()
-        if not hasattr(self._db, "execute_command"):
+        db = self._db
+        if db is None or not hasattr(db, "execute_command"):
             raise RuntimeError("Underlying client does not support execute_command")
 
         args: list[Any] = [
@@ -763,7 +766,7 @@ RETURN 1 AS ct"""
             str(len(props)),
             *props,
         ]
-        return self._db.execute_command(*args)
+        return db.execute_command(*args)
 
 
 # --- factory by env (convenience for server/main) ---

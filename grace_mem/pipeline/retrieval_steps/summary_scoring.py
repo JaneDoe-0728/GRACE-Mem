@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any
 
 import numpy as np
@@ -54,7 +54,7 @@ class ScoringWeights:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> ScoringWeights:
-        valid = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore[attr-defined]
+        valid = {item.name for item in fields(cls)}
         return cls(**{k: v for k, v in d.items() if k in valid})
 
 

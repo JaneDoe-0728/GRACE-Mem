@@ -1,0 +1,66 @@
+name: Python CI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-and-tests:
+    name: Ruff, mypy, and pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          python-version: "3.11"
+
+      - name: Install locked dependencies
+        run: uv sync --locked --dev
+
+      - name: Ruff lint
+        run: uv run ruff check --output-format=github grace_mem experiment
+
+      - name: Ruff format changed Python files (advisory)
+        continue-on-error: true
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
+            BEFORE_SHA="$(git rev-parse "${GITHUB_SHA}^")"
+          fi
+
+          mapfile -d '' changed_files < <(
+            git diff --name-only --diff-filter=ACMR -z \
+              "$BEFORE_SHA" "$GITHUB_SHA" -- '*.py' '*.pyi'
+          )
+
+          if (( ${#changed_files[@]} == 0 )); then
+            echo "No changed Python files to format-check."
+            exit 0
+          fi
+
+          uv run ruff format --check --output-format=github "${changed_files[@]}"
+
+      - name: Type check core package (advisory)
+        continue-on-error: true
+        run: uv run mypy grace_mem
+
+      - name: Run offline tests
+        run: uv run pytest -q -m "not integration"
