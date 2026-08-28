@@ -90,7 +90,7 @@ from grace_mem.utils.logger_config import make_module_jlog
 logger = logging.getLogger(__name__)
 
 
-class MultiDatasetProcessor:
+class DatasetRunner:
     """Process multiple datasets with separate VDBs but shared graph"""
 
     def __init__(
@@ -158,7 +158,7 @@ class MultiDatasetProcessor:
         if cleanup_error is not None:
             raise cleanup_error
 
-    def __enter__(self) -> "MultiDatasetProcessor":
+    def __enter__(self) -> "DatasetRunner":
         return self
 
     def __exit__(self, exc_type, exc, traceback) -> None:
@@ -178,12 +178,12 @@ class MultiDatasetProcessor:
     def _ensure_runtime_components(self) -> None:
         """Construct the retriever and its backends on first use.
 
-        Lazy because a processor may be created for a dataset that turns out to be
+        Lazy because a runner may be created for a dataset that turns out to be
         already complete, and loading models for work that is then skipped is the
         main avoidable cost in a resumed sweep.
         """
         if self._closed:
-            raise RuntimeError("MultiDatasetProcessor is closed")
+            raise RuntimeError("DatasetRunner is closed")
         if self.llm is None:
             self.llm = LLMClient()
         if self.graph is None:

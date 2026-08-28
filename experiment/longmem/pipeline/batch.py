@@ -27,7 +27,7 @@ from experiment.longmem.helpers.datasets import (
     select_datasets,
 )
 from experiment.longmem.models import DatasetConfig
-from experiment.longmem.pipeline.processor import MultiDatasetProcessor
+from experiment.longmem.pipeline.runner import DatasetRunner
 from experiment.longmem.utils.io import write_json_file
 
 
@@ -269,10 +269,10 @@ def main(argv: list[str] | None = None):
         if num is not None:
             datasets = datasets[:num]
 
-        with MultiDatasetProcessor(
+        with DatasetRunner(
             base_output_dir=str(output_dir),
-        ) as processor:
-            results = processor.process_all(
+        ) as runner:
+            results = runner.process_all(
                 datasets,
                 run_judge=run_judge,
                 stages=set(selected_stages),
@@ -282,13 +282,13 @@ def main(argv: list[str] | None = None):
             # Post-Processing: Save Summary
             # ============================================================
 
-            summary_path = processor.base_output_dir / "processing_summary_0204.json"
+            summary_path = runner.base_output_dir / "processing_summary_0204.json"
             write_json_file(summary_path, results)
 
             print(f"\n{'='*60}")
             print("All processing complete!")
             print(f"{'='*60}")
-            print(f"Output directory: {processor.base_output_dir}")
+            print(f"Output directory: {runner.base_output_dir}")
             print(f"Summary file: {summary_path}")
             print(f"Stages: {', '.join(selected_stages)}")
             print("\nResults:")
