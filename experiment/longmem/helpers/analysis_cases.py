@@ -75,7 +75,7 @@ def events_by_type(records: list[dict]) -> dict[str, list[dict]]:
     return result
 
 
-def step3_has_answer(data_folder: Path, dataset_id: str) -> dict:
+def probe_has_answer(data_folder: Path, dataset_id: str) -> dict:
     """Which turns the dataset marks as holding the answer, and how many.
 
     Ground truth for every recall figure downstream. A count of zero means the
@@ -113,7 +113,7 @@ def step3_has_answer(data_folder: Path, dataset_id: str) -> dict:
     return {"turns": turns, "summary_ids": summary_ids}
 
 
-def step2_ingest(log_dir: Path, target_turns: list[dict]) -> dict:
+def probe_ingest(log_dir: Path, target_turns: list[dict]) -> dict:
     """Did ingestion produce anything for this question's sessions?
 
     Step 2 of the per-question trace. Every later step is conditional on this:
@@ -148,7 +148,7 @@ def step2_ingest(log_dir: Path, target_turns: list[dict]) -> dict:
     }
 
 
-def step4_summaries(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
+def probe_summaries(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
     """Which summaries were written for the gold sessions.
 
     A gold session with no summary cannot be retrieved by summary search, which
@@ -164,7 +164,7 @@ def step4_summaries(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
     return {"summaries": summaries, "count": len(summaries)}
 
 
-def step5_entities(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
+def probe_entities(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
     """Which entities were extracted from the gold summaries.
 
     Entities are matched to summaries through their provenance events rather
@@ -223,7 +223,7 @@ def step5_entities(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
     }
 
 
-def step6_relationships(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
+def probe_relationships(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
     """Which relationships were extracted from the gold summaries.
 
     Matched through provenance like step 5. Entities present with no
@@ -255,7 +255,7 @@ def step6_relationships(artifacts_dir: Path, target_summary_ids: list[str]) -> d
     return {"relationships": relationships, "count": len(relationships), "rel_ids": [row["id"] for row in relationships]}
 
 
-def step7_search(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
+def probe_search(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
     """Did the target reach the candidate pool, and by which search path?
 
     Vector and BM25 are reported separately because they fail differently: a
@@ -291,7 +291,7 @@ def step7_search(log_dir: Path, target_entity_ids: list[str], target_rel_ids: li
     }
 
 
-def step8_filtering(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
+def probe_filtering(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
     """If the target reached the pool but not the evidence, where was it cut?
 
     Threshold and top-k are distinguished because they call for different fixes:
@@ -347,7 +347,7 @@ def step8_filtering(log_dir: Path, target_entity_ids: list[str], target_rel_ids:
     }
 
 
-def step9_evidence(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
+def probe_evidence(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
     """Did the target reach the final evidence handed to the generator?
 
     The last retrieval step. A target present here alongside a wrong answer
@@ -479,14 +479,14 @@ def analyze_one(
     log_dir = output_dir / f"logs_{dataset_id}"
     artifacts_dir = output_dir / f"artifacts_{dataset_id}"
 
-    s3 = step3_has_answer(data_folder, dataset_id)
-    s2 = step2_ingest(log_dir, target_turns=s3["turns"])
-    s4 = step4_summaries(artifacts_dir, target_summary_ids=s3["summary_ids"])
-    s5 = step5_entities(artifacts_dir, target_summary_ids=s3["summary_ids"])
-    s6 = step6_relationships(artifacts_dir, target_summary_ids=s3["summary_ids"])
-    s7 = step7_search(log_dir, s5["entity_ids"], s6["rel_ids"])
-    s8 = step8_filtering(log_dir, s5["entity_ids"], s6["rel_ids"])
-    s9 = step9_evidence(log_dir, s5["entity_ids"], s6["rel_ids"])
+    s3 = probe_has_answer(data_folder, dataset_id)
+    s2 = probe_ingest(log_dir, target_turns=s3["turns"])
+    s4 = probe_summaries(artifacts_dir, target_summary_ids=s3["summary_ids"])
+    s5 = probe_entities(artifacts_dir, target_summary_ids=s3["summary_ids"])
+    s6 = probe_relationships(artifacts_dir, target_summary_ids=s3["summary_ids"])
+    s7 = probe_search(log_dir, s5["entity_ids"], s6["rel_ids"])
+    s8 = probe_filtering(log_dir, s5["entity_ids"], s6["rel_ids"])
+    s9 = probe_evidence(log_dir, s5["entity_ids"], s6["rel_ids"])
 
     passed_thresh_ent = {row["id"] for row in s8.get("target_entity_results", []) if row.get("passed") is True}
     passed_thresh_rel = {row["id"] for row in s8.get("target_rel_results", []) if row.get("passed") is True}
@@ -518,6 +518,10 @@ def analyze_one(
             "gold_answer": gold_answer,
             "generated_answer": generated_answer,
         },
+        # These keys are the case-file schema: analyze_one's result is written
+        # to cases/<id>.json and read back by the summary tooling. The probes
+        # above were renamed; these names cannot be, without making every
+        # existing case file unreadable.
         "step2_ingest": s2,
         "step3_turns": s3["turns"],
         "step3_summary_ids": s3["summary_ids"],
