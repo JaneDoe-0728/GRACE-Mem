@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 # no-argument path keeps working; pass an explicit cache_dir instead.
 CACHE_DIR = Path("vdb_cache")
 CACHE_DIR.mkdir(exist_ok=True)
-ENT_FILE = CACHE_DIR / "entities_cache.pkl"
-REL_FILE = CACHE_DIR / "relationships_cache.pkl"
+ENTITY_CACHE_FILE = CACHE_DIR / "entities_cache.pkl"
+RELATIONSHIP_CACHE_FILE = CACHE_DIR / "relationships_cache.pkl"
 
 class CacheStore:
     """Load, save, and clear the entity/relationship extraction cache.
@@ -58,13 +58,13 @@ class CacheStore:
         """
         if cache_dir is None:
             # Backward compatibility: use global cache
-            ent_file = ENT_FILE
-            rel_file = REL_FILE
+            entity_cache_file = ENTITY_CACHE_FILE
+            relationship_cache_file = RELATIONSHIP_CACHE_FILE
         else:
             cache_dir = Path(cache_dir)
             cache_dir.mkdir(exist_ok=True, parents=True)
-            ent_file = cache_dir / "entities_cache.pkl"
-            rel_file = cache_dir / "relationships_cache.pkl"
+            entity_cache_file = cache_dir / "entities_cache.pkl"
+            relationship_cache_file = cache_dir / "relationships_cache.pkl"
 
         def _load(p: Path) -> dict[str, dict]:
             """Load a cached shard from disk and fall back to an empty mapping on error."""
@@ -77,8 +77,8 @@ class CacheStore:
                 logger.error("Cache load failed: %s -> %s", p, e)
                 return {}
 
-        ent = _load(ent_file)
-        rel = _load(rel_file)
+        ent = _load(entity_cache_file)
+        rel = _load(relationship_cache_file)
         cache: dict[str, dict] = {
             "entities": {},
             "entities_full": {},
@@ -108,13 +108,13 @@ class CacheStore:
         """
         if cache_dir is None:
             # Backward compatibility: use global cache
-            ent_file = ENT_FILE
-            rel_file = REL_FILE
+            entity_cache_file = ENTITY_CACHE_FILE
+            relationship_cache_file = RELATIONSHIP_CACHE_FILE
         else:
             cache_dir = Path(cache_dir)
             cache_dir.mkdir(exist_ok=True, parents=True)
-            ent_file = cache_dir / "entities_cache.pkl"
-            rel_file = cache_dir / "relationships_cache.pkl"
+            entity_cache_file = cache_dir / "entities_cache.pkl"
+            relationship_cache_file = cache_dir / "relationships_cache.pkl"
 
         def _dump(p: Path, obj: dict[str, dict]) -> None:
             """Write one cache shard to disk."""
@@ -125,8 +125,8 @@ class CacheStore:
                 logger.error("Cache dump failed: %s -> %s", p, e)
                 raise
 
-        _dump(ent_file, {"entities": cache.get("entities", {}), "entities_full": cache.get("entities_full", {})})
-        _dump(rel_file, {"relationships": cache.get("relationships", {}), "relationships_full": cache.get("relationships_full", {})})
+        _dump(entity_cache_file, {"entities": cache.get("entities", {}), "entities_full": cache.get("entities_full", {})})
+        _dump(relationship_cache_file, {"relationships": cache.get("relationships", {}), "relationships_full": cache.get("relationships_full", {})})
 
     @staticmethod
     def clear(cache: dict[str, dict]) -> None:
