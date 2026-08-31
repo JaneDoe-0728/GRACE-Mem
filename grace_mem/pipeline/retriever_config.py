@@ -1,32 +1,68 @@
-"""Every knob the Retriever reads, in one frozen dataclass.
+"""Every knob the Retriever reads, grouped by the stage that reads it.
 
-Kept out of retriever.py because it is data, not behaviour: it changes when an
-experiment sweeps a parameter, while the retrieval code around it does not.
+The four groups below are the Retriever's responsibility boundaries, made
+explicit: search decides what enters the candidate pool, filtering decides what
+survives, evidence decides what the LLM finally sees, and adaptive decides
+whether to go round again. A knob that does not obviously belong to one of them
+is a sign that the stage boundaries have drifted.
 
-The field groups below -- initial search, post-intersection filtering, the
-filter_method dispatch and its RRF/PPR parameters, evidence assembly, summary
-scoring, adaptive re-search -- are the responsibility boundaries of the
-Retriever itself. If this ever splits into SearchConfig / FilterConfig /
-EvidenceConfig / AdaptiveConfig, those groups are where the seams are.
+`RetrieverConfig` composes the four by inheritance rather than by holding them
+as nested fields, and that is load-bearing rather than stylistic:
 
-Field names are load-bearing: experiment/experiment_config.py's
-RETRIEVAL_PARAMS and RERANKER_PARAMS keys match them exactly, and are splatted
-in as **kwargs. Renaming a field renames a config key.
+  * `experiment_config.py`'s RETRIEVAL_PARAMS and RERANKER_PARAMS are flat
+    dicts splatted in as `RetrieverConfig(**params)`. Nesting would break every
+    call site and turn every config key into a two-level path.
+  * The Retriever reads `self.cfg.ent_topk` in 88 places. Flat inheritance
+    keeps that working while still letting a future component take only the
+    group it needs -- a searcher can accept a `SearchConfig` and be given the
+    whole `RetrieverConfig`, because it is one.
+
+Field names are config keys. Renaming a field renames the key that
+experiment_config.py, every sweep script, and every recorded run metadata file
+uses for it.
 """
 
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class RetrieverConfig:
-    """Single source of truth for Retriever defaults."""
-    summary_embed_dim: int = 1024
+class SearchConfig:
+    """Stage 1: how wide the initial entity and relationship search casts.
+
+    These decide what enters the candidate pool at all. Nothing downstream can
+    recover an entity that was never retrieved here, which is why the topk and
+    threshold pairs are the first thing to loosen when gold evidence goes
+    missing entirely rather than being ranked badly.
+    """
+
     # entity initial search
     ent_topk: int = 5
     ent_threshold: float = 0.3
     # relationship initial search
     rel_topk: int = 5
     rel_threshold: float = 0.3
+    # spreading activation
+    use_spreading_activation: bool = False
+    sa_max_hops: int = 2
+    sa_rescale_c: float = 0.4
+    sa_tau_a: float = 0.5
+    sa_max_activated: int = 20
+    # Keyword source for relationship vector search:
+    # "high_level" (abstract reasoning words, baseline) | "low_level" (concrete anchors) | "both"
+    relation_search_keywords: str = "high_level"
+
+
+@dataclass(frozen=True)
+class FilterConfig:
+    """Stages 3 and 4: how the candidate pool is narrowed and reranked.
+
+    `filter_method` is the single axis these hang off -- "similarity", "rrf",
+    "ppr", "rrf+ppr" or "reranker_only" -- and each value activates a different
+    subset. The rrf_*, ppr_* and rrk_* parameters are dead weight under a
+    method that does not read them, which is deliberate: one flat set of knobs
+    swept by one flag beats five parallel config objects.
+    """
+
     # post-intersection filtering
     filter_ent_topk: int = 3
     filter_rel_topk: int = 3
@@ -36,22 +72,6 @@ class RetrieverConfig:
     use_reranker: bool = True
     reranker_threshold: float = -3.0
     reranker_topk: int = 5
-    # spreading activation
-    use_spreading_activation: bool = False
-    sa_max_hops: int = 2
-    sa_rescale_c: float = 0.4
-    sa_tau_a: float = 0.5
-    sa_max_activated: int = 20
-    # evidence
-    summary_topk_per_item: int = 5
-    summary_vec_threshold: float = 0.4
-    use_full_summary: bool = True
-    fallback_to_raw: bool = False
-    # adaptive re-search (off by default — enable per call or via custom config)
-    enable_adaptive_search: bool = False
-    tau_confidence: float = 0.70           # trigger threshold
-    adaptive_threshold_scale: float = 0.8  # filter threshold multiplier for pass-2
-    novel_ent_threshold: float = 0.35      # min similarity to original query_vec to admit a novel entity
     # Step 2.6 filter method — single axis for ablation
     filter_method: str = "similarity"      # "similarity" | "rrf" | "ppr" | "rrf+ppr" | "reranker_only"
     # RRF parameters (active when filter_method in {"rrf", "rrf+ppr"})
@@ -65,6 +85,25 @@ class RetrieverConfig:
     rrk_ent_topk: int = 5          # max entities to keep
     rrk_rel_topk: int = 5          # max relationships to keep
     rrk_threshold: float = 0.0     # score cutoff — 0.0 means "Yes logit > No logit"
+
+
+@dataclass(frozen=True)
+class EvidenceConfig:
+    """How the surviving candidates become the Evidence block the LLM reads.
+
+    The largest group, because it spans three separable decisions that grew
+    together: which summaries to score (`summary_filter_mode` and its weights),
+    which text to return for them (raw turn vs summary vs the :u/:a split), and
+    how many survive (top-k, direct-vector, rerank). If this file splits
+    further, the seam runs through here.
+    """
+
+    summary_embed_dim: int = 1024
+    # evidence
+    summary_topk_per_item: int = 5
+    summary_vec_threshold: float = 0.4
+    use_full_summary: bool = True
+    fallback_to_raw: bool = False
     # ── Summary selection strategy ────────────────────────────────────────────
     # "semantic"               → baseline cosine-similarity ranking (default)
     # "graph_count"            → graph link counts only (semantic_weight=0)
@@ -139,6 +178,27 @@ class RetrieverConfig:
     # Per-entity quota: guarantee this many snippets per source entity/relationship
     # before filling remaining top-K slots by score (0 = disabled).
     summary_per_entity_min: int = 0
-    # Keyword source for relationship vector search:
-    # "high_level" (abstract reasoning words, baseline) | "low_level" (concrete anchors) | "both"
-    relation_search_keywords: str = "high_level"
+
+
+@dataclass(frozen=True)
+class AdaptiveConfig:
+    """Pass-2 re-search: ask again when the first pass looks unconvincing.
+
+    Off by default. `tau_confidence` is the trigger, the other three shape what
+    the second pass is allowed to do differently from the first.
+    """
+
+    # adaptive re-search (off by default — enable per call or via custom config)
+    enable_adaptive_search: bool = False
+    tau_confidence: float = 0.70           # trigger threshold
+    adaptive_threshold_scale: float = 0.8  # filter threshold multiplier for pass-2
+    novel_ent_threshold: float = 0.35      # min similarity to original query_vec to admit a novel entity
+
+
+@dataclass(frozen=True)
+class RetrieverConfig(SearchConfig, FilterConfig, EvidenceConfig, AdaptiveConfig):
+    """Every knob, flat, as the experiment configs and the Retriever expect it.
+
+    Adds nothing of its own. It exists so the four groups can be named
+    separately while callers keep one object with one flat namespace.
+    """
