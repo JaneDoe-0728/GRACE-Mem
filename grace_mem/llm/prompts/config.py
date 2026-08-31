@@ -2,7 +2,7 @@
 Common configuration for LLM prompts.
 """
 
-from grace_mem.utils.common import EntityType
+from grace_mem.domain.entities import EntityType
 
 EXTRA_KWARGS: dict[str, str] = {
     # "language": "English",

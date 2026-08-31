@@ -32,13 +32,12 @@ from typing import Any
 
 import numpy as np
 
+from grace_mem.domain.entities import _entity_key, canonical_entity_id
 from grace_mem.llm.prompts.entity_ops import ENTITY_OPS_FEW_SHOT, ENTITY_OPS_RULES_V2
 from grace_mem.llm.token_tracking import token_tracker
 from grace_mem.storage import build_id_to_meta_maps
 from grace_mem.utils.common import (
-    _entity_key,
     _parse_entity_ops_block,
-    canonical_entity_id,
     canonicalize_entity_type_label,
     tokenize_en,
 )

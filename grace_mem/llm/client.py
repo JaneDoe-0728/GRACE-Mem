@@ -27,10 +27,10 @@ import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from grace_mem.domain.extraction import SCHEMA_keyword
 from grace_mem.llm.token_tracking import token_tracker
 from grace_mem.runtime.reproducibility import get_runtime_reproducibility
 from grace_mem.services.entity_manager import EntityOpsConfig, EntityOpsProcessor
-from grace_mem.utils.common import SCHEMA_keyword
 
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(dotenv_path=ENV_PATH)

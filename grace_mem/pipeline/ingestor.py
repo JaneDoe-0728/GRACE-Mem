@@ -38,6 +38,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
+from grace_mem.domain.entities import Entity, EntityType
+from grace_mem.domain.extraction import ExtractionResult
+from grace_mem.domain.relationships import Relationship
 from grace_mem.llm.prompts import (
     EXTRA_KWARGS,
     entity_extraction_only,
@@ -50,13 +53,7 @@ from grace_mem.pipeline.ingest_steps.extract import (
 )
 from grace_mem.pipeline.ingest_steps.sync import ExtractionSyncer
 from grace_mem.runtime.analysis_log import append_analysis_record
-from grace_mem.utils.common import (
-    Entity,
-    EntityType,
-    ExtractionResult,
-    Relationship,
-    is_context_length_exceeded_error,
-)
+from grace_mem.utils.common import is_context_length_exceeded_error
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
 from grace_mem.utils.query_time_parser import parse_query_time
 from grace_mem.utils.temporal import (

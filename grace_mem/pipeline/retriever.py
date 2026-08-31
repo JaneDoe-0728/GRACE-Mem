@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 
+from grace_mem.domain.extraction import KeywordExtractionResult
 from grace_mem.pipeline.ablation import flag_enabled
 from grace_mem.pipeline.candidates import CandidateSet
 from grace_mem.pipeline.hyde import generate_hyde_vector
@@ -34,7 +35,6 @@ from grace_mem.pipeline.trace import (
     format_retrieval_stage_trace_text,
 )
 from grace_mem.storage import build_id_to_meta_maps
-from grace_mem.utils.common import KeywordExtractionResult
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
 from grace_mem.utils.query_time_parser import parse_query_time
 from grace_mem.utils.raw_context_lookup import RawContextLookup

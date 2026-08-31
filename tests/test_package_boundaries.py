@@ -10,7 +10,6 @@ Every rule is written against the *current* module paths and holds today. Each
 one is the same rule the target tree needs, so the move commits update the paths
 here and nothing else:
 
-    grace_mem.utils.common        ->  grace_mem/domain/
     grace_mem.pipeline.ingest_steps    ->  grace_mem/ingestion/
     grace_mem.pipeline.retrieval_steps ->  grace_mem/retrieval/
 """
@@ -21,8 +20,13 @@ from tools.import_graph import build_graph, discover_modules
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Where the domain models live today; becomes grace_mem.domain.* after the move.
-DOMAIN_MODULES = ("grace_mem.utils.common",)
+# The domain layer. Intra-domain imports are allowed; anything else is not.
+DOMAIN_MODULES = (
+    "grace_mem.domain",
+    "grace_mem.domain.entities",
+    "grace_mem.domain.extraction",
+    "grace_mem.domain.relationships",
+)
 # The two capabilities, at their current paths.
 INGESTION_PREFIX = "grace_mem.pipeline.ingest_steps"
 RETRIEVAL_PREFIX = "grace_mem.pipeline.retrieval_steps"
@@ -71,7 +75,7 @@ def test_domain_models_import_nothing_from_grace_mem():
         (module, target)
         for module in DOMAIN_MODULES
         for target in graph.get(module, set())
-        if target.startswith("grace_mem.")
+        if target.startswith("grace_mem.") and not target.startswith("grace_mem.domain")
     }
 
     assert reached == set()
