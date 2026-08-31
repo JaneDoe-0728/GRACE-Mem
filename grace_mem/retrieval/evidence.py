@@ -810,7 +810,7 @@ class EvidenceBuilder:
                 # Ablation: wide net → plain cosine top-N (skip the cross-encoder).
                 scored_entries = cand[:int(summary_rerank_topk)]
             elif idx_text:
-                from grace_mem.utils.reranker import get_reranker
+                from grace_mem.retrieval.reranker import get_reranker
                 try:
                     ranked = get_reranker().rerank(query_text, [t for _, t in idx_text], batch_size=2)
                     order = [idx_text[li][0] for li, _ in ranked][:int(summary_rerank_topk)]

@@ -17,8 +17,8 @@ model returning something unparseable anyway.
 
 
 from grace_mem.domain.extraction import KeywordExtractionResult
-from grace_mem.llm.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
-from grace_mem.pipeline.keyword_cache import keyword_cache
+from grace_mem.retrieval.keyword_cache import keyword_cache
+from grace_mem.retrieval.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
 
 _jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")

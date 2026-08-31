@@ -8,15 +8,17 @@ from typing import Any
 import numpy as np
 
 from grace_mem.domain.extraction import KeywordExtractionResult
-from grace_mem.pipeline.ablation import flag_enabled
-from grace_mem.pipeline.candidates import CandidateSet
-from grace_mem.pipeline.hyde import generate_hyde_vector
-from grace_mem.pipeline.keywords import generate_query_keywords
-from grace_mem.pipeline.query_rewrite import maybe_rewrite_retrieval_question
-from grace_mem.pipeline.rendering import render_context_text
+from grace_mem.retrieval.ablation import flag_enabled
+from grace_mem.retrieval.candidates import CandidateSet
+from grace_mem.retrieval.config import RetrieverConfig
+from grace_mem.retrieval.hyde import generate_hyde_vector
+from grace_mem.retrieval.keywords import generate_query_keywords
+from grace_mem.retrieval.query_rewrite import maybe_rewrite_retrieval_question
+from grace_mem.retrieval.raw_turn_lookup import RawContextLookup
+from grace_mem.retrieval.rendering import render_context_text
 
 # Import modular components
-from grace_mem.pipeline.retrieval_steps import (
+from grace_mem.retrieval.steps import (
     EntityRelationshipSearcher,
     EvidenceBuilder,
     EvidenceFilter,
@@ -24,11 +26,10 @@ from grace_mem.pipeline.retrieval_steps import (
     SpreadingActivationEngine,
     SubgraphPageRank,
 )
-from grace_mem.pipeline.retrieval_steps.adaptive import additive_merge
-from grace_mem.pipeline.retrieval_steps.narrowing import NarrowingModule
-from grace_mem.pipeline.retrieval_steps.temporal import date_within_coarse_range
-from grace_mem.pipeline.retriever_config import RetrieverConfig
-from grace_mem.pipeline.trace import (
+from grace_mem.retrieval.steps.adaptive import additive_merge
+from grace_mem.retrieval.steps.narrowing import NarrowingModule
+from grace_mem.retrieval.steps.temporal_relevance import date_within_coarse_range
+from grace_mem.retrieval.trace import (
     build_adaptive_trace,
     build_stage_trace_snapshot,
     dedupe_preserve_order,
@@ -37,7 +38,6 @@ from grace_mem.pipeline.trace import (
 from grace_mem.storage import build_id_to_meta_maps
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
 from grace_mem.utils.query_time_parser import parse_query_time
-from grace_mem.utils.raw_context_lookup import RawContextLookup
 
 _jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")
 _trace_jlog = make_module_jlog(name="grace_mem.Retriever.Trace", filename="kg_retrieval_trace.jsonl")
@@ -1288,7 +1288,7 @@ class Retriever:
 
         LLM used for rewriting: LLM_API / MODEL_NAME (from .env).
         """
-        from grace_mem.pipeline.retrieval_steps.adaptive import (
+        from grace_mem.retrieval.steps.adaptive import (
             build_adaptive_graph,
             build_adaptive_llm_client,
             compute_confidence,

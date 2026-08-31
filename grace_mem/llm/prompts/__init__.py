@@ -12,10 +12,14 @@ All exports maintain backward compatibility with the original flat prompts.py st
 
 # Configuration
 # Adaptive retrieval
-from .adaptive import (
+from grace_mem.retrieval.prompts.adaptive import (
     ADAPTIVE_REWRITE_SYSTEM,
     ADAPTIVE_REWRITE_SYSTEM_MULTIHOP,
 )
+
+# Keyword extraction
+from grace_mem.retrieval.prompts.keyword import KEYWORD_EXTRACTION_PROMPT
+
 from .config import EXTRA_KWARGS
 
 # Entity operations
@@ -29,9 +33,6 @@ from .extraction import (
     entity_extraction_only,
     relationship_extraction_only,
 )
-
-# Keyword extraction
-from .keyword import KEYWORD_EXTRACTION_PROMPT
 
 __all__ = [
     # Adaptive retrieval

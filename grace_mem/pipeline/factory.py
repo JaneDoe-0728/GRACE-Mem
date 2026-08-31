@@ -86,7 +86,7 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
     from grace_mem.graph.falkordb import graph_from_env
     from grace_mem.llm import LLMClient
     from grace_mem.pipeline.ingestor import Ingestor
-    from grace_mem.pipeline.retriever import Retriever
+    from grace_mem.retrieval.pipeline import Retriever
     from grace_mem.services import EntityManager, Provenance, RelationshipManager
     from grace_mem.storage import MGR
 

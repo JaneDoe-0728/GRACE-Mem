@@ -35,7 +35,7 @@ logger = logging.getLogger("grace_mem.Adaptive")
 # Adaptive LLM client
 # ──────────────────────────────────────────────────────────────────────────────
 
-from grace_mem.pipeline.rendering import render_context_text
+from grace_mem.retrieval.rendering import render_context_text
 from grace_mem.utils.logger_config import make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")

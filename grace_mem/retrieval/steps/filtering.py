@@ -520,7 +520,7 @@ class EvidenceFilter:
         Returns:
             (updated_entity_ids, updated_relationship_ids) tuple
         """
-        from grace_mem.utils.reranker import get_reranker
+        from grace_mem.retrieval.reranker import get_reranker
 
         timer_rerank_total = _StepTimer()
         _jlog(
@@ -732,7 +732,7 @@ class EvidenceFilter:
         Returns ordered lists (reranker rank order, deduplicated) rather than
         sets so the final Retrieved_Context ordering is deterministic across runs.
         """
-        from grace_mem.utils.reranker import get_reranker
+        from grace_mem.retrieval.reranker import get_reranker
 
         timer_total = _StepTimer()
         _jlog(

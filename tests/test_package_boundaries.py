@@ -11,7 +11,7 @@ one is the same rule the target tree needs, so the move commits update the paths
 here and nothing else:
 
     grace_mem.pipeline.ingest_steps    ->  grace_mem/ingestion/
-    grace_mem.pipeline.retrieval_steps ->  grace_mem/retrieval/
+    grace_mem.retrieval.steps ->  grace_mem/retrieval/
 """
 
 from pathlib import Path
@@ -29,7 +29,7 @@ DOMAIN_MODULES = (
 )
 # The two capabilities, at their current paths.
 INGESTION_PREFIX = "grace_mem.pipeline.ingest_steps"
-RETRIEVAL_PREFIX = "grace_mem.pipeline.retrieval_steps"
+RETRIEVAL_PREFIX = "grace_mem.retrieval.steps"
 
 
 def _graph() -> dict[str, set[str]]:

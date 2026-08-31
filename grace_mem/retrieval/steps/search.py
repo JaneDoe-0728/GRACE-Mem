@@ -7,7 +7,7 @@ from typing import Any
 import faiss
 import numpy as np
 
-from grace_mem.pipeline.ablation import flag_enabled
+from grace_mem.retrieval.ablation import flag_enabled
 from grace_mem.utils.common import tokenize_en
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
 
