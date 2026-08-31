@@ -700,164 +700,35 @@ class Retriever:
             rel_endpoint_scores=rel_endpoint_scores,
         )
 
-    def assemble_context_from_query(
+    def _filter_candidates(
         self,
-        question: str,
-        low_level_keywords: list[str],
-        high_level_keywords: list[str],
-        request_id: str | None = None,
-        ent_topk: int | None = None,
-        rel_topk: int | None = None,
-        ent_threshold: float | None = None,
-        rel_threshold: float | None = None,
-        filter_ent_topk: int | None = None,
-        filter_rel_topk: int | None = None,
-        filter_ent_threshold: float | None = None,
-        filter_rel_threshold: float | None = None,
-        query_time: str | None = None,
-        _graph: Any = None,
-    ) -> tuple[list[dict], list[dict], str, np.ndarray]:
-        """
-        Assemble KG context from query using modular components.
+        *,
+        candidates: CandidateSet,
+        intersect_entity_ids,
+        intersect_rel_ids,
+        query_vec,
+        filter_ent_topk,
+        filter_rel_topk,
+        filter_ent_threshold,
+        filter_rel_threshold,
+        request_id: str | None,
+        merged_branch: list,
+        append_trace,
+    ) -> tuple:
+        """Stage 3: narrow the candidate pool, dispatching on filter_method.
+
+        Five strategies behind one flag -- "similarity", "rrf", "ppr",
+        "rrf+ppr", "reranker_only" -- so that changing which one a run uses is
+        one config value rather than a code path. This is the retrieval policy;
+        the stages either side of it are mechanism.
+
+        Takes the CandidateSet rather than its six fields, which is the reason
+        that type exists.
 
         Returns:
-            (context_entities, context_relationships, context_text, query_vec)
+            (filtered_entity_ids, filtered_rel_ids, filtered_entities,
+             filtered_rels, ent_id2meta, rel_id2meta)
         """
-        timer_total = _StepTimer()
-        # Resolve params from config
-        ent_topk = ent_topk if ent_topk is not None else self.cfg.ent_topk
-        rel_topk = rel_topk if rel_topk is not None else self.cfg.rel_topk
-        ent_threshold = ent_threshold if ent_threshold is not None else self.cfg.ent_threshold
-        rel_threshold = rel_threshold if rel_threshold is not None else self.cfg.rel_threshold
-        filter_ent_topk = filter_ent_topk if filter_ent_topk is not None else self.cfg.filter_ent_topk
-        filter_rel_topk = filter_rel_topk if filter_rel_topk is not None else self.cfg.filter_rel_topk
-        filter_ent_threshold = filter_ent_threshold if filter_ent_threshold is not None else self.cfg.filter_ent_threshold
-        filter_rel_threshold = filter_rel_threshold if filter_rel_threshold is not None else self.cfg.filter_rel_threshold
-
-        # Resolve graph: caller may supply a local graph override for adaptive pass-2
-        graph = _graph if _graph is not None else self.graph
-        local_branch: list[dict[str, Any]] = []
-        global_branch: list[dict[str, Any]] = []
-        merged_branch: list[dict[str, Any]] = []
-
-        def append_trace(
-            branch: list[dict[str, Any]],
-            *,
-            step: str,
-            stage: str,
-            entity_names: list[str],
-            relationship_names: list[str],
-            skipped: bool = False,
-            reason: str | None = None,
-        ) -> None:
-            """Append one step record to the retrieval trace."""
-            previous = branch[-1] if branch else None
-            branch.append(
-                build_stage_trace_snapshot(
-                    step=step,
-                    stage=stage,
-                    entity_names=entity_names,
-                    relationship_names=relationship_names,
-                    previous=previous,
-                    skipped=skipped,
-                    reason=reason,
-                )
-            )
-
-        def emit_trace(stop_reason: str | None = None) -> None:
-            """Write the accumulated trace out as a structured log event."""
-            self._emit_retrieval_stage_trace(
-                request_id=request_id,
-                question=question,
-                low_level_keywords=low_level_keywords,
-                high_level_keywords=high_level_keywords,
-                local_branch=local_branch,
-                global_branch=global_branch,
-                merged_branch=merged_branch,
-                graph_override=bool(_graph is not None),
-                stop_reason=stop_reason,
-                elapsed_sec=timer_total.sec(),
-            )
-
-        _jlog(
-            "assemble_context_from_query_start",
-            request_id,
-            step="2",
-            question=question,
-            low_level_keywords=low_level_keywords,
-            high_level_keywords=high_level_keywords,
-            ent_topk=ent_topk,
-            rel_topk=rel_topk,
-            ent_threshold=ent_threshold,
-            rel_threshold=rel_threshold,
-            filter_ent_topk=filter_ent_topk,
-            filter_rel_topk=filter_rel_topk,
-            filter_ent_threshold=filter_ent_threshold,
-            filter_rel_threshold=filter_rel_threshold,
-            query_time=query_time,
-            graph_override=bool(_graph is not None),
-        )
-
-        # 0) Embed query
-        query_vec = self.searcher.embed_query(question, request_id=request_id)
-
-        # 1) Search entities and relationships
-        _candidates = self._search_candidates(
-            question=question,
-            low_level_keywords=low_level_keywords,
-            high_level_keywords=high_level_keywords,
-            query_vec=query_vec,
-            ent_topk=ent_topk,
-            rel_topk=rel_topk,
-            ent_threshold=ent_threshold,
-            rel_threshold=rel_threshold,
-            graph=graph,
-            request_id=request_id,
-            timer_total=timer_total,
-            local_branch=local_branch,
-            global_branch=global_branch,
-            append_trace=append_trace,
-            emit_trace=emit_trace,
-        )
-        if _candidates is None:
-            return [], [], "", query_vec
-        node_subgraph = _candidates.node_subgraph
-        edge_subgraph = _candidates.edge_subgraph
-        entity_emb_scores = _candidates.entity_emb_scores
-        entity_bm25_scores = _candidates.entity_bm25_scores
-        rel_emb_scores = _candidates.rel_emb_scores
-        rel_endpoint_scores = _candidates.rel_endpoint_scores
-
-        # 2) Compute intersection (using union for now as per original code)
-        intersect_entity_ids, intersect_rel_ids = self.evidence_filter.compute_subgraph_intersection(
-            node_subgraph=node_subgraph,
-            edge_subgraph=edge_subgraph,
-            use_union=True,  # Original code uses union
-            request_id=request_id,
-        )
-        append_trace(
-            merged_branch,
-            step="2.5",
-            stage="union_candidates",
-            entity_names=self._entity_names_from_ids(sorted(intersect_entity_ids)),
-            relationship_names=self._relationship_names_from_ids(sorted(intersect_rel_ids)),
-        )
-
-        if not intersect_entity_ids and not intersect_rel_ids:
-            _jlog("intersection_empty", request_id, step="2.5")
-            emit_trace(stop_reason="intersection_empty")
-            _jlog(
-                "assemble_context_from_query_complete",
-                request_id,
-                step="2",
-                entity_count=0,
-                relationship_count=0,
-                context_length=0,
-                reason="intersection_empty",
-                elapsed_sec=timer_total.sec(),
-            )
-            return [], [], "", query_vec
-
         # 3) Filter candidates (step 2.6) — dispatch on filter_method
         timer_filter = _StepTimer()
         _jlog(
@@ -874,7 +745,7 @@ class Retriever:
         # Node-subgraph relation IDs (presence signal for relation RRF L3)
         node_subgraph_rel_ids: set = {
             nb["rel_id"]
-            for b in node_subgraph.values()
+            for b in candidates.node_subgraph.values()
             for nb in (b.get("neighbors") or [])
             if "rel_id" in nb
         }
@@ -904,10 +775,10 @@ class Retriever:
                 rrf_k=self.cfg.rrf_k,
                 filter_entity_top_k=rrf_top_k,
                 filter_relationship_top_k=filter_rel_topk,
-                entity_emb_scores=entity_emb_scores,
-                entity_bm25_scores=entity_bm25_scores,
-                rel_endpoint_scores=rel_endpoint_scores,
-                rel_emb_scores=rel_emb_scores,
+                entity_emb_scores=candidates.entity_emb_scores,
+                entity_bm25_scores=candidates.entity_bm25_scores,
+                rel_endpoint_scores=candidates.rel_endpoint_scores,
+                rel_emb_scores=candidates.rel_emb_scores,
                 node_subgraph_rel_ids=node_subgraph_rel_ids,
                 filter_method=self.cfg.filter_method,
                 request_id=request_id,
@@ -1042,6 +913,186 @@ class Retriever:
                     "target_name": tgt_meta.get("name"),
                     "target_type": tgt_meta.get("type"),
                 })
+
+
+        return (filtered_entity_ids, filtered_rel_ids, filtered_entities,
+                filtered_rels, ent_id2meta, rel_id2meta)
+
+    def assemble_context_from_query(
+        self,
+        question: str,
+        low_level_keywords: list[str],
+        high_level_keywords: list[str],
+        request_id: str | None = None,
+        ent_topk: int | None = None,
+        rel_topk: int | None = None,
+        ent_threshold: float | None = None,
+        rel_threshold: float | None = None,
+        filter_ent_topk: int | None = None,
+        filter_rel_topk: int | None = None,
+        filter_ent_threshold: float | None = None,
+        filter_rel_threshold: float | None = None,
+        query_time: str | None = None,
+        _graph: Any = None,
+    ) -> tuple[list[dict], list[dict], str, np.ndarray]:
+        """
+        Assemble KG context from query using modular components.
+
+        Returns:
+            (context_entities, context_relationships, context_text, query_vec)
+        """
+        timer_total = _StepTimer()
+        # Resolve params from config
+        ent_topk = ent_topk if ent_topk is not None else self.cfg.ent_topk
+        rel_topk = rel_topk if rel_topk is not None else self.cfg.rel_topk
+        ent_threshold = ent_threshold if ent_threshold is not None else self.cfg.ent_threshold
+        rel_threshold = rel_threshold if rel_threshold is not None else self.cfg.rel_threshold
+        filter_ent_topk = filter_ent_topk if filter_ent_topk is not None else self.cfg.filter_ent_topk
+        filter_rel_topk = filter_rel_topk if filter_rel_topk is not None else self.cfg.filter_rel_topk
+        filter_ent_threshold = filter_ent_threshold if filter_ent_threshold is not None else self.cfg.filter_ent_threshold
+        filter_rel_threshold = filter_rel_threshold if filter_rel_threshold is not None else self.cfg.filter_rel_threshold
+
+        # Resolve graph: caller may supply a local graph override for adaptive pass-2
+        graph = _graph if _graph is not None else self.graph
+        local_branch: list[dict[str, Any]] = []
+        global_branch: list[dict[str, Any]] = []
+        merged_branch: list[dict[str, Any]] = []
+
+        def append_trace(
+            branch: list[dict[str, Any]],
+            *,
+            step: str,
+            stage: str,
+            entity_names: list[str],
+            relationship_names: list[str],
+            skipped: bool = False,
+            reason: str | None = None,
+        ) -> None:
+            """Append one step record to the retrieval trace."""
+            previous = branch[-1] if branch else None
+            branch.append(
+                build_stage_trace_snapshot(
+                    step=step,
+                    stage=stage,
+                    entity_names=entity_names,
+                    relationship_names=relationship_names,
+                    previous=previous,
+                    skipped=skipped,
+                    reason=reason,
+                )
+            )
+
+        def emit_trace(stop_reason: str | None = None) -> None:
+            """Write the accumulated trace out as a structured log event."""
+            self._emit_retrieval_stage_trace(
+                request_id=request_id,
+                question=question,
+                low_level_keywords=low_level_keywords,
+                high_level_keywords=high_level_keywords,
+                local_branch=local_branch,
+                global_branch=global_branch,
+                merged_branch=merged_branch,
+                graph_override=bool(_graph is not None),
+                stop_reason=stop_reason,
+                elapsed_sec=timer_total.sec(),
+            )
+
+        _jlog(
+            "assemble_context_from_query_start",
+            request_id,
+            step="2",
+            question=question,
+            low_level_keywords=low_level_keywords,
+            high_level_keywords=high_level_keywords,
+            ent_topk=ent_topk,
+            rel_topk=rel_topk,
+            ent_threshold=ent_threshold,
+            rel_threshold=rel_threshold,
+            filter_ent_topk=filter_ent_topk,
+            filter_rel_topk=filter_rel_topk,
+            filter_ent_threshold=filter_ent_threshold,
+            filter_rel_threshold=filter_rel_threshold,
+            query_time=query_time,
+            graph_override=bool(_graph is not None),
+        )
+
+        # 0) Embed query
+        query_vec = self.searcher.embed_query(question, request_id=request_id)
+
+        # 1) Search entities and relationships
+        _candidates = self._search_candidates(
+            question=question,
+            low_level_keywords=low_level_keywords,
+            high_level_keywords=high_level_keywords,
+            query_vec=query_vec,
+            ent_topk=ent_topk,
+            rel_topk=rel_topk,
+            ent_threshold=ent_threshold,
+            rel_threshold=rel_threshold,
+            graph=graph,
+            request_id=request_id,
+            timer_total=timer_total,
+            local_branch=local_branch,
+            global_branch=global_branch,
+            append_trace=append_trace,
+            emit_trace=emit_trace,
+        )
+        if _candidates is None:
+            return [], [], "", query_vec
+        node_subgraph = _candidates.node_subgraph
+        edge_subgraph = _candidates.edge_subgraph
+
+        # 2) Compute intersection (using union for now as per original code)
+        intersect_entity_ids, intersect_rel_ids = self.evidence_filter.compute_subgraph_intersection(
+            node_subgraph=node_subgraph,
+            edge_subgraph=edge_subgraph,
+            use_union=True,  # Original code uses union
+            request_id=request_id,
+        )
+        append_trace(
+            merged_branch,
+            step="2.5",
+            stage="union_candidates",
+            entity_names=self._entity_names_from_ids(sorted(intersect_entity_ids)),
+            relationship_names=self._relationship_names_from_ids(sorted(intersect_rel_ids)),
+        )
+
+        if not intersect_entity_ids and not intersect_rel_ids:
+            _jlog("intersection_empty", request_id, step="2.5")
+            emit_trace(stop_reason="intersection_empty")
+            _jlog(
+                "assemble_context_from_query_complete",
+                request_id,
+                step="2",
+                entity_count=0,
+                relationship_count=0,
+                context_length=0,
+                reason="intersection_empty",
+                elapsed_sec=timer_total.sec(),
+            )
+            return [], [], "", query_vec
+
+        # 3) Filter candidates (step 2.6) — dispatch on filter_method
+        (
+            filtered_entity_ids,
+            filtered_rel_ids,
+            filtered_entities,
+            filtered_rels,
+            ent_id2meta,
+            rel_id2meta,
+        ) = self._filter_candidates(
+            candidates=_candidates,
+            intersect_entity_ids=intersect_entity_ids,
+            intersect_rel_ids=intersect_rel_ids,
+            query_vec=query_vec,
+            filter_ent_topk=filter_ent_topk,
+            filter_rel_topk=filter_rel_topk,
+            filter_ent_threshold=filter_ent_threshold,
+            filter_rel_threshold=filter_rel_threshold,
+            request_id=request_id,
+            merged_branch=merged_branch,
+            append_trace=append_trace,
+        )
 
         # 4) Optional reranker recovery / reranker-only selection
         filtered_entity_ids_set: list[str] | None
