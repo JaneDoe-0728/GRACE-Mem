@@ -273,7 +273,20 @@ experiment/
 │   ├── analysis/
 │   └── artifacts/
 │
-└── agent_filter/               a study, not a benchmark; left as-is
+└── agent_filter/               a study, not a benchmark; grouped by responsibility
+    ├── harness.py              orchestration: prepare → search → verify → finalize
+    ├── corpus.py               the per-question haystack, and the GREP/READ tools
+    ├── protocol.py             one reply → one Command, whatever channel it arrived in
+    ├── context.py              read the seeds out of a context, write one back
+    ├── loop.py                 AgentSession and AgentTools
+    ├── verification.py         the sufficiency verifier and its repair round
+    ├── adjudication.py         the answer-blind auditor
+    ├── finalization.py         evidence selection policy, one copy
+    ├── vector_search.py        semantic search over a question's summaries VDB
+    ├── config.py               AgentFilterConfig
+    ├── prompting/              every prompt, grouped by the call that sends it
+    ├── extensions/             optional mechanisms beside the pipeline (ledger)
+    └── replay/                 entry points: python -m …replay.longmem | .locomo
 ```
 
 ### How far the symmetry goes
@@ -421,8 +434,8 @@ it imports.
   python -m experiment.longmem.pipeline.watchdog
   python -m experiment.common.evaluation.judge
   python -m experiment.common.evaluation.score
-  python -m experiment.agent_filter.locomo_replay
-  python -m experiment.agent_filter.replay_run
+  python -m experiment.agent_filter.replay.locomo
+  python -m experiment.agent_filter.replay.longmem
   python -m tools.download_datasets
   ```
 - **CLI flags and stage names are untouched.** `ingest`, `qa_eval`, `judge` stay

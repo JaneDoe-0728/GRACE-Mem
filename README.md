@@ -223,11 +223,11 @@ but successful refinement is not a guarantee that answer quality improves.
 
 ```bash
 # LongMemEval
-uv run python -m experiment.agent_filter.replay_run \
+uv run python -m experiment.agent_filter.replay.longmem \
   --source-run <existing-run> --run-tag <agent-run> --workers 4
 
 # LoCoMo
-uv run python -m experiment.agent_filter.locomo_replay \
+uv run python -m experiment.agent_filter.replay.locomo \
   --source-run <existing-run> --run-tag <agent-run> \
   --chunk-turns 8 --samples 0-9 --workers 4 --granularity turn
 ```

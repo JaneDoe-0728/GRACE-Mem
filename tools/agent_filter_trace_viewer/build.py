@@ -1,7 +1,7 @@
 """Compile the grep agent's _grep_agent_traces.jsonl into a self-contained HTML
 viewer.
 
-For each question replay_run.py appends a trace to
+For each question replay/longmem.py appends a trace to
 output/<run-tag>/<cat>/_grep_agent_traces.jsonl, carrying sample, category,
 question, gold, answer, commands, kept, dropped, fallback, agent_ms and so on.
 This script adds two kinds of *derived* field, then embeds the data into

@@ -1,4 +1,4 @@
-"""Prompts for the grep agent (inline mini-harness).
+"""What the agent is told: its tools, its rules, and the per-question hints.
 
 Design principles, drawn from the lessons of the Grep and DCI papers:
 - inline delivery: tool results go straight back into the conversation, never
@@ -92,7 +92,7 @@ HYPOTHESIS_LINE_BLOCK_V2 = (
 )
 
 
-def _active_hypothesis_block() -> str:
+def active_hypothesis_block() -> str:
     """Return the active hypothesis prompt version (env-gated; the old version
     remains the default)."""
     import os
@@ -154,41 +154,6 @@ CANDIDATE evidence turns (from vector+rerank; may contain distractors, may be in
 Verify the candidates and search for missing evidence, then give FINAL sids.
 """
 
-# ── Sufficiency verifier: an independent audit call that does not share the
-# agent's conversation ──────────────────────────────────────────────────────
-SUFFICIENCY_SYSTEM = """You are a strict evidence auditor for a QA system.
-Given a QUESTION and the EVIDENCE turns selected to answer it, judge whether the
-evidence ALONE is enough to answer the question COMPLETELY and precisely.
-
-Pay special attention to:
-- counting/aggregation questions: does the evidence contain EVERY instance being
-  counted? If the question asks "how many X", missing even one mention makes it
-  insufficient.
-- temporal questions: are ALL dates/durations needed for the comparison present?
-- multi-part questions: is every part covered?
-
-Do NOT judge answer quality — only whether the necessary information is present.
-
-Reply with EXACTLY one line:
-SUFFICIENT
-or
-INSUFFICIENT: <the specific missing information — which entity, date, or how many more instances are likely missing>"""
-
-SUFFICIENCY_USER = """QUESTION: {question}
-{date_line}
-SELECTED EVIDENCE:
-{evidence}
-
-Is this evidence sufficient to answer the question completely? Reply SUFFICIENT or INSUFFICIENT: <missing>."""
-
-# The gap-directed top-up search instruction, fed back into the agent's conversation
-GAP_HINT_TEMPLATE = """An independent verifier reviewed your FINAL selection and judged the evidence
-INSUFFICIENT: {missing}
-
-Continue searching with GREP to fill exactly this gap. Your previous selections are
-kept — you only need to find the MISSING evidence and ADD it. When done, reply:
-FINAL <all previous sids> <newly found sids>"""
-
 # ── Searched-empty -> abstention hint, appended to the end of the answer context ─
 # _abs abstention questions fall back 70% of the time (the answer is not in the
 # corpus, so the agent never reaches FINAL). The signal "searched the whole corpus
@@ -200,41 +165,3 @@ ABSTENTION_HINT = (
     "context above does not clearly contain the answer, state that the information "
     "is not available in the conversation history — do not guess or invent details."
 )
-
-# ── Answer-blind per-item adjudication: an independent call that does not share
-# the agent's conversation ─────────────────────────────────────────────────────
-# The counter to the agent asking and answering itself: its FINAL is an "answer
-# citation" (solve first, then keep only the smallest turn set containing the
-# answer span -- of 7 gold entries per question it takes just 2). This
-# adjudication call cannot see the agent's search history or the answer it
-# reached, and rules on one thing only for each discarded seed: is it topically
-# relevant to the question? Solving the question or judging the answer is
-# explicitly forbidden, which routes around the answer-span radar that causes the
-# preference and multi-hop failures.
-ADJUDICATE_SYSTEM = """You are an evidence auditor for a long-term memory QA system.
-You are given a QUESTION and candidate evidence turns that an earlier selection
-step decided to discard. Audit each candidate INDEPENDENTLY, one by one.
-
-Judge TOPICAL RELEVANCE, not answers:
-- KEEP a candidate if it carries information about the question's subject — the
-  same person, entity, event, activity, preference, constraint, or time period
-  the question is about — even if it does not answer the question by itself.
-  Statements where the user describes themselves (what they have, like, use,
-  did, plan, or want) are evidence for any question about that topic. Dated
-  mentions of the same fact/entity are evidence for counting, latest-value and
-  time-span questions.
-- DROP a candidate only if it is about an unrelated subject.
-
-Do NOT try to answer the question. Do NOT judge whether a candidate contains
-the answer — a turn can be essential evidence without containing any answer.
-
-Output format — one line per candidate, cover ALL candidates, in the given order:
-<sid> KEEP|DROP <short reason>
-No other text before or after the lines."""
-
-ADJUDICATE_USER = """QUESTION: {question}
-{date_line}
-Discarded candidates to audit ({n} items):
-{candidates}
-
-Audit every candidate — one line each, exactly: <sid> KEEP|DROP <short reason>"""

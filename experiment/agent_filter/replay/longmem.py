@@ -11,7 +11,7 @@ Why:
      through this same path
 
 Usage:
-    python -m experiment.agent_filter.replay_run \
+    python -m experiment.agent_filter.replay.longmem \
         --source-run rr16-base-split --run-tag rr16-grep-v3 --workers 3
     # --limit N / --category X for a small sample
 """

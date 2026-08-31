@@ -13,7 +13,7 @@ Porting design, kept to the minimum change:
 
 Usage:
     LLM_API=http://localhost:1234/v1 MODEL_NAME=openai/gpt-oss-20b \
-    python -m experiment.agent_filter.locomo_replay --source-run locomo-n8-full \
+    python -m experiment.agent_filter.replay.locomo --source-run locomo-n8-full \
         --run-tag locomo-n8-grep --chunk-turns 8 --workers 2
 """
 from __future__ import annotations
@@ -36,9 +36,9 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 
 from experiment.agent_filter.corpus import Corpus, Turn
+from experiment.agent_filter.extensions.ledger import append_ledger, compile_table
 from experiment.agent_filter.harness import refine_context
-from experiment.agent_filter.ledger import append_ledger, compile_table
-from experiment.agent_filter.skills import SKILLS as _SKILLS
+from experiment.agent_filter.prompting.skills import SKILLS as _SKILLS
 
 if TYPE_CHECKING:
     from grace_mem.llm import LLMClient
@@ -172,7 +172,7 @@ def process_row(row: dict, corpus: Corpus, params: dict, trace_fh, lock,
     with lock:
         # Write the full trace (timing, commands, sufficiency, dropped), matching
         # LongMem's.
-        # Keep replay_run-compatible timing and agent fields for experiment/common/evaluation/score.py.
+        # Keep the LongMem replay's timing and agent fields for experiment/common/evaluation/score.py.
         trace_fh.write(json.dumps({"question": q[:120], **trace}, ensure_ascii=False) + "\n")
         trace_fh.flush()
     return out

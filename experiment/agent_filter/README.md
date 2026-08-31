@@ -23,8 +23,8 @@ configuration defaults, not invariants for every run.
 | Purpose | File |
 |---|---|
 | Core harness and tools | [`harness.py`](harness.py) |
-| LongMemEval replay | [`replay_run.py`](replay_run.py) |
-| LoCoMo replay | [`locomo_replay.py`](locomo_replay.py) |
+| LongMemEval replay | [`replay/longmem.py`](replay/longmem.py) |
+| LoCoMo replay | [`replay/locomo.py`](replay/locomo.py) |
 | Shared defaults | [`../experiment_config.py`](../experiment_config.py) |
 
 `GREP_AGENT_PARAMS` is the source of truth for algorithm defaults such as mode,
@@ -53,7 +53,7 @@ Relevant environment variables:
 ## LongMemEval Replay
 
 ```bash
-uv run python -m experiment.agent_filter.replay_run \
+uv run python -m experiment.agent_filter.replay.longmem \
   --source-run <existing-retrieval-run> \
   --run-tag <agent-filter-run> \
   --workers 4
@@ -73,7 +73,7 @@ answers, and writes a separate run under
 ## LoCoMo Replay
 
 ```bash
-uv run python -m experiment.agent_filter.locomo_replay \
+uv run python -m experiment.agent_filter.replay.locomo \
   --source-run <existing-retrieval-run> \
   --run-tag <agent-filter-run> \
   --chunk-turns 8 \
@@ -145,6 +145,6 @@ settings when comparing a baseline with Agent Filter.
 ## LoCoMo Trace Accounting
 
 LoCoMo seed IDs are chunk-level, while turn-granularity FINAL IDs can include a
-turn suffix such as `t2`. `locomo_replay.py` normalizes FINAL IDs to their chunk
+turn suffix such as `t2`. `replay/locomo.py` normalizes FINAL IDs to their chunk
 prefix before writing kept/added/dropped trace accounting. LongMem seed and
 FINAL IDs already use the same ID space.

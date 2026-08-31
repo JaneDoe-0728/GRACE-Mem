@@ -20,15 +20,18 @@ import time
 import traceback
 from pathlib import Path
 
+from experiment.agent_filter import vector_search
 from experiment.agent_filter.corpus import Corpus, load_corpus
-from experiment.agent_filter.prompts import (
+from experiment.agent_filter.prompting.agent import (
     ABSTENTION_HINT,
     CATEGORY_HINTS,
+    SYSTEM_PROMPT,
+    USER_TEMPLATE,
+)
+from experiment.agent_filter.prompting.verification import (
     GAP_HINT_TEMPLATE,
     SUFFICIENCY_SYSTEM,
     SUFFICIENCY_USER,
-    SYSTEM_PROMPT,
-    USER_TEMPLATE,
 )
 
 _EVIDENCE_HEADER = "### Evidence Summary"
@@ -325,22 +328,10 @@ def _vector_search(
     """Execution side of the VECTOR command: embed the query, search that
     question's summaries VDB, and return an inline candidate list (same format as
     GREP; the agent still has to verify them with READ/GREP)."""
-    from experiment.agent_filter.gap_vector import vector_gap_candidates
-
-    cands = vector_gap_candidates(
+    hits = vector_search.search_summaries(
         artifact_dir, query, exclude=exclude, topn=topn, min_score=min_score,
     )
-    if not cands:
-        return (f"vector {query!r}: 0 hits above threshold. "
-                "Try rephrasing the query, or fall back to GREP with rare literal words.")
-    lines = [(f"vector {query!r}: {len(cands)} semantically similar turns "
-             "(NOT verified — check with READ/GREP before including)")]
-    for s, sc in cands:
-        turns = corpus.resolve(s)
-        entry = corpus.display_entry(s, max_chars=200) or "(text unavailable)"
-        dt = f"[{turns[0].date}] " if turns and turns[0].date else ""
-        lines.append(f"[sid={s}] (score={sc:.2f}) {dt}{entry}")
-    return "\n".join(lines)
+    return vector_search.render_hits(corpus, query, hits)
 
 
 def _rebuild_context(
@@ -443,7 +434,7 @@ def _adjudicate_candidates(
     Returns (the KEEP sids, a per-item verdict dict). A candidate given no
     verdict counts as DROP -- adjudication is an add-only recovery, so no
     verdict means nothing is added back."""
-    from experiment.agent_filter.prompts import (
+    from experiment.agent_filter.prompting.adjudication import (
         ADJUDICATE_SYSTEM,
         ADJUDICATE_USER,
     )
@@ -557,7 +548,7 @@ def refine_context(
         # miss does it fall back to the category hint
         hint = ""
         if p.get("grep_agent_use_skills", False):
-            from experiment.agent_filter.skills import select_skills
+            from experiment.agent_filter.prompting.skills import select_skills
             matched = select_skills(question)
             trace["skills"] = [n for n, _ in matched]
             hint = "\n\n".join(s for _, s in matched)
@@ -566,7 +557,7 @@ def refine_context(
 
         # VECTOR tool: enabled only when this question's summaries VDB is present
         # (the agent decides for itself when to search semantically -- unlike the
-        # disproven gap_vector approach where the verifier pushed candidates, here
+        # disproven gap-repair approach where the verifier pushed candidates, here
         # the agent pulls).
         vector_ok = (
             bool(p.get("grep_agent_vector_search", True))
@@ -579,15 +570,15 @@ def refine_context(
         verified_sids: set[str] = set()
         vector_candidate_sids: set[str] = set()
         trace["evidence_provenance"] = {}
-        from experiment.agent_filter.prompts import (
+        from experiment.agent_filter.prompting.agent import (
             VECTOR_TOOL_BLOCK,
-            _active_hypothesis_block,
+            active_hypothesis_block,
         )
         emit_hyp = bool(int(p.get("grep_agent_emit_hypothesis", 0)))
         system = SYSTEM_PROMPT.format(
             max_calls=max_calls,
             vector_tool=VECTOR_TOOL_BLOCK if vector_ok else "",
-            hypothesis_line=_active_hypothesis_block() if emit_hyp else "",
+            hypothesis_line=active_hypothesis_block() if emit_hyp else "",
         )
         if mode == "filter":
             system += "\nIMPORTANT: you may only KEEP or DROP candidates; do not add new sids in FINAL."
@@ -915,8 +906,7 @@ def refine_context(
             # to confirm.
             gap_topn = int(p.get("grep_agent_gap_vector_topn", 0))
             if artifact_dir is not None and gap_topn > 0:
-                from experiment.agent_filter.gap_vector import vector_gap_candidates
-                cands = vector_gap_candidates(
+                cands = vector_search.search_summaries(
                     artifact_dir,
                     f"{question}\n{missing}",
                     exclude=set(final),

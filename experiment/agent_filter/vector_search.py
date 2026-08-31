@@ -1,13 +1,14 @@
-"""Vector top-up search from the gap description -- the second weapon in the
-sufficiency repair arm.
+"""Semantic search over a question's summaries VDB.
 
-The grep repair arm comes back empty about 87% of the time, and the root cause is
-the paraphrase gap: the information the verifier flags as missing is often not a
-literal span anywhere in the corpus. So here the question plus the missing
-description is embedded and used to search that question's summaries VDB (the
-:u/:a split produced by rebuild_split_summaries.py), pulling back the semantic
-neighbours grep cannot reach and handing them to the agent to confirm.
+Two callers share it, for the same reason -- the paraphrase gap. What the
+question asks for is often not a literal span anywhere in the corpus, so GREP
+cannot reach it:
 
+  - the VECTOR command, which the agent drives itself, and
+  - the sufficiency repair arm, which embeds the verifier's gap description
+    (the grep repair arm alone comes back empty about 87% of the time).
+
+The VDB holds the :u/:a split summaries produced by rebuild_split_summaries.py.
 Both the VDB client and the embedder are lazily cached globally (the embedder
 takes 2-3GB of GPU and is loaded only once).
 """
@@ -44,7 +45,7 @@ def _get_vdb(artifact_dir: Path):
         return _vdb_cache[key]
 
 
-def vector_gap_candidates(
+def search_summaries(
     artifact_dir: str | Path,
     query_text: str,
     *,
@@ -74,3 +75,22 @@ def vector_gap_candidates(
         return out
     except Exception:
         return []
+
+
+def render_hits(corpus, query: str, hits: list[tuple[str, float]]) -> str:
+    """Render VECTOR hits as the inline candidate list the agent reads back.
+
+    Same shape as a GREP result, so the agent needs no second format, and each
+    hit still carries its score.
+    """
+    if not hits:
+        return (f"vector {query!r}: 0 hits above threshold. "
+                "Try rephrasing the query, or fall back to GREP with rare literal words.")
+    lines = [(f"vector {query!r}: {len(hits)} semantically similar turns "
+             "(NOT verified — check with READ/GREP before including)")]
+    for sid, score in hits:
+        turns = corpus.resolve(sid)
+        entry = corpus.display_entry(sid, max_chars=200) or "(text unavailable)"
+        dt = f"[{turns[0].date}] " if turns and turns[0].date else ""
+        lines.append(f"[sid={sid}] (score={score:.2f}) {dt}{entry}")
+    return "\n".join(lines)
