@@ -1,0 +1,140 @@
+{
+  "calls": [
+    {
+      "args": {
+        "question": "What did the marathon runner say about new shoes?"
+      },
+      "call": "searcher.embed_query"
+    },
+    {
+      "args": {
+        "entity_top_k": 5,
+        "entity_vec_threshold": 0.3,
+        "low_level_keywords": [
+          "marathon",
+          "shoes"
+        ]
+      },
+      "call": "searcher.search_entities_hybrid"
+    },
+    {
+      "args": {
+        "seed_entity_ids": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "e7"
+        ]
+      },
+      "call": "sa.run"
+    },
+    {
+      "args": {
+        "entity_ids": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "e7",
+          "e8"
+        ]
+      },
+      "call": "graph.get_node_subgraph"
+    },
+    {
+      "args": {
+        "keywords": [
+          "purchase",
+          "running"
+        ],
+        "relationship_top_k": 5,
+        "relationship_vec_threshold": 0.3
+      },
+      "call": "searcher.search_relationships_by_vec"
+    },
+    {
+      "args": {
+        "rel_ids": [
+          "r1",
+          "r2",
+          "r3",
+          "r4",
+          "r5",
+          "r6"
+        ]
+      },
+      "call": "graph.get_edge_subgraph"
+    },
+    {
+      "args": {
+        "edge_ids": [
+          "r1",
+          "r2",
+          "r3",
+          "r4",
+          "r5",
+          "r6"
+        ],
+        "node_ids": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "e7",
+          "e8"
+        ],
+        "use_union": true
+      },
+      "call": "filter.compute_subgraph_intersection"
+    },
+    {
+      "args": {
+        "entity_ids": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "e7",
+          "e8"
+        ],
+        "entity_top_k": 5,
+        "question": "What did the marathon runner say about new shoes?",
+        "relationship_ids": [
+          "r1",
+          "r2",
+          "r3",
+          "r4",
+          "r5",
+          "r6"
+        ],
+        "relationship_top_k": 5,
+        "threshold": 0.0
+      },
+      "call": "filter.rerank_filter"
+    }
+  ],
+  "context_text": "=== Entities ===\n- Entity E1 (None): description of e1\n- Entity E2 (None): description of e2\n- Entity E3 (None): description of e3\n\n=== Relationships ===\n- Entity E1 -> Entity E2: None\n- Entity E2 -> Entity E3: None",
+  "entity_count": 3,
+  "entity_ids": [
+    "e1",
+    "e2",
+    "e3"
+  ],
+  "query_vec_shape": [
+    8
+  ],
+  "relationship_count": 2,
+  "relationship_ids": [
+    "r1",
+    "r2"
+  ]
+}
