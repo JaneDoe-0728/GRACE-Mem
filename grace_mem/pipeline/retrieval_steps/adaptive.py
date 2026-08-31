@@ -35,6 +35,12 @@ logger = logging.getLogger("grace_mem.Adaptive")
 # Adaptive LLM client
 # ──────────────────────────────────────────────────────────────────────────────
 
+from grace_mem.pipeline.rendering import render_context_text
+from grace_mem.utils.logger_config import make_module_jlog
+
+_jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")
+
+
 def build_adaptive_llm_client() -> Any:
     """Build an LLMClient for adaptive re-search query rewriting."""
     from grace_mem.llm import LLMClient
@@ -313,3 +319,82 @@ def _build_expansion(question: str, ent_names: list[str], rel_descs: list[str]) 
     # Cap to keep the query retrieval-oriented and avoid embedding dilution.
     extras = extras[:8]
     return f"{question.rstrip('?.! ')} {' '.join(extras)}"
+
+
+def additive_merge(
+    *,
+    vdb_manager,
+    cache,
+    cfg,
+    entities_1: list[dict],
+    rels_1: list[dict],
+    entities_2: list[dict],
+    rels_2: list[dict],
+    request_id: str | None,
+    conf_1: float,
+    conf_2: float,
+    query_vec: Any = None,
+) -> tuple[list[dict], list[dict], str, float]:
+    """
+    Additive context merge: preserve all pass-1 results and append only
+    pass-2 items whose IDs were not already retrieved in pass-1.
+
+    This ensures the answer-bearing context from pass-1 is never displaced.
+    Novel entities are filtered by their similarity to the original query_vec
+    (threshold: cfg.novel_ent_threshold) to discard noise introduced by
+    rewrite drift.  Novel rels are admitted unconditionally since they are
+    anchored to already-filtered entities.
+
+    Returns:
+        (merged_entities, merged_rels, merged_text, conf_merged)
+    """
+    # Collect pass-1 IDs to identify novel pass-2 items
+    ent_ids_1: set = {e["id"] for e in entities_1}
+    rel_ids_1: set = {r["rel_id"] for r in rels_1}
+
+    novel_ents_raw = [e for e in entities_2 if e["id"] not in ent_ids_1]
+    novel_rels = [r for r in rels_2 if r["rel_id"] not in rel_ids_1]
+
+    # Filter novel entities by similarity to the original question embedding
+    if query_vec is not None and novel_ents_raw:
+        ent_vdb = vdb_manager.get_entities_vdb(0)
+        novel_ents = [
+            e for e in novel_ents_raw
+            if (res := ent_vdb.compare_by_id(e["id"], query_vec, threshold=0.0))
+            is not None and res[1] >= cfg.novel_ent_threshold
+        ]
+    else:
+        novel_ents = novel_ents_raw
+
+    merged_entities = entities_1 + novel_ents
+    merged_rels = rels_1 + novel_rels
+
+    # Confidence unchanged from pass-1 (pass-1 context is fully preserved)
+    conf_merged = conf_1
+
+    _jlog(
+        "adaptive_merge_rerank",
+        request_id,
+        step="2b",
+        entities_pass1=len(entities_1),
+        entities_pass2=len(entities_2),
+        rels_pass1=len(rels_1),
+        rels_pass2=len(rels_2),
+        novel_entities_raw=len(novel_ents_raw),
+        novel_entities=len(novel_ents),
+        novel_rels=len(novel_rels),
+        merged_entities=len(merged_entities),
+        merged_rels=len(merged_rels),
+        conf_1=conf_1,
+        conf_2=conf_2,
+        conf_merged=conf_merged,
+        novel_ent_threshold=cfg.novel_ent_threshold,
+    )
+
+    merged_text = render_context_text(
+        cache=cache,
+        entities=merged_entities,
+        relationships=merged_rels,
+        request_id=request_id,
+    )
+    return merged_entities, merged_rels, merged_text, conf_merged
