@@ -1,13 +1,13 @@
 """
 Entity and relationship search functionality using hybrid vector + BM25 approach.
 """
-import os
 from collections.abc import Iterable
 from typing import Any
 
 import faiss
 import numpy as np
 
+from grace_mem.pipeline.ablation import flag_enabled
 from grace_mem.utils.common import tokenize_en
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
 
@@ -107,7 +107,7 @@ class EntityRelationshipSearcher:
         # Ablation F: close the BM25 branch -- entity seeds are left with the
         # vector path alone.
         # The env-var convention follows KG_ABLATION_NO_GRAPH: off by default.
-        if os.getenv("KG_ABLATION_NO_BM25", "0").lower() not in ("0", "", "false"):
+        if flag_enabled("KG_ABLATION_NO_BM25"):
             _jlog("bm25_skipped_ablation", request_id, step="2.1")
             _jlog(
                 "search_entities_hybrid_complete",

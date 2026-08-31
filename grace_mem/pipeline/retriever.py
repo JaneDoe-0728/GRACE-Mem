@@ -9,6 +9,7 @@ import numpy as np
 
 from grace_mem.llm.prompts.hyde_prompting import HYDE_SYSTEM, HYDE_USER
 from grace_mem.llm.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
+from grace_mem.pipeline.ablation import flag_enabled
 from grace_mem.pipeline.keyword_cache import keyword_cache
 from grace_mem.pipeline.query_rewrite import maybe_rewrite_retrieval_question
 from grace_mem.pipeline.rendering import render_context_text
@@ -46,10 +47,6 @@ _trace_pretty_log = setup_logger(
     log_dir=_TRACE_PRETTY_LOG_DIR,
     to_console=False,
 )
-
-
-def _env_flag_enabled(name: str) -> bool:
-    return os.getenv(name, "0").lower() not in ("0", "", "false")
 
 
 
@@ -1220,7 +1217,7 @@ class Retriever:
         # Ablation H: KG_ABLATION_NO_TEMPORAL_BOOST=1 -> skip this reranking.
         # Note: LoCoMo passes no query_time, so this block is structurally dead
         # there; H only means anything for LongMem.
-        if _env_flag_enabled("KG_ABLATION_NO_TEMPORAL_BOOST"):
+        if flag_enabled("KG_ABLATION_NO_TEMPORAL_BOOST"):
             _jlog(
                 "ablation_no_temporal_boost_applied",
                 request_id,
@@ -1699,7 +1696,7 @@ class Retriever:
             # vector search returns {} for empty keywords (empty edge subgraph).
             # Relationship candidates still arrive via the node subgraph's incident
             # edges (local_rel_set), so the pool never drops to zero.
-            if _env_flag_enabled("KG_ABLATION_NO_KEYWORDS"):
+            if flag_enabled("KG_ABLATION_NO_KEYWORDS"):
                 _jlog("ablation_no_keywords_applied", request_id, step="1")
                 kw = KeywordExtractionResult(high_level_keywords=[], low_level_keywords=[])
             else:
@@ -1761,7 +1758,7 @@ class Retriever:
             # relationship text blocks from the context. evidence_entities/evidence_rels are
             # kept (the evidence provenance channel is untouched), so the answering
             # model sees the Evidence block alone.
-            if _env_flag_enabled("KG_ABLATION_NO_KG_TEXT"):
+            if flag_enabled("KG_ABLATION_NO_KG_TEXT"):
                 _jlog(
                     "ablation_no_kg_text_applied",
                     request_id,
@@ -1775,7 +1772,7 @@ class Retriever:
             # context carries no entity/relationship text blocks either.
             # The env-var convention follows KG_NARROWING_ENABLED / USE_GREP_AGENT:
             # off by default.
-            if _env_flag_enabled("KG_ABLATION_NO_GRAPH"):
+            if flag_enabled("KG_ABLATION_NO_GRAPH"):
                 _jlog(
                     "ablation_no_graph_applied",
                     request_id,
@@ -1807,7 +1804,7 @@ class Retriever:
             # Ablation A: KG_ABLATION_NO_DIRECT_VECTOR=1 -> config closes the direct
             # search channel down to topn=0 (add_direct becomes a no-op); all that is
             # left here is a signal the smoke test can assert on.
-            if _env_flag_enabled("KG_ABLATION_NO_DIRECT_VECTOR"):
+            if flag_enabled("KG_ABLATION_NO_DIRECT_VECTOR"):
                 _jlog(
                     "ablation_no_direct_vector_applied",
                     request_id,
