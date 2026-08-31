@@ -29,7 +29,7 @@ from experiment.agent_filter.context import (
 )
 from experiment.agent_filter.corpus import Corpus, load_corpus
 from experiment.agent_filter.llm_factory import agent_llm, verify_llm
-from experiment.agent_filter.models import SID_RE, Command
+from experiment.agent_filter.loop import AgentSession, AgentTools
 from experiment.agent_filter.prompting.agent import (
     ABSTENTION_HINT,
     CATEGORY_HINTS,
@@ -37,7 +37,6 @@ from experiment.agent_filter.prompting.agent import (
     USER_TEMPLATE,
 )
 from experiment.agent_filter.prompting.verification import GAP_HINT_TEMPLATE
-from experiment.agent_filter.protocol import extract_final_sids, parse_response
 from experiment.agent_filter.verification import check_sufficiency
 
 # Detects aggregation/latest-value questions (a question-driven trigger for the
@@ -47,24 +46,6 @@ _AGG_QUESTION_RE = re.compile(
     r"number of|most recent(ly)?|latest|currently|current|in total|altogether)\b",
     re.IGNORECASE,
 )
-
-
-def _vector_search(
-    artifact_dir,
-    corpus: Corpus,
-    query: str,
-    *,
-    exclude: set[str],
-    topn: int,
-    min_score: float,
-) -> str:
-    """Execution side of the VECTOR command: embed the query, search that
-    question's summaries VDB, and return an inline candidate list (same format as
-    GREP; the agent still has to verify them with READ/GREP)."""
-    hits = vector_search.search_summaries(
-        artifact_dir, query, exclude=exclude, topn=topn, min_score=min_score,
-    )
-    return vector_search.render_hits(corpus, query, hits)
 
 
 def refine_context(
@@ -138,10 +119,6 @@ def refine_context(
             and (Path(artifact_dir) / "summaries_chroma").exists()
         )
         trace["vector_tool"] = vector_ok
-        # Provenance: VECTOR results are discovery-only. A sid is verified only
-        # after it appears in a raw GREP or READ result.
-        verified_sids: set[str] = set()
-        vector_candidate_sids: set[str] = set()
         trace["evidence_provenance"] = {}
         from experiment.agent_filter.prompting.agent import (
             VECTOR_TOOL_BLOCK,
@@ -166,153 +143,26 @@ def refine_context(
             ),
             candidates=candidates_block(corpus, seed),
         )
-        messages = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ]
+        session = AgentSession(
+            llm=llm,
+            tools=AgentTools(
+                corpus,
+                seed=seed,
+                artifact_dir=artifact_dir,
+                grep_max_lines=grep_max_lines,
+                vector_enabled=vector_ok,
+                vector_topn=int(p.get("grep_agent_vector_topn", 8)),
+                vector_min_score=float(p.get("grep_agent_vector_min_score", 0.30)),
+            ),
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            trace=trace,
+            emit_hypothesis=emit_hyp,
+        )
 
-        def _run_loop(budget: int) -> list[str] | None:
-            """Run one GREP/READ->FINAL tool loop (shared by the main search and the
-            verify top-up search)."""
-            parse_failures = 0
-            repeat_count = 0
-            prev_cmd: Command | None = None
-            for _ in range(budget):
-                _t0 = time.perf_counter()
-                resp = llm.chat(messages=messages, temperature=0.0, max_tokens=1024)
-                parsed = parse_response(resp)
-                cmd, reply, raw_reply, diag = (
-                    parsed.command, parsed.reply, parsed.raw_reply, parsed.diagnostics,
-                )
-                # Only retain the compact command in conversation history.
-                # Raw reasoning is diagnostic data, not useful context, and
-                # replaying it would inflate the next request's input tokens.
-                messages.append({
-                    "role": "assistant",
-                    "content": f"{cmd.kind} {cmd.arg}" if cmd else "",
-                })
-                if cmd is None:
-                    parse_failures += 1
-                    trace["commands"].append({"cmd": "PARSE_FAIL", "arg": raw_reply[:200],
-                                              "ms": round((time.perf_counter() - _t0) * 1000),
-                                              **diag})
-                    if parse_failures >= 2:
-                        return None
-                    messages.append({"role": "user", "content":
-                        "Could not parse a command. Reply with exactly one command as the "
-                        "last line: GREP <regex> | READ <sid> [k] | FINAL <sid> ..."})
-                    continue
-
-                kind, arg = cmd.kind, cmd.arg
-                if kind == "FINAL":
-                    if emit_hyp:
-                        # The agent's self-reported answer hypothesis (productionizing
-                        # "hypothesis recovery", replacing hyp-v1's after-the-fact
-                        # 4o-mini extraction). Look for a HYPOTHESIS: line in the
-                        # reply; failing that, fall back to the whole reasoning block
-                        # (reasoning_content or reply) for downstream use.
-                        # Capture HYPOTHESIS only to end of line; if a FINAL or sid
-                        # token follows on the same or an adjacent line (the agent
-                        # writes both together), cut before FINAL so the FINAL line's
-                        # sids are not swallowed into the hypothesis (seen in hyp-v1
-                        # 06db6396 and the 120b filter).
-                        hm = re.search(r"HYPOTHESIS\s*[::]\s*([^\n]+)", reply, re.IGNORECASE)
-                        hyp = hm.group(1).strip() if hm else ""
-                        hyp = re.split(r"\bFINAL\b", hyp, maxsplit=1, flags=re.IGNORECASE)[0].strip()
-                        if hyp and hyp.upper() != "NONE":
-                            trace["hypothesis"] = hyp[:200]
-                    trace["commands"].append({"cmd": "FINAL", "arg": arg[:500],
-                                              "reply": reply[:1200],
-                                              "ms": round((time.perf_counter() - _t0) * 1000),
-                                              **diag})
-                    return extract_final_sids(arg, reply)
-
-                # Broken-record circuit breaker: repeating the same command prompts
-                # for closure, and three in a row jumps straight to a forced FINAL
-                if cmd == prev_cmd:
-                    repeat_count += 1
-                    if repeat_count >= 2:
-                        trace["commands"].append({"cmd": "REPEAT_BREAK", "arg": f"{kind} {arg}"[:200],
-                                                  "ms": round((time.perf_counter() - _t0) * 1000)})
-                        return None
-                    messages.append({"role": "user", "content":
-                        "You already ran that exact command. Try DIFFERENT keywords, "
-                        "or reply FINAL <sid> ... with your current best selection."})
-                    continue
-                prev_cmd = cmd
-                repeat_count = 0
-                if kind == "GREP":
-                    result = corpus.grep(arg, max_lines=grep_max_lines)
-                    verified_sids.update(corpus.normalize_sids(SID_RE.findall(result)))
-                elif kind == "VECTOR":
-                    if vector_ok:
-                        result = _vector_search(
-                            artifact_dir, corpus, arg,
-                            exclude=set(corpus.normalize_sids(seed)),
-                            topn=int(p.get("grep_agent_vector_topn", 8)),
-                            min_score=float(p.get("grep_agent_vector_min_score", 0.30)),
-                        )
-                        _vhits = corpus.normalize_sids(SID_RE.findall(result))
-                        vector_candidate_sids.update(_vhits)
-                        # A VECTOR hit counts as verified outright, on a par with
-                        # GREP/READ. The provenance gate is gone: whatever is pulled
-                        # back is trusted, with no second verification required.
-                        verified_sids.update(_vhits)
-                    else:
-                        result = "VECTOR is not available for this question; use GREP or READ."
-                else:  # READ
-                    sid, k = arg.rsplit(" ", 1)
-                    result = corpus.read_window(sid, k=int(k))
-                    verified_sids.update(corpus.normalize_sids(SID_RE.findall(result)))
-                trace["commands"].append({"cmd": kind, "arg": arg[:300], "result_chars": len(result),
-                                          "reply": reply[:1200], "result": result[:1500],
-                                          "ms": round((time.perf_counter() - _t0) * 1000),
-                                          **diag})
-                # The closing reminder lives permanently in the recent context --
-                # after several search rounds models routinely forget how to finish.
-                # It states outright that a partial FINAL is acceptable: 49 of 73
-                # fallbacks were aggregation questions burning every round because
-                # they "could not gather every instance and dared not submit". The
-                # adjudication layer fills gaps anyway, so completeness is not the
-                # goal here.
-                result += ("\n\n(When you have identified the evidence, reply with one line: "
-                           "FINAL <sid> <sid> ... — copy sids exactly. A PARTIAL set is "
-                           "acceptable: FINAL the turns you have confirmed so far — a separate "
-                           "audit step recovers anything you miss. Do not keep searching for "
-                           "completeness.)")
-                messages.append({"role": "user", "content": result})
-            return None
-
-        final_raw = _run_loop(max_calls)
-
-        _salvage_msgs = [
-            ("STOP searching. Reply NOW with only one line listing the selected evidence "
-            "sids, copied EXACTLY from this list (or ones you found via GREP):\n{seeds}\n"
-            "FINAL <sid> <sid> ..."),
-            ("Output ONLY the single line below, filled in with sids from this list — "
-            "no other text, no tool calls:\n{seeds}\nFINAL <sid> <sid> ..."),
-        ]
-
-        def _ask_final(attempt: int) -> list[str]:
-            """Force closure: attach the candidate sid list for the model to copy
-            from, then extract the sids."""
-            messages.append({"role": "user", "content":
-                _salvage_msgs[min(attempt, 1)].format(seeds=" ".join(seed))})
-            _t0 = time.perf_counter()
-            resp = llm.chat(messages=messages, temperature=0.0, max_tokens=512)
-            parsed = parse_response(resp)
-            cmd, reply, diag = parsed.command, parsed.reply, parsed.diagnostics
-            messages.append({
-                "role": "assistant",
-                "content": f"{cmd.kind} {cmd.arg}" if cmd else "",
-            })
-            arg = cmd.arg if cmd and cmd.kind == "FINAL" else ""
-            out = extract_final_sids(arg, reply)
-            trace["commands"].append({"cmd": "FINAL(forced)", "arg": (arg or reply)[:500],
-                                      "reply": reply[:1200],
-                                      "ms": round((time.perf_counter() - _t0) * 1000),
-                                      **diag})
-            return out
+        final_raw = session.run(max_calls)
 
         if not (final_raw and corpus.normalize_sids(final_raw)):
             # No FINAL / empty FINAL / unparseable sids -> prompt once for closure.
@@ -323,7 +173,7 @@ def refine_context(
             # whereas the noise of all 16 entries acts as cover on hard questions.
             if final_raw:
                 trace["final_raw_unresolved"] = final_raw[:20]
-            final_raw = _ask_final(0)
+            final_raw = session.force_final(seed)
 
         # Uncertainty signal: an agent refusing to FINAL on its own means it found
         # no confirmable evidence for an answer (_abs abstention questions fall back
@@ -360,7 +210,7 @@ def refine_context(
             # the full set. Note: the evidence_floor blind pad was retired on
             # 2026-07-20, so its value is no longer borrowed here and the fallback is
             # written as a literal 12.
-            verified_norm = corpus.normalize_sids(list(verified_sids))
+            verified_norm = corpus.normalize_sids(list(session.verified_sids))
             fvf_min = int(p.get("grep_agent_force_verified_min", 12))
             # Narrowing requires: the flag on, a non-abstention question, and enough
             # verified evidence. Fail any one of those -> keep the full context.
@@ -371,13 +221,13 @@ def refine_context(
                 return finalize_from_raw(
                     final_raw=verified_norm,
                     context=context, corpus=corpus, seed=seed,
-                    verified_sids=verified_sids,
-                    vector_candidate_sids=vector_candidate_sids,
+                    verified_sids=session.verified_sids,
+                    vector_candidate_sids=session.vector_candidate_sids,
                     question=question, question_date=question_date, category=category,
                     llm=llm, p=p, trace=trace,
                 )
             trace["fallback"] = "no_final"
-            trace["verified_sids"] = corpus.normalize_sids(list(verified_sids))
+            trace["verified_sids"] = corpus.normalize_sids(list(session.verified_sids))
             if bool(p.get("grep_agent_abstention_hint", 0)):
                 trace["abstention_hint"] = True
                 return context + ABSTENTION_HINT, trace
@@ -401,14 +251,14 @@ def refine_context(
         # back by GREP/READ/VECTOR is trusted across the board. The only unverified
         # things left are hallucinated sids, which _rebuild_context drops naturally
         # because the corpus cannot resolve them.
-        trace["verified_sids"] = corpus.normalize_sids(list(verified_sids))
-        trace["vector_candidate_sids"] = corpus.normalize_sids(list(vector_candidate_sids))
+        trace["verified_sids"] = corpus.normalize_sids(list(session.verified_sids))
+        trace["vector_candidate_sids"] = corpus.normalize_sids(list(session.vector_candidate_sids))
         seed_set = set(corpus.normalize_sids(seed))
         trace["evidence_provenance"] = {
             s: (
-                "seed+verified" if s in seed_set and s in verified_sids
+                "seed+verified" if s in seed_set and s in session.verified_sids
                 else "seed" if s in seed_set
-                else "verified" if s in verified_sids
+                else "verified" if s in session.verified_sids
                 else "unverified"
             )
             for s in final
@@ -464,8 +314,8 @@ def refine_context(
                         "candidate turns (NOT yet verified — check with READ/GREP before "
                         "including):\n" + "\n".join(lines)
                     )
-            messages.append({"role": "user", "content": gap_msg})
-            extra_raw = _run_loop(verify_budget)
+            session.tell(gap_msg)
+            extra_raw = session.run(verify_budget)
             if not extra_raw:
                 break
             extra = corpus.normalize_sids(extra_raw)
