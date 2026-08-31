@@ -7,10 +7,9 @@ from typing import Any
 
 import numpy as np
 
-from grace_mem.llm.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
 from grace_mem.pipeline.ablation import flag_enabled
 from grace_mem.pipeline.hyde import generate_hyde_vector
-from grace_mem.pipeline.keyword_cache import keyword_cache
+from grace_mem.pipeline.keywords import generate_query_keywords
 from grace_mem.pipeline.query_rewrite import maybe_rewrite_retrieval_question
 from grace_mem.pipeline.rendering import render_context_text
 
@@ -342,131 +341,6 @@ class Retriever:
         )
         _trace_pretty_log.info(waterfall_text)
 
-    def generate_query_keywords(self, question: str, request_id: str | None = None,
-                                max_retries: int = 5,
-                                retrieval_guidance: str | None = None) -> KeywordExtractionResult:
-        """
-        Extract local/global keywords from query.
-        Retries up to max_retries times only if the LLM output is unparseable.
-        Empty or partial keyword lists are allowed so retrieval can continue
-        with whichever signals are available.
-        """
-        import re as _re
-        timer = _StepTimer()
-        guidance_section = ""
-        if retrieval_guidance:
-            guidance_section = f"\nRetrieval guidance:\n{retrieval_guidance}\n"
-        keyword_prompt = KEYWORD_EXTRACTION_PROMPT.format(
-            query=question, guidance_section=guidance_section
-        )
-        last_error = ""
-        js = ""
-
-        _jlog(
-            "generate_query_keywords_start",
-            request_id,
-            step="1",
-            question=question,
-            max_retries=max_retries,
-        )
-
-        # Reproducibility: return cached keywords if this exact prompt was seen.
-        cached = keyword_cache.get(keyword_prompt)
-        if cached is not None:
-            _jlog(
-                "generate_keywords_cache_hit",
-                request_id,
-                step="1",
-                high_level_count=len(cached.high_level_keywords),
-                low_level_count=len(cached.low_level_keywords),
-                high_level_keywords=cached.high_level_keywords,
-                low_level_keywords=cached.low_level_keywords,
-                elapsed_sec=timer.sec(),
-            )
-            return cached
-
-        for attempt in range(1, max_retries + 1):
-            try:
-                _jlog(
-                    "generate_keywords_attempt_start",
-                    request_id,
-                    step="1",
-                    attempt=attempt,
-                )
-                js, sec = self.llm.generate_llm_keyword(keyword_prompt)
-                _jlog(
-                    "generate_keywords_llm_done",
-                    request_id,
-                    step="1",
-                    attempt=attempt,
-                    latency_sec=sec,
-                )
-
-                # Strip <think>...</think> or any prose before the JSON object
-                m = _re.search(r'\{.*\}', js, _re.DOTALL)
-                if m:
-                    js = m.group(0)
-
-                res = KeywordExtractionResult.model_validate_json(js)
-
-                if not res.high_level_keywords and not res.low_level_keywords:
-                    _jlog(
-                        "generate_keywords_empty",
-                        request_id,
-                        step="1",
-                        attempt=attempt,
-                        high_level_count=len(res.high_level_keywords),
-                        low_level_count=len(res.low_level_keywords),
-                    )
-                    if attempt < max_retries:
-                        continue
-                elif not res.high_level_keywords or not res.low_level_keywords:
-                    _jlog(
-                        "generate_keywords_partial",
-                        request_id,
-                        step="1",
-                        attempt=attempt,
-                        high_level_count=len(res.high_level_keywords),
-                        low_level_count=len(res.low_level_keywords),
-                    )
-
-                _jlog(
-                    "generate_query_keywords_result",
-                    request_id,
-                    step="1",
-                    attempt=attempt,
-                    high_level_count=len(res.high_level_keywords),
-                    low_level_count=len(res.low_level_keywords),
-                    high_level_keywords=res.high_level_keywords,
-                    low_level_keywords=res.low_level_keywords,
-                    elapsed_sec=timer.sec(),
-                )
-                # Cache non-empty results so reruns are reproducible.
-                if res.low_level_keywords or res.high_level_keywords:
-                    keyword_cache.put(keyword_prompt, res)
-                return res
-
-            except Exception as e:
-                last_error = str(e)
-                _jlog(
-                    "generate_keywords_attempt_failed",
-                    request_id,
-                    step="1",
-                    attempt=attempt,
-                    error=last_error,
-                )
-
-        # All retries exhausted
-        _jlog(
-            "generate_keywords_give_up",
-            request_id,
-            step="1",
-            max_retries=max_retries,
-            last_error=last_error,
-            raw_output_preview=repr(js[:500]) if js else "",
-            elapsed_sec=timer.sec(),
-        )
-        return KeywordExtractionResult()
 
 
     def assemble_context_from_query(
@@ -1383,7 +1257,7 @@ class Retriever:
 
         try:
             # --- Pass-2 keywords ---
-            kw2 = self.generate_query_keywords(rewritten_q, request_id=request_id)
+            kw2 = generate_query_keywords(llm=self.llm, question=rewritten_q, request_id=request_id)
 
             # --- Pass-2 retrieval with relaxed filter thresholds ---
             scale = self.cfg.adaptive_threshold_scale
@@ -1667,8 +1541,8 @@ class Retriever:
                 _jlog("ablation_no_keywords_applied", request_id, step="1")
                 kw = KeywordExtractionResult(high_level_keywords=[], low_level_keywords=[])
             else:
-                kw = self.generate_query_keywords(
-                    rewritten_question, request_id=request_id,
+                kw = generate_query_keywords(llm=self.llm,
+                    question=rewritten_question, request_id=request_id,
                     retrieval_guidance=retrieval_guidance,
                 )
 
