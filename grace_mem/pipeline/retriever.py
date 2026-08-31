@@ -10,6 +10,7 @@ import numpy as np
 from grace_mem.llm.prompts.hyde_prompting import HYDE_SYSTEM, HYDE_USER
 from grace_mem.llm.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
 from grace_mem.pipeline.keyword_cache import keyword_cache
+from grace_mem.pipeline.query_rewrite import maybe_rewrite_retrieval_question
 from grace_mem.pipeline.rendering import render_context_text
 
 # Import modular components
@@ -36,11 +37,6 @@ from grace_mem.utils.common import KeywordExtractionResult
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
 from grace_mem.utils.query_time_parser import parse_query_time
 from grace_mem.utils.raw_context_lookup import RawContextLookup
-from grace_mem.utils.temporal import (
-    build_time_context,
-    rewrite_temporal_text,
-    time_rewrite_ablation_enabled,
-)
 
 _jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")
 _trace_jlog = make_module_jlog(name="grace_mem.Retriever.Trace", filename="kg_retrieval_trace.jsonl")
@@ -56,90 +52,6 @@ def _env_flag_enabled(name: str) -> bool:
     return os.getenv(name, "0").lower() not in ("0", "", "false")
 
 
-def _maybe_rewrite_retrieval_question(
-    question: str,
-    query_time: str | None,
-    request_id: str | None,
-) -> str:
-    """Step 0b: rewrite relative temporal expressions for retrieval only."""
-    if time_rewrite_ablation_enabled():
-        _jlog(
-            "query_temporal_rewrite_skipped",
-            request_id,
-            step="0b",
-            reason="ablation_no_time_rewrite",
-        )
-        return question
-
-    if not query_time:
-        _jlog(
-            "query_temporal_rewrite_skipped",
-            request_id,
-            step="0b",
-            reason="no_query_time",
-        )
-        return question
-
-    reference_dt = parse_query_time(query_time)
-    if reference_dt is None:
-        _jlog(
-            "query_temporal_rewrite_failed",
-            request_id,
-            step="0b",
-            reason="parse_query_time_failed",
-            query_time=query_time,
-        )
-        return question
-
-    context = build_time_context(
-        reference_dt=reference_dt,
-        reference_time_str=query_time,
-        source="retriever",
-    )
-    rewritten_question, temporal_meta = rewrite_temporal_text(question, context)
-    constraints = temporal_meta.get("constraints", [])
-    expressions_count = temporal_meta.get("expressions_count", 0)
-    if rewritten_question != question:
-        _jlog(
-            "query_temporal_rewrite",
-            request_id,
-            step="0b",
-            original=question,
-            rewritten=rewritten_question,
-            reference_time=temporal_meta.get("reference_time"),
-            expressions_count=expressions_count,
-            constraints=[
-                {
-                    "original_text": c.get("original_text"),
-                    "operator": c.get("operator"),
-                    "status": (c.get("resolution") or {}).get("status"),
-                    "confidence": (c.get("resolution") or {}).get("confidence"),
-                    "granularity": (c.get("resolution") or {}).get("granularity"),
-                    "start": (c.get("resolution") or {}).get("start"),
-                    "end": (c.get("resolution") or {}).get("end"),
-                    "normalized_text": (c.get("resolution") or {}).get("normalized_text"),
-                }
-                for c in constraints
-            ],
-        )
-    else:
-        _jlog(
-            "query_temporal_rewrite_no_change",
-            request_id,
-            step="0b",
-            original=question,
-            reference_time=temporal_meta.get("reference_time"),
-            expressions_count=expressions_count,
-            constraints=[
-                {
-                    "original_text": c.get("original_text"),
-                    "status": (c.get("resolution") or {}).get("status"),
-                    "confidence": (c.get("resolution") or {}).get("confidence"),
-                }
-                for c in constraints
-            ],
-        )
-    return rewritten_question
 
 
 
@@ -1767,7 +1679,7 @@ class Retriever:
 
         try:
             # 0b) Rewrite relative temporal expressions in the question
-            rewritten_question = _maybe_rewrite_retrieval_question(
+            rewritten_question = maybe_rewrite_retrieval_question(
                 question,
                 query_time,
                 request_id,
