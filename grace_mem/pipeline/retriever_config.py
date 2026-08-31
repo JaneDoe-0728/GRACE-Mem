@@ -85,11 +85,10 @@ class FilterConfig:
 class EvidenceConfig:
     """How surviving candidates become the Evidence block the LLM reads.
 
-    The largest group, because three separable decisions grew together: which
-    text to return for a summary (raw turn, summary, or the :u/:a split), which
-    return for them (raw turn vs summary vs the :u/:a split), and how many
-    survive (top-k, direct-vector, rerank). If this file splits further, the
-    seam runs through here.
+    The largest group, because two separable decisions grew together: which
+    text to return for a summary (raw turn, summary, or the :u/:a split), and
+    how many survive (top-k, direct-vector, rerank). If this file splits
+    further, the seam runs between them.
     """
 
     summary_embed_dim: int = 1024
