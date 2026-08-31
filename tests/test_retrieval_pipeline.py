@@ -33,21 +33,23 @@ from tests.retrieval_fakes import (
     CallLog,
     FakeEvidenceFilter,
     FakeGraph,
-    FakePageRank,
     FakeSearcher,
     FakeSpreadingActivation,
     cache,
 )
 
 SNAPSHOT_DIR = Path(__file__).parent / "fixtures"
-FILTER_METHODS = ["similarity", "rrf", "ppr", "rrf+ppr", "reranker_only"]
+# Only one filter strategy remains: the reranker is the filter. The other four
+# were deleted with summary_scoring -- the paper never used them, and neither
+# did experiment_config.
+FILTER_METHODS = ["reranker_only"]
 
 QUESTION = "What did the marathon runner say about new shoes?"
 LOW_LEVEL = ["marathon", "shoes"]
 HIGH_LEVEL = ["running", "purchase"]
 
 
-def _retriever(filter_method: str, **overrides) -> Retriever:
+def _retriever(**overrides) -> Retriever:
     """A Retriever wired to doubles, bypassing an __init__ that wants real services.
 
     The same pattern as tests/test_adaptive_trace.py. Only the components
@@ -55,12 +57,11 @@ def _retriever(filter_method: str, **overrides) -> Retriever:
     it touched would raise, which is a useful failure rather than a silent one.
     """
     r = object.__new__(Retriever)
-    r.cfg = RetrieverConfig(filter_method=filter_method, use_spreading_activation=True, **overrides)
+    r.cfg = RetrieverConfig(use_spreading_activation=True, **overrides)
     r.log = CallLog()
     r.searcher = FakeSearcher(r.log)
     r.graph = FakeGraph(r.log)
     r.evidence_filter = FakeEvidenceFilter(r.log)
-    r.ppr_engine = FakePageRank(r.log)
     r.sa_engine = FakeSpreadingActivation(r.log)
     r.cache = cache()
     r.llm = None
@@ -69,8 +70,8 @@ def _retriever(filter_method: str, **overrides) -> Retriever:
     return r
 
 
-def _capture(filter_method: str) -> dict:
-    r = _retriever(filter_method)
+def _capture() -> dict:
+    r = _retriever()
     entities, relationships, context_text, query_vec = r.assemble_context_from_query(
         question=QUESTION,
         low_level_keywords=LOW_LEVEL,
@@ -88,28 +89,24 @@ def _capture(filter_method: str) -> dict:
     }
 
 
-@pytest.mark.parametrize("filter_method", FILTER_METHODS)
-def test_assemble_context_matches_snapshot(filter_method: str) -> None:
-    """The candidate sets and rendered context are unchanged for this dispatch path."""
-    path = SNAPSHOT_DIR / f"retrieval_{filter_method.replace('+', '_')}.json"
-    actual = _capture(filter_method)
+def test_assemble_context_matches_snapshot() -> None:
+    """The candidate set and rendered context are unchanged."""
+    path = SNAPSHOT_DIR / "retrieval_reranker_only.json"
+    actual = _capture()
 
     if os.getenv("KG_UPDATE_RETRIEVAL_SNAPSHOTS") == "1":
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         pytest.skip(f"snapshot rewritten: {path.name}")
 
-    assert path.exists(), (
-        f"no snapshot for filter_method={filter_method}. "
-        "Generate with KG_UPDATE_RETRIEVAL_SNAPSHOTS=1."
-    )
+    assert path.exists(), "no snapshot. Generate with KG_UPDATE_RETRIEVAL_SNAPSHOTS=1."
     assert actual == json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_every_dispatch_path_reaches_the_search_stage() -> None:
+def test_the_search_stage_actually_runs() -> None:
     """A guard on the guard: a snapshot of an empty run would pass and prove nothing."""
     for method in FILTER_METHODS:
-        captured = _capture(method)
+        captured = _capture()
         names = [c["call"] for c in captured["calls"]]
         for required in ("searcher.embed_query", "searcher.search_entities_hybrid",
                          "searcher.search_relationships_by_vec",
@@ -118,11 +115,18 @@ def test_every_dispatch_path_reaches_the_search_stage() -> None:
         assert names[0] == "searcher.embed_query", f"{method} did not embed first: {names[0]}"
 
 
-def test_the_dispatch_paths_do_not_all_agree() -> None:
-    """If every filter_method produced the same result, the snapshots would not
-    distinguish a broken dispatch from a working one."""
-    results = {m: tuple(_capture(m)["entity_ids"]) for m in FILTER_METHODS}
-    assert len(set(results.values())) > 1, f"all five paths returned the same entities: {results}"
+def test_the_reranker_does_the_filtering() -> None:
+    """Stage 3 passes everything through; the reranker is what cuts.
+
+    Replaces a test that compared the five dispatch paths against each other.
+    With one path left, what is worth pinning is that stage 3 does no cutting
+    of its own -- if it started to, the reranker would be scoring a
+    pre-narrowed pool without anyone noticing."""
+    calls = [c for c in _capture()["calls"] if c["call"].startswith("filter.")]
+    assert [c["call"] for c in calls] == [
+        "filter.compute_subgraph_intersection",
+        "filter.rerank_filter",
+    ], f"stage 3 filtered before the reranker: {[c[chr(39)+chr(39)] for c in calls]}"
 
 
 def test_an_empty_candidate_pool_short_circuits_the_whole_query() -> None:
@@ -134,7 +138,7 @@ def test_an_empty_candidate_pool_short_circuits_the_whole_query() -> None:
     caught it because the return types disagreed. This test catches it whether
     or not the types happen to.
     """
-    r = _retriever("similarity")
+    r = _retriever()
 
     class _EmptyGraph:
         def get_node_subgraph(self, entity_ids):

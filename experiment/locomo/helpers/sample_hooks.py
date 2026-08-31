@@ -22,7 +22,7 @@ from experiment.locomo.utils.graph import (
     write_graph_export,
 )
 from experiment.locomo.utils.log import log_event
-from grace_mem.storage.cache import CacheStore
+from grace_mem.adapters.cache.cache import CacheStore
 
 
 def ensure_worker_repo_path() -> None:

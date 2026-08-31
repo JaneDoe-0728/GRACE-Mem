@@ -18,12 +18,12 @@ from pathlib import Path
 import pandas as pd
 
 from experiment.longmem.utils.io import read_csv_frame
-from grace_mem.utils.query_time_parser import parse_query_time
-from grace_mem.utils.temporal import (
+from grace_mem.temporal import (
     build_time_context,
     rewrite_temporal_text,
     time_rewrite_ablation_enabled,
 )
+from grace_mem.temporal.query_time_parser import parse_query_time
 
 
 class QAEvalStage:
@@ -258,8 +258,8 @@ if __name__ == "__main__":
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
     from experiment.experiment_config import RETRIEVAL_PARAMS
-    from grace_mem.llm import LLMClient
-    from grace_mem.pipeline.factory import build_pipeline as _build_pipeline
+    from grace_mem.adapters.llm import LLMClient
+    from grace_mem.bootstrap import build_pipeline as _build_pipeline
 
     CSV_PATH = "./experiment/longmem/script_data/temporal_reasoning/2ebe6c92.csv"
     with _build_pipeline() as runtime:

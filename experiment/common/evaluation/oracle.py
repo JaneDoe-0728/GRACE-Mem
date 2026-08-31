@@ -43,7 +43,7 @@ from experiment.locomo.helpers.dataset import (
     normalize_qa_item,
 )
 from experiment.longmem.stages.qa_eval import QAEvalStage
-from grace_mem.llm import LLMClient
+from grace_mem.adapters.llm import LLMClient
 
 LOCOMO_DATA = _ROOT / "experiment" / "locomo" / "data" / "locomo10.json"
 LOCOMO_OUTPUT = _ROOT / "experiment" / "locomo" / "output" / "standard"

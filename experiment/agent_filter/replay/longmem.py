@@ -30,7 +30,7 @@ import pandas as pd
 from experiment.agent_filter.harness import refine_context
 from experiment.common.paths import REPO_ROOT
 from experiment.longmem.stages.qa_eval import QAEvalStage
-from grace_mem.llm import LLMClient
+from grace_mem.adapters.llm import LLMClient
 
 OUTPUT_ROOT = REPO_ROOT / "experiment" / "longmem" / "output"
 DATA_ROOT = REPO_ROOT / "experiment" / "longmem" / "script_data"

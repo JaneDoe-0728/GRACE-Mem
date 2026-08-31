@@ -78,15 +78,16 @@ from experiment.longmem.utils.io import (
     read_csv_frame,
     write_csv_frame,
 )
-from grace_mem.embeddings import embedder
-from grace_mem.graph.falkordb import graph_from_env
-from grace_mem.llm import LLMClient, token_tracker
-from grace_mem.pipeline.ingestor import Ingestor
-from grace_mem.pipeline.retriever import Retriever
-from grace_mem.pipeline.retriever_config import RetrieverConfig
-from grace_mem.services import EntityManager, Provenance, RelationshipManager
-from grace_mem.storage import VDBManager
-from grace_mem.utils.logger_config import make_module_jlog
+from grace_mem.adapters.embedding.embeddings import embedder
+from grace_mem.adapters.graph.falkordb import graph_from_env
+from grace_mem.adapters.llm import LLMClient, token_tracker
+from grace_mem.adapters.vector_store import VDBManager
+from grace_mem.domain.provenance import Provenance
+from grace_mem.ingestion.managers import EntityManager, RelationshipManager
+from grace_mem.ingestion.pipeline import Ingestor
+from grace_mem.retrieval.config import RetrieverConfig
+from grace_mem.retrieval.pipeline import Retriever
+from grace_mem.runtime.logger_config import make_module_jlog
 
 logger = logging.getLogger(__name__)
 
@@ -410,7 +411,7 @@ class DatasetRunner:
         )
 
         if self._split_lookup is None:
-            from grace_mem.utils.raw_context_lookup import RawContextLookup
+            from grace_mem.retrieval.raw_turn_lookup import RawContextLookup
 
             print(f"[SPLIT] Loading raw context from {SCRIPT_DATA_DIR} ...")
             self._split_lookup = RawContextLookup(SCRIPT_DATA_DIR)
@@ -688,14 +689,14 @@ class DatasetRunner:
 
         # Monkey-patch the _jlog functions to use dataset-specific loggers
         # This overrides the module-level _jlog defined at import time
-        import grace_mem.graph.falkordb as falkordb_module
-        import grace_mem.pipeline.ingest_steps.sync as sync_step_module
-        import grace_mem.pipeline.ingestor as ingestor_module
-        import grace_mem.pipeline.retrieval_steps.evidence as evidence_module
-        import grace_mem.pipeline.retrieval_steps.filtering as filtering_module
-        import grace_mem.pipeline.retrieval_steps.search as search_module
-        import grace_mem.pipeline.retrieval_steps.temporal as temporal_module
-        import grace_mem.pipeline.retriever as retriever_module
+        import grace_mem.adapters.graph.falkordb as falkordb_module
+        import grace_mem.ingestion.pipeline as ingestor_module
+        import grace_mem.ingestion.steps.sync as sync_step_module
+        import grace_mem.retrieval.evidence as evidence_module
+        import grace_mem.retrieval.pipeline as retriever_module
+        import grace_mem.retrieval.steps.filtering as filtering_module
+        import grace_mem.retrieval.steps.search as search_module
+        import grace_mem.retrieval.steps.temporal_relevance as temporal_module
         self._bind_module_logger(ingestor_module, ingestor_jlog)
         self._bind_module_logger(sync_step_module, ingestor_jlog)
         self._bind_module_logger(

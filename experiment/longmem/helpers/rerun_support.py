@@ -116,12 +116,12 @@ def output_csv_needs_rerun(csv_path: Path) -> bool:
 
 def setup_retrieval_loggers(dataset_name: str, log_dir: Path) -> None:
     """Point retrieval logging at this dataset's directory for the rerun."""
-    import grace_mem.pipeline.retrieval_steps.evidence as evidence_module
-    import grace_mem.pipeline.retrieval_steps.filtering as filtering_module
-    import grace_mem.pipeline.retrieval_steps.search as search_module
-    import grace_mem.pipeline.retrieval_steps.temporal as temporal_module
-    import grace_mem.pipeline.retriever as retriever_module
-    from grace_mem.utils.logger_config import make_module_jlog
+    import grace_mem.retrieval.evidence as evidence_module
+    import grace_mem.retrieval.pipeline as retriever_module
+    import grace_mem.retrieval.steps.filtering as filtering_module
+    import grace_mem.retrieval.steps.search as search_module
+    import grace_mem.retrieval.steps.temporal_relevance as temporal_module
+    from grace_mem.runtime.logger_config import make_module_jlog
 
     retriever_module._jlog = make_module_jlog(
         name=f"grace_mem.Retriever.{dataset_name}",
@@ -182,7 +182,7 @@ def cleanup_retrieval_loggers(log_dir: Path) -> None:
     handles behind. Without this the process eventually exhausts its descriptor
     limit, partway through a long sweep and far from the cause.
     """
-    from grace_mem.utils.logger_config import close_event_loggers
+    from grace_mem.runtime.logger_config import close_event_loggers
 
     close_event_loggers(log_dir=str(log_dir))
 

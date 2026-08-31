@@ -47,10 +47,10 @@ if __package__ in (None, ""):
         sys.path.insert(0, str(repo_root))
 
 try:
-    from grace_mem.pipeline.retrieval_steps import TemporalRelevanceCalculator
-    from grace_mem.storage import MGR
-    from grace_mem.utils.query_time_parser import detect_and_parse_time_expressions
-    from grace_mem.utils.temporal import time_rewrite_ablation_enabled
+    from grace_mem.adapters.vector_store import MGR
+    from grace_mem.retrieval.steps import TemporalRelevanceCalculator
+    from grace_mem.temporal import time_rewrite_ablation_enabled
+    from grace_mem.temporal.query_time_parser import detect_and_parse_time_expressions
 except Exception as e:
     raise RuntimeError(
         f"Failed to import GRACE-Mem modules. Ensure PYTHONPATH includes your project root. Original error: {e!r}"
@@ -1095,7 +1095,7 @@ def replay_summary_fact_from_run_answer(item: dict) -> dict:
 
 def _extract_latest_t_tag(kg_context: str) -> str | None:
     """Return the most recent date string found in [t:...] tags in the KG context."""
-    from grace_mem.utils.query_time_parser import parse_query_time
+    from grace_mem.temporal.query_time_parser import parse_query_time
     dates = []
     for m in re.finditer(r'\[t:([^\]]+)\]', kg_context):
         dt = parse_query_time(m.group(1).strip())
@@ -1462,7 +1462,7 @@ def main():
         output_csv = Path(__file__).resolve().parent / "data" / f"sample{args.sample_index}_eval.csv"
 
     # Standalone mode owns one pipeline runtime for retrieval and graph access.
-    from grace_mem.pipeline.factory import build_pipeline
+    from grace_mem.bootstrap import build_pipeline
 
     with build_pipeline(retriever_config=RERANKER_PARAMS) as runtime:
         retriever = runtime.retriever

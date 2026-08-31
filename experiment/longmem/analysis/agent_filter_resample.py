@@ -30,7 +30,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 
 from experiment.longmem.stages.qa_eval import QAEvalStage
-from grace_mem.llm import LLMClient
+from grace_mem.adapters.llm import LLMClient
 
 OUTPUT_ROOT = _ROOT / "experiment" / "longmem" / "output"
 

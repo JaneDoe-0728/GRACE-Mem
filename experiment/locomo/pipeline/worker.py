@@ -469,7 +469,7 @@ def _run_locomo_gold_summary_only(args) -> None:
 
     from experiment.locomo.helpers.dataset import resolve_dataset_path
     from experiment.locomo.stages import judge, qa_eval
-    from grace_mem.llm import token_tracker
+    from grace_mem.adapters.llm import token_tracker
 
     dataset = "locomo"
     dataset_json = resolve_dataset_path(kind="qa_json", explicit_path=args.dataset_json)
@@ -553,7 +553,7 @@ def _run_locomo_gold_raw_text_only(args) -> None:
 
     from experiment.locomo.helpers.dataset import resolve_dataset_path
     from experiment.locomo.stages import judge, qa_eval
-    from grace_mem.llm import token_tracker
+    from grace_mem.adapters.llm import token_tracker
 
     dataset = "locomo"
     dataset_json = resolve_dataset_path(kind="qa_json", explicit_path=args.dataset_json)
@@ -631,7 +631,7 @@ def _run_locomo_replay_summary_raw_text_from_run(args) -> None:
 
     from experiment.locomo.helpers.dataset import resolve_dataset_path
     from experiment.locomo.stages import judge, qa_eval
-    from grace_mem.llm import token_tracker
+    from grace_mem.adapters.llm import token_tracker
 
     if not args.replay_run_dir:
         raise ValueError("--replay-run-dir is required for replay_summary_raw_text_from_run mode")
@@ -722,7 +722,7 @@ def _run_locomo_replay_summary_fact_from_run(args) -> None:
 
     from experiment.locomo.helpers.dataset import resolve_dataset_path
     from experiment.locomo.stages import judge, qa_eval
-    from grace_mem.llm import token_tracker
+    from grace_mem.adapters.llm import token_tracker
 
     if not args.replay_run_dir:
         raise ValueError("--replay-run-dir is required for replay_summary_fact_from_run mode")
@@ -823,7 +823,7 @@ def run_locomo_worker(args) -> None:
     )
     from experiment.locomo.helpers.dataset import load_raw_samples, resolve_dataset_path
     from experiment.locomo.stages import ingest, judge
-    from grace_mem.llm import token_tracker
+    from grace_mem.adapters.llm import token_tracker
 
     dataset = "locomo"
     dataset_json = resolve_dataset_path(
@@ -915,12 +915,12 @@ def run_locomo_worker(args) -> None:
         if artifact_dir is not None:
             restore_artifacts_from_dir(artifact_dir)
 
-        from grace_mem.storage import MGR
+        from grace_mem.adapters.vector_store import MGR
         if artifact_dir is not None:
             reload_mgr_state_from_artifacts(MGR)
 
         from experiment.locomo.stages import qa_eval
-        from grace_mem.pipeline.factory import build_pipeline
+        from grace_mem.bootstrap import build_pipeline
 
         pipeline = build_pipeline(retriever_config=RERANKER_PARAMS, ingestor_config=_INGESTOR_CONFIG)
         retriever = pipeline.retriever

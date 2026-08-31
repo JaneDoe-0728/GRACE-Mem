@@ -66,15 +66,6 @@ class FilterConfig:
     use_reranker: bool = True
     reranker_threshold: float = -3.0
     reranker_topk: int = 5
-    # Step 2.6 filter method — single axis for ablation
-    filter_method: str = "similarity"      # "similarity" | "rrf" | "ppr" | "rrf+ppr" | "reranker_only"
-    # RRF — active for "rrf", "rrf+ppr"
-    rrf_k: float = 60.0
-    rrf_candidate_k: int = 50             # RRF top-N fed into PPR ("rrf+ppr" only)
-    # PPR — active for "ppr", "rrf+ppr"
-    ppr_alpha: float = 0.85
-    ppr_top_k: int = 10
-    ppr_inverse_degree: bool = False
     # Reranker-only — active for "reranker_only"
     rrk_ent_topk: int = 5          # max entities to keep
     rrk_rel_topk: int = 5          # max relationships to keep

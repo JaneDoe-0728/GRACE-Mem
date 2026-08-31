@@ -27,7 +27,9 @@ _embed_fn = None
 def _get_embed():
     global _embed_fn
     if _embed_fn is None:
-        from grace_mem.embeddings import embedder  # lazy: loads qwen3-0.6b onto the GPU
+        from grace_mem.adapters.embedding.embeddings import (
+            embedder,  # lazy: loads qwen3-0.6b onto the GPU
+        )
         _embed_fn = embedder.embed
     return _embed_fn
 
@@ -36,7 +38,7 @@ def _get_vdb(artifact_dir: Path):
     key = str(artifact_dir)
     with _lock:
         if key not in _vdb_cache:
-            from grace_mem.storage.chroma_vdb import SummariesVDB
+            from grace_mem.adapters.vector_store.chroma_vdb import SummariesVDB
             _vdb_cache[key] = SummariesVDB(
                 dim=1024,
                 path=str(Path(artifact_dir) / "summaries_chroma"),

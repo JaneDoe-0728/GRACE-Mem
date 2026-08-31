@@ -32,10 +32,10 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from grace_mem.utils.temporal.classifier import classify_single_expression
-from grace_mem.utils.temporal.normalizer import build_time_context
-from grace_mem.utils.temporal.resolver import resolve_match
-from grace_mem.utils.temporal.types import ResolutionStatus
+from grace_mem.temporal.classifier import classify_single_expression
+from grace_mem.temporal.normalizer import build_time_context
+from grace_mem.temporal.resolver import resolve_match
+from grace_mem.temporal.types import ResolutionStatus
 
 # ---------------------------------------------------------------------------
 # constants (local copies – do not touch the project parser)

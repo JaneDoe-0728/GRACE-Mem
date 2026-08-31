@@ -89,7 +89,7 @@ def cluster(llm, question: str, answers: list[str]) -> list[list[int]]:
 
 def main():
     from experiment.common.evaluation.judge import JudgeEngine, openai_api_key
-    from grace_mem.llm import LLMClient
+    from grace_mem.adapters.llm import LLMClient
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", nargs=3, default=["locomo-n8-120b-fo2", "locomo-n8-120b-fo2r", "vote3"])

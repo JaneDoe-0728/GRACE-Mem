@@ -1,5 +1,5 @@
 """Re-run the 8 split-embed retrieval experiments with the *current* reranker
-code (grace_mem/utils/reranker.py), reproducing each run's original config.
+code (grace_mem/retrieval/reranker.py), reproducing each run's original config.
 
 Config source of truth is experiment/experiment_config.py. Only the 5 swept
 knobs differ between experiments; this driver edits ONLY those lines (regex,
@@ -33,7 +33,7 @@ from experiment.common.evaluation.judge import (
     find_column,
 )
 from experiment.common.paths import REPO_ROOT
-from grace_mem.llm import LLMClient
+from grace_mem.adapters.llm import LLMClient
 
 CONFIG_PATH = REPO_ROOT / "experiment" / "experiment_config.py"
 OUTPUT_DIR = REPO_ROOT / "experiment" / "longmem" / "output"

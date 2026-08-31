@@ -25,7 +25,6 @@ from grace_mem.retrieval.steps import (
     EvidenceFilter,
     SAConfig,
     SpreadingActivationEngine,
-    SubgraphPageRank,
 )
 from grace_mem.retrieval.steps.adaptive import additive_merge
 from grace_mem.retrieval.steps.narrowing import NarrowingModule
@@ -122,7 +121,6 @@ class Retriever:
             cache=self.cache
         )
 
-        self.ppr_engine = SubgraphPageRank()
 
         # Spreading activation engine (constructed regardless; only runs when cfg flag is on)
         self.sa_engine = SpreadingActivationEngine(
@@ -716,7 +714,7 @@ class Retriever:
         merged_branch: list,
         append_trace,
     ) -> tuple:
-        """Stage 3: narrow the candidate pool, dispatching on filter_method.
+        """Stage 3: pass the intersected pool through to the reranker.
 
         Five strategies behind one flag -- "similarity", "rrf", "ppr",
         "rrf+ppr", "reranker_only" -- so that changing which one a run uses is
@@ -730,143 +728,29 @@ class Retriever:
             (filtered_entity_ids, filtered_rel_ids, filtered_entities,
              filtered_rels, ent_id2meta, rel_id2meta)
         """
-        # 3) Filter candidates (step 2.6) — dispatch on filter_method
+        # 3) Filter candidates (step 2.6)
         timer_filter = _StepTimer()
         _jlog(
             "filter_step_start",
             request_id,
             step="2.6",
-            filter_method=self.cfg.filter_method,
             entity_candidate_count=len(intersect_entity_ids),
             relationship_candidate_count=len(intersect_rel_ids),
             filter_ent_topk=filter_ent_topk,
             filter_rel_topk=filter_rel_topk,
         )
 
-        # Node-subgraph relation IDs (presence signal for relation RRF L3)
-        node_subgraph_rel_ids: set = {
-            nb["rel_id"]
-            for b in candidates.node_subgraph.values()
-            for nb in (b.get("neighbors") or [])
-            if "rel_id" in nb
-        }
 
-        if self.cfg.filter_method == "similarity":
-            filtered_entity_ids, filtered_rel_ids = self.evidence_filter.filter_by_similarity(
-                entity_ids=intersect_entity_ids,
-                relationship_ids=intersect_rel_ids,
-                query_vec=query_vec,
-                filter_entity_top_k=filter_ent_topk,
-                filter_relationship_top_k=filter_rel_topk,
-                filter_entity_threshold=filter_ent_threshold,
-                filter_relationship_threshold=filter_rel_threshold,
-                request_id=request_id,
-            )
-
-        elif self.cfg.filter_method in ("rrf", "rrf+ppr"):
-            rrf_top_k = (
-                filter_ent_topk
-                if self.cfg.filter_method == "rrf"
-                else self.cfg.rrf_candidate_k
-            )
-            filtered_entity_ids, filtered_rel_ids, rrf_scores = self.evidence_filter.filter_by_rrf(
-                entity_ids=intersect_entity_ids,
-                relationship_ids=intersect_rel_ids,
-                query_vec=query_vec,
-                rrf_k=self.cfg.rrf_k,
-                filter_entity_top_k=rrf_top_k,
-                filter_relationship_top_k=filter_rel_topk,
-                entity_emb_scores=candidates.entity_emb_scores,
-                entity_bm25_scores=candidates.entity_bm25_scores,
-                rel_endpoint_scores=candidates.rel_endpoint_scores,
-                rel_emb_scores=candidates.rel_emb_scores,
-                node_subgraph_rel_ids=node_subgraph_rel_ids,
-                filter_method=self.cfg.filter_method,
-                request_id=request_id,
-            )
-
-            if self.cfg.filter_method == "rrf+ppr":
-                _, rel_id2meta_pp = build_id_to_meta_maps(self.cache)
-                rrf_candidate_set = set(filtered_entity_ids)
-                induced_edges = [
-                    (rel_id2meta_pp[rid]["source_id"], rid, rel_id2meta_pp[rid]["target_id"])
-                    for rid in intersect_rel_ids
-                    if rid in rel_id2meta_pp
-                    and rel_id2meta_pp[rid].get("source_id") in rrf_candidate_set
-                    and rel_id2meta_pp[rid].get("target_id") in rrf_candidate_set
-                ]
-                ppr_entities, _ = self.ppr_engine.run_ppr(
-                    entity_ids=filtered_entity_ids,
-                    rrf_scores=rrf_scores,
-                    subgraph_edges=induced_edges,
-                    alpha=self.cfg.ppr_alpha,
-                    top_k=self.cfg.ppr_top_k,
-                    inverse_degree_weight=self.cfg.ppr_inverse_degree,
-                )
-                ppr_ent_set = set(ppr_entities)
-                filtered_entity_ids = ppr_entities
-                filtered_rel_ids = [
-                    rid for rid in intersect_rel_ids
-                    if rel_id2meta_pp.get(rid, {}).get("source_id") in ppr_ent_set
-                    and rel_id2meta_pp.get(rid, {}).get("target_id") in ppr_ent_set
-                ]
-                _jlog(
-                    "ppr_done",
-                    request_id,
-                    step="2.6",
-                    ppr_entity_count=len(filtered_entity_ids),
-                    ppr_rel_count=len(filtered_rel_ids),
-                )
-
-        elif self.cfg.filter_method == "ppr":
-            cosine_scores_ppr = self.evidence_filter.compute_cosine_scores(
-                intersect_entity_ids, query_vec
-            )
-            _, rel_id2meta_pp = build_id_to_meta_maps(self.cache)
-            ppr_candidates = sorted(intersect_entity_ids)
-            ppr_candidate_set = set(ppr_candidates)
-            induced_edges_ppr = [
-                (rel_id2meta_pp[rid]["source_id"], rid, rel_id2meta_pp[rid]["target_id"])
-                for rid in intersect_rel_ids
-                if rid in rel_id2meta_pp
-                and rel_id2meta_pp[rid].get("source_id") in ppr_candidate_set
-                and rel_id2meta_pp[rid].get("target_id") in ppr_candidate_set
-            ]
-            ppr_entities_ppr, _ = self.ppr_engine.run_ppr(
-                entity_ids=ppr_candidates,
-                rrf_scores=cosine_scores_ppr,
-                subgraph_edges=induced_edges_ppr,
-                alpha=self.cfg.ppr_alpha,
-                top_k=self.cfg.ppr_top_k,
-                inverse_degree_weight=self.cfg.ppr_inverse_degree,
-            )
-            ppr_ent_set_ppr = set(ppr_entities_ppr)
-            filtered_entity_ids = ppr_entities_ppr
-            filtered_rel_ids = [
-                rid for rid in intersect_rel_ids
-                if rel_id2meta_pp.get(rid, {}).get("source_id") in ppr_ent_set_ppr
-                and rel_id2meta_pp.get(rid, {}).get("target_id") in ppr_ent_set_ppr
-            ]
-            _jlog(
-                "ppr_done",
-                request_id,
-                step="2.6",
-                ppr_entity_count=len(filtered_entity_ids),
-                ppr_rel_count=len(filtered_rel_ids),
-            )
-
-        elif self.cfg.filter_method == "reranker_only":
-            # skip pre-filter; reranker handles selection in step 2.7
-            filtered_entity_ids = sorted(intersect_entity_ids)
-            filtered_rel_ids = sorted(intersect_rel_ids)
-        else:
-            raise ValueError(f"Unknown filter_method: {self.cfg.filter_method!r}")
+        # The reranker is the filter: everything that survived the intersection
+        # goes forward, and stage 4 scores and cuts it. Sorted so the order the
+        # reranker sees does not depend on set iteration.
+        filtered_entity_ids = sorted(intersect_entity_ids)
+        filtered_rel_ids = sorted(intersect_rel_ids)
 
         _jlog(
             "filter_step_done",
             request_id,
             step="2.6",
-            filter_method=self.cfg.filter_method,
             filtered_entities=len(filtered_entity_ids),
             filtered_rels=len(filtered_rel_ids),
             elapsed_sec=timer_filter.sec(),
@@ -1073,7 +957,7 @@ class Retriever:
             )
             return [], [], "", query_vec
 
-        # 3) Filter candidates (step 2.6) — dispatch on filter_method
+        # 3) Filter candidates (step 2.6)
         (
             filtered_entity_ids,
             filtered_rel_ids,
@@ -1096,35 +980,19 @@ class Retriever:
         )
 
         # 4) Optional reranker recovery / reranker-only selection
+        # The reranker IS the filter: it scores every candidate that survived the
+        # intersection and selects the top-K. Stage 3 does no cutting of its own.
         filtered_entity_ids_set: list[str] | None
         filtered_rel_ids_set: list[str] | None
-        if self.cfg.filter_method == "reranker_only":
-            # reranker IS the filter — score all candidates, select top-K
-            filtered_entity_ids_set, filtered_rel_ids_set = self.evidence_filter.rerank_filter(
-                question=question,
-                entity_ids=intersect_entity_ids,
-                relationship_ids=intersect_rel_ids,
-                entity_top_k=self.cfg.rrk_ent_topk,
-                relationship_top_k=self.cfg.rrk_rel_topk,
-                threshold=self.cfg.rrk_threshold,
-                request_id=request_id,
-            )
-        elif self.cfg.use_reranker:
-            recovered_entity_ids, recovered_rel_ids = self.evidence_filter.rerank_and_recover(
-                question=question,
-                all_entity_ids=intersect_entity_ids,
-                all_relationship_ids=intersect_rel_ids,
-                filtered_entity_ids=set(filtered_entity_ids),
-                filtered_relationship_ids=set(filtered_rel_ids),
-                reranker_threshold=self.cfg.reranker_threshold,
-                reranker_top_k=self.cfg.reranker_topk,
-                request_id=request_id,
-            )
-            filtered_entity_ids_set = sorted(recovered_entity_ids)
-            filtered_rel_ids_set = sorted(recovered_rel_ids)
-        else:
-            filtered_entity_ids_set = None
-            filtered_rel_ids_set = None
+        filtered_entity_ids_set, filtered_rel_ids_set = self.evidence_filter.rerank_filter(
+            question=question,
+            entity_ids=intersect_entity_ids,
+            relationship_ids=intersect_rel_ids,
+            entity_top_k=self.cfg.rrk_ent_topk,
+            relationship_top_k=self.cfg.rrk_rel_topk,
+            threshold=self.cfg.rrk_threshold,
+            request_id=request_id,
+        )
 
         if filtered_entity_ids_set is not None and filtered_rel_ids_set is not None:
             # Re-convert IDs to metadata dicts after reranker or reranker_only

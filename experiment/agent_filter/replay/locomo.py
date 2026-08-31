@@ -41,7 +41,7 @@ from experiment.agent_filter.harness import refine_context
 from experiment.agent_filter.prompting.skills import SKILLS as _SKILLS
 
 if TYPE_CHECKING:
-    from grace_mem.llm import LLMClient
+    from grace_mem.adapters.llm import LLMClient
 
 _TEMPORAL_DET = {n: d for n, d, _ in _SKILLS}["temporal-computation"]
 
@@ -54,7 +54,7 @@ _tls = threading.local()
 
 def _llm() -> LLMClient:
     if getattr(_tls, "llm", None) is None:
-        from grace_mem.llm import LLMClient
+        from grace_mem.adapters.llm import LLMClient
 
         _tls.llm = LLMClient(timeout=300.0)
     return _tls.llm
@@ -141,7 +141,7 @@ def _compiler():
     # (LLM_API/MODEL_NAME); optionally point it at a stronger endpoint via
     # LEDGER_COMPILER_API / LEDGER_COMPILER_MODEL.
     if getattr(_compiler_tls, "c", None) is None:
-        from grace_mem.llm import LLMClient
+        from grace_mem.adapters.llm import LLMClient
 
         _compiler_tls.c = LLMClient(
             base_url=os.getenv("LEDGER_COMPILER_API") or None,

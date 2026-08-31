@@ -61,16 +61,9 @@ RERANKER_PARAMS = {
     "use_reranker": True,
     "reranker_threshold": -3.0,
     "reranker_topk": 10,
-    # Filter policy / graph reranking
-    "filter_method": "reranker_only",
     "rrk_ent_topk": 25,
     "rrk_rel_topk": 25,
     "rrk_threshold": -100.0,
-    "rrf_k": 60.0,
-    "rrf_candidate_k": 50,
-    "ppr_alpha": 0.85,
-    "ppr_top_k": 10,
-    "ppr_inverse_degree": False,
     # Spreading Activation (SA-RAG)
     "use_spreading_activation": True,
     "sa_max_hops": 2,

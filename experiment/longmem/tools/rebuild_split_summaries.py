@@ -23,9 +23,9 @@ import time
 from pathlib import Path
 
 from experiment.common.paths import REPO_ROOT
-from grace_mem.utils.query_time_parser import parse_query_time
-from grace_mem.utils.raw_context_lookup import RawContextLookup
-from grace_mem.utils.temporal import build_time_context, rewrite_temporal_text
+from grace_mem.retrieval.raw_turn_lookup import RawContextLookup
+from grace_mem.temporal import build_time_context, rewrite_temporal_text
+from grace_mem.temporal.query_time_parser import parse_query_time
 
 SCRIPT_DATA_DIR = REPO_ROOT / "experiment" / "longmem" / "script_data"
 
@@ -126,7 +126,7 @@ def _validate_split_ids(ids: set[str], expected_ids: set[str] | None = None) -> 
 
 
 def _read_split_ids(chroma_dir: Path) -> set[str]:
-    from grace_mem.storage.chroma_vdb import SummariesVDB
+    from grace_mem.adapters.vector_store.chroma_vdb import SummariesVDB
 
     vdb = SummariesVDB(dim=1024, path=str(chroma_dir), collection_name="summaries")
     try:
@@ -223,7 +223,7 @@ def rebuild_artifact(artifact_dir: Path, lookup: RawContextLookup, compressor, d
     if temp_dir.exists():
         shutil.rmtree(temp_dir)
 
-    from grace_mem.storage.chroma_vdb import SummariesVDB
+    from grace_mem.adapters.vector_store.chroma_vdb import SummariesVDB
     vdb = None
     n_missing = 0
     try:
@@ -293,7 +293,7 @@ def export_artifact(artifact_dir: Path) -> dict:
     if not chroma_dir.exists():
         return {"status": "skip", "reason": "no_chroma"}
 
-    from grace_mem.storage.chroma_vdb import SummariesVDB
+    from grace_mem.adapters.vector_store.chroma_vdb import SummariesVDB
     vdb = SummariesVDB(dim=1024, path=str(chroma_dir), collection_name="summaries")
     results = vdb._collection.get(include=["metadatas"])
     vdb.close()

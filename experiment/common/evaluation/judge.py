@@ -35,7 +35,7 @@ from requests.exceptions import HTTPError, RequestException
 
 from experiment.locomo.helpers.llm import build_judge_standard_messages
 from experiment.longmem.prompts import build_judge_messages
-from grace_mem.llm import LLMClient
+from grace_mem.adapters.llm import LLMClient
 
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
