@@ -1,0 +1,159 @@
+{
+  "calls": [
+    {
+      "args": {
+        "dialogue_datetime": "2023/02/18 (Sat) 08:08",
+        "has_tctx": true,
+        "message_id": 3,
+        "session_id": 1,
+        "temporal_hints": [
+          {
+            "category": "relative_weekday",
+            "display_value": "2023-02-14",
+            "granularity": "day",
+            "markers": [
+              {
+                "entity_name": "2023-02-14",
+                "entity_type": "Date",
+                "marker_type": "DATE"
+              }
+            ],
+            "normalized_end": "2023-02-14",
+            "normalized_start": "2023-02-14",
+            "normalized_time": null,
+            "original": "last Tuesday",
+            "reference_time": "2023/02/18 (Sat) 08:08",
+            "resolved_to": "2023-02-14",
+            "status": "resolved"
+          }
+        ]
+      },
+      "call": "compressor.summarize_turn"
+    },
+    {
+      "args": {
+        "completion_delim": null,
+        "prompt_var_keys": [
+          "completion_delimiter",
+          "dialogue_datetime",
+          "entity_types",
+          "raw_conversation",
+          "record_delimiter",
+          "temporal_hints",
+          "tuple_delimiter"
+        ],
+        "record_delim": null,
+        "tuple_delim": null
+      },
+      "call": "entity_extractor.extract"
+    },
+    {
+      "args": {
+        "completion_delim": null,
+        "extracted_entity_names": [
+          "Taipei Marathon",
+          "last Tuesday",
+          "running shoes"
+        ],
+        "prompt_var_keys": [
+          "completion_delimiter",
+          "dialogue_datetime",
+          "entity_types",
+          "raw_conversation",
+          "record_delimiter",
+          "temporal_hints",
+          "tuple_delimiter"
+        ],
+        "record_delim": null,
+        "tuple_delim": null
+      },
+      "call": "relationship_extractor.extract"
+    },
+    {
+      "args": {
+        "entity_names": [
+          "2023-02-14",
+          "Taipei Marathon",
+          "running shoes"
+        ],
+        "entity_sim_threshold": null,
+        "entity_sim_topk": null,
+        "provenance_keys": [
+          "dialogue_datetime",
+          "message_id",
+          "session_id",
+          "summary_ids"
+        ],
+        "relationship_pairs": [
+          [
+            "2023-02-14",
+            "Taipei Marathon"
+          ],
+          [
+            "Taipei Marathon",
+            "running shoes"
+          ]
+        ]
+      },
+      "call": "syncer.sync"
+    }
+  ],
+  "result": {
+    "results": [
+      [
+        "two_step_extraction",
+        true,
+        {
+          "entity_idx": {
+            "2023-02-14": {
+              "entity_type": "Date",
+              "id": "e2",
+              "name": "2023-02-14"
+            },
+            "Taipei Marathon": {
+              "entity_type": "Event",
+              "id": "e1",
+              "name": "Taipei Marathon"
+            },
+            "running shoes": {
+              "entity_type": "Product",
+              "id": "e3",
+              "name": "running shoes"
+            }
+          },
+          "entity_summary": {
+            "added": 3,
+            "updated": 0
+          },
+          "extracted_entities": [
+            "entity_name='Taipei Marathon' entity_type=<EntityType.Event: 'Event'> entity_description='A running event the user took part in.' entity_metadata=None",
+            "entity_name='2023-02-14' entity_type=<EntityType.Date: 'Date'> entity_description='The day the marathon happened.' entity_metadata={'temporal': {'display_value': '2023-02-14', 'normalized_time': None, 'normalized_start': '2023-02-14', 'normalized_end': '2023-02-14', 'granularity': 'day', 'original_phrase': 'last Tuesday', 'reference_time': '2023/02/18 (Sat) 08:08', 'status': 'resolved', 'confidence': None}}",
+            "entity_name='running shoes' entity_type=<EntityType.Product: 'Product'> entity_description='Shoes bought after the marathon.' entity_metadata=None"
+          ],
+          "extracted_relationships": [
+            "source_entity='Taipei Marathon' target_entity='2023-02-14' relationship_description='The marathon took place on that day.' relationship_keywords='when|date'",
+            "source_entity='running shoes' target_entity='Taipei Marathon' relationship_description='The shoes were bought after the marathon.' relationship_keywords='after|purchase'"
+          ],
+          "relationship_metas": [
+            {
+              "rel_id": "r1",
+              "source_id": "e1",
+              "target_id": "e2"
+            },
+            {
+              "rel_id": "r2",
+              "source_id": "e2",
+              "target_id": "e3"
+            }
+          ]
+        }
+      ]
+    ],
+    "summary_id": "1_3"
+  },
+  "result_keys": [
+    "request_id",
+    "results",
+    "summary_id"
+  ]
+}
