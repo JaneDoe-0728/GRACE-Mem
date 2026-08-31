@@ -222,11 +222,23 @@ verdicts、還是 accuracy 數字。
 *建議：* 這是一個概念的兩種投影，不是歧義。兩者都保留，但 `SpeakerTurn` 應被理解為
 「僅填入 speaker 與 text 的 **Turn**」。不要再引入第三種寫法。
 
-**7. 其餘縮寫配對，已裁決。** `ctx` → **context**（再依 #1 收斂到 **Evidence** 或
-**TimeContext**）；`art` → **artifact**；`qa` 僅在 `qa_eval` 之內保留；
-`meta` → **metadata**；`data` vs `dataset` —— **Dataset** 是領域詞，`data` 僅用於
-路徑常數；`vec`/`vdb` —— 儲存體用 **VDB**，數值用 **vector**；`eval` 依 #4 寫全稱；
-`stat` → **stats**（指 artifact），絕不指 "status"。
+**7. 其餘縮寫配對。** 每一組都用 AST 掃描分離「識別字」與「字串常值」後逐一查核。
+結果各不相同，其中兩項原本的裁決根本是錯的。
+
+| 配對 | 原裁決 | 實際狀態 |
+| --- | --- | --- |
+| `ctx` → **Evidence** / **TimeContext** | 依 #1 | **已完成。** `ctx_dataset`、`ctx_stage`、`ctx_base` 保留：那是 token-tracking 語境與 prompt 語境，是這個字的第三、第四種意思，都不是 Evidence |
+| `art` → **Artifact** | 寫全稱 | **已完成。** 44 個識別字，不涉及任何 artifact schema，也沒有對外文件引用 |
+| `vdb` | **VDB** 本來就是識別字中的 canonical 拼法 | **本來就符合。** 無事可做；原本的寫法暗示相反，是誤導 |
+| `stat` → `stats` | — | **撤銷。** 25 處全部是 `Path.stat()`。掃描器的 `stat`/`statuse` 配對是它自己詞幹處理的產物，不是真的同義詞 |
+| `data` vs `dataset` | `data` 僅用於路徑常數 | **本來就符合。** `DATA_ROOT`、`SCRIPT_DATA_DIR`、`LOCOMO_DATA`、`DATA_JSON` 都是路徑常數；`graph_data`、`export_data` 指的是一份 payload，不是 **Dataset** 這個領域詞 |
+| `meta` → **metadata** | 寫全稱 | **未做。** 42 個名稱中 21 個凍結：`"metas"` 是 BM25 pickle 內的 key，`"meta"` 是 `cases/<id>.json` 的 key，`entity_meta`/`rel_meta` 是參數。可改的 21 個與它們交錯 —— 與 #5 完全相同的「只改一半」問題 |
+| `vec` → **vector** | 數值用全稱 | **未做。** `summary_vec_threshold`、`entity_vec_threshold`、`relationship_vec_threshold` 同時是 config key 與 `DatasetConfig` 欄位，動不了；`query_vec` 是跨七個模組的參數。改掉其餘的會讓兩半互相矛盾 |
+| `qa` 在 `qa_eval` 之外 | 移除 | **未做。** `"qa_json"` 是 worker、judge 與路徑解析器共用的 dataset-kind 查詢 key；真正自由的只有 5 個名稱 |
+| `eval` | 依 #4 寫全稱 | **未做**，而且大致無意義 —— 123 處中多數就是 `qa_eval` 本身，而 #4 已將它凍結 |
+
+`meta`、`vec`、`qa` 與 #5 呈現同一個模式：必須先決定一份凍結名單 —— 哪些 config key
+可以改、既有儲存的 key 需要什麼相容性 —— 才有辦法一致地掃除。那是設計問題，不是更名。
 
 **8.「step」有第三個沒人宣告的意思。**
 `experiment/longmem/helpers/analysis_cases.py` 定義了 `step2_ingest`、

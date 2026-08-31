@@ -230,12 +230,26 @@ sid-addressable with a position.
 `SpeakerTurn` should be understood as "a **Turn** with only its speaker and text
 populated". Do not introduce a third spelling.
 
-**7. Other abbreviation pairs, resolved.** `ctx` → **context** (and then to
-**Evidence** or **TimeContext** per #1); `art` → **artifact**; `qa` keeps its
-place only inside `qa_eval`; `meta` → **metadata**; `data` vs `dataset` — **Dataset**
-is the domain term, `data` only in path constants; `vec`/`vdb` → **VDB** for the
-store, **vector** for the values; `eval` → spell out per #4; `stat` → **stats**
-(the artifact) never "status".
+**7. Other abbreviation pairs.** Each was checked against the code with an AST
+pass separating identifiers from string literals. The outcome differs per pair,
+and two of the original rulings were simply wrong.
+
+| Pair | Ruling | State |
+| --- | --- | --- |
+| `ctx` → **Evidence** / **TimeContext** | per #1 | **Done.** `ctx_dataset`, `ctx_stage` and `ctx_base` stay: they are a token-tracking context and a prompt context, a third and fourth sense of the word, neither of which is Evidence |
+| `art` → **Artifact** | spell out | **Done.** 44 identifiers, no artifact schema, nothing documented |
+| `vdb` | **VDB** *is* the canonical spelling in identifiers | **Already conforming.** Nothing to change; the original entry implied otherwise |
+| `stat` → `stats` | — | **Withdrawn.** All 25 occurrences are `Path.stat()`. The scanner's `stat`/`statuse` pair was an artifact of its own stemming, not a real synonym |
+| `data` vs `dataset` | `data` only in path constants | **Already conforming.** `DATA_ROOT`, `SCRIPT_DATA_DIR`, `LOCOMO_DATA`, `DATA_JSON` are path constants; `graph_data` and `export_data` name a payload, not the **Dataset** domain term |
+| `meta` → **metadata** | spell out | **Not done.** 21 of 42 names are frozen: `"metas"` is a key inside the BM25 pickle, `"meta"` is a key in `cases/<id>.json`, and `entity_meta`/`rel_meta` are parameters. The safe 21 interleave with them — the same half-pair problem as #5 |
+| `vec` → **vector** | for values | **Not done.** `summary_vec_threshold`, `entity_vec_threshold` and `relationship_vec_threshold` are config keys *and* `DatasetConfig` fields and cannot move; `query_vec` is a parameter crossing seven modules. Renaming the rest leaves the two halves disagreeing |
+| `qa` outside `qa_eval` | remove | **Not done.** `"qa_json"` is a dataset-kind lookup key shared by the worker, the judge and the path resolver; only 5 names are actually free |
+| `eval` | spell out per #4 | **Not done**, and mostly moot — 123 of the occurrences are `qa_eval` itself, which #4 freezes |
+
+The pattern across `meta`, `vec`, `qa` and #5 is the same: a frozen list has to be
+decided first — which config keys may change, what compatibility the stored keys
+need — before any of them can be swept coherently. That is a design question, not
+a rename.
 
 **8. "step" has a third meaning nobody declared.**
 `experiment/longmem/helpers/analysis_cases.py` defines `step2_ingest`,
