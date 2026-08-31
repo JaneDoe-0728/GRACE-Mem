@@ -113,3 +113,27 @@ def rebuild_context(
         dt_str = f"[{turns[0].date}]" if turns[0].date else ""
         lines.append(f"  • {dt_str}{sid_tags}[score=--] {entry} ")
     return "\n".join(lines), context_sids
+
+
+def append_fetched_evidence(
+    context: str,
+    corpus: Corpus,
+    added: list[str],
+    seed_sids: list[str],
+) -> tuple[str, list[str]]:
+    """Hang the agent's finds on the end of the original context, untouched.
+
+    fetch_only's guarantee is that the information is never less than baseline,
+    so the original text is left word for word -- baseline evidence may be plain
+    text with no sid, which a rebuild would wrongly delete. Returns
+    (context, context_sids).
+    """
+    lines = ["", "### Additional Evidence (agent-retrieved)"]
+    evidence_sids = list(seed_sids)
+    for sid in added:
+        turn = corpus.resolve(sid)[0]
+        entry = corpus.display_entry(sid)
+        dt = f"[{turn.date}]" if turn.date else ""
+        lines.append(f"  • {dt}[sid={sid}][score=--] {entry} ")
+        evidence_sids.append(sid)
+    return context.rstrip("\n") + "\n".join(lines), evidence_sids

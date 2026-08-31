@@ -1,51 +1,64 @@
-"""Grep agent mini-harness (inline delivery, plain-text command protocol).
+"""Agent Filter's entry point: one question in, one refined answer context out.
 
-Flow:
-  seed = the 16 sids inside the Evidence Summary (vector+rerank coarse filter)
-  -> the agent verifies the candidates with GREP / READ and hunts down the
-     literal evidence that was missed
-  -> FINAL sids -> rebuild the Evidence Summary block from raw turn text
-Safety net: if the agent fails, emits invalid output, or blows the budget, the
-original context is handed back untouched.
+The flow this module orchestrates, and nothing else:
 
-No function-calling API: local models (gpt-oss-20b via LM Studio) are steadiest
-against a plain-text one-command-per-line protocol, parsed with regexes.
+    prepare   the seed sids inside the Evidence Summary, the corpus behind them,
+              and the prompt the agent starts from
+        │
+    search    the agent verifies candidates with GREP/READ/VECTOR and hunts down
+              the evidence retrieval missed, until it replies FINAL
+        │
+    verify    an independent verifier may send it back out for what is missing
+        │
+    finalize  the selection policy decides what the answering model sees
+
+Safety net at every step: if the agent fails, emits invalid output, or blows the
+budget, the original context is handed back untouched. Each stage lives in its
+own module -- protocol, loop, verification, adjudication, finalization -- and
+this file is the sequence they run in.
 """
 from __future__ import annotations
 
-import re
-import time
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 
-from experiment.agent_filter import vector_search
-from experiment.agent_filter.adjudication import adjudicate_candidates
+from experiment.agent_filter.config import AgentFilterConfig
 from experiment.agent_filter.context import (
     candidates_block,
     graph_context_from_context,
-    rebuild_context,
     seed_scores_from_context,
     seed_sids_from_context,
 )
 from experiment.agent_filter.corpus import Corpus, load_corpus
-from experiment.agent_filter.llm_factory import agent_llm, verify_llm
+from experiment.agent_filter.finalization import EvidenceFinalizer, finalize_from_raw
+from experiment.agent_filter.llm_factory import agent_llm
 from experiment.agent_filter.loop import AgentSession, AgentTools
 from experiment.agent_filter.prompting.agent import (
     ABSTENTION_HINT,
     CATEGORY_HINTS,
     SYSTEM_PROMPT,
     USER_TEMPLATE,
+    VECTOR_TOOL_BLOCK,
+    active_hypothesis_block,
 )
-from experiment.agent_filter.prompting.verification import GAP_HINT_TEMPLATE
-from experiment.agent_filter.verification import check_sufficiency
+from experiment.agent_filter.verification import SufficiencyRepairer
 
-# Detects aggregation/latest-value questions (a question-driven trigger for the
-# retention strategy, independent of any dataset category label)
-_AGG_QUESTION_RE = re.compile(
-    r"\b(how many|how much|how often|how long|how frequently|total|count|sum|"
-    r"number of|most recent(ly)?|latest|currently|current|in total|altogether)\b",
-    re.IGNORECASE,
+_FILTER_MODE_RULE = (
+    "\nIMPORTANT: you may only KEEP or DROP candidates; do not add new sids in FINAL."
 )
+
+
+@dataclass
+class _Preparation:
+    """What one question looks like before the agent has said anything."""
+    corpus: Corpus
+    seed: list[str]
+    category: str | None
+    graph_context: str
+    hint: str
+    is_abstention: bool
+    vector_ok: bool
 
 
 def refine_context(
@@ -64,107 +77,23 @@ def refine_context(
     back to the original context.
     The corpus may be prebuilt externally (e.g. a LoCoMo chunk-level corpus); when
     it is not supplied it is loaded from csv_path."""
-    p = params or {}
-    mode = p.get("grep_agent_mode", "filter_fetch")
-    max_calls = int(p.get("grep_agent_max_calls", 8))
-    max_sids = int(p.get("grep_agent_max_sids", 16))
-    grep_max_lines = int(p.get("grep_agent_grep_max_lines", 30))
-    include_filter_graph = bool(p.get("grep_agent_filter_include_graph_context", False))
-    include_answer_graph = bool(p.get("grep_agent_answer_include_graph_context", True))
-
-    trace: dict = {"enabled": True, "mode": mode, "commands": [], "fallback": None}
+    config = AgentFilterConfig.from_params(params)
+    trace: dict = {"enabled": True, "mode": config.mode, "commands": [], "fallback": None}
     try:
-        if corpus is None:
-            corpus = load_corpus(csv_path)
-        seed = seed_sids_from_context(context)
-        trace["seed_sids"] = seed
-        trace["seed_scores"] = seed_scores_from_context(context)  # sid -> rerank score
-        graph_context = graph_context_from_context(
-            context,
-            max_chars=int(p.get("grep_agent_graph_context_max_chars", 12000)),
+        prep = _prepare(
+            question=question, context=context, csv_path=csv_path, category=category,
+            corpus=corpus, artifact_dir=artifact_dir, config=config, trace=trace,
         )
-        trace["graph_context_available"] = bool(graph_context)
-        trace["filter_graph_context"] = include_filter_graph
-        trace["answer_graph_context"] = include_answer_graph
-        if not seed and mode == "filter":
+        if not prep.seed and config.mode == "filter":
             trace["fallback"] = "no_seed"
             return context, trace
 
-        if category is None:
-            category = Path(csv_path).parent.name
-        # _abs abstention questions (the answer is not in the corpus):
-        # force_verified_final must keep the full protective context for these and
-        # never narrow -- fvf-73 measured that narrowing (even with plenty of
-        # verified evidence) tempts the model to abandon the abstention and answer.
-        is_abstention = bool(csv_path) and Path(csv_path).stem.endswith("_abs")
-        trace["is_abstention"] = is_abstention
-        # The skill library (driven by question shape) takes precedence; only on a
-        # miss does it fall back to the category hint
-        hint = ""
-        if p.get("grep_agent_use_skills", False):
-            from experiment.agent_filter.prompting.skills import select_skills
-            matched = select_skills(question)
-            trace["skills"] = [n for n, _ in matched]
-            hint = "\n\n".join(s for _, s in matched)
-        if not hint:
-            hint = CATEGORY_HINTS.get(category, "")
-
-        # VECTOR tool: enabled only when this question's summaries VDB is present
-        # (the agent decides for itself when to search semantically -- unlike the
-        # disproven gap-repair approach where the verifier pushed candidates, here
-        # the agent pulls).
-        vector_ok = (
-            bool(p.get("grep_agent_vector_search", True))
-            and artifact_dir is not None
-            and (Path(artifact_dir) / "summaries_chroma").exists()
+        session = _open_session(
+            question=question, question_date=question_date, prep=prep,
+            llm=llm, artifact_dir=artifact_dir, config=config, trace=trace,
         )
-        trace["vector_tool"] = vector_ok
-        trace["evidence_provenance"] = {}
-        from experiment.agent_filter.prompting.agent import (
-            VECTOR_TOOL_BLOCK,
-            active_hypothesis_block,
-        )
-        emit_hyp = bool(int(p.get("grep_agent_emit_hypothesis", 0)))
-        system = SYSTEM_PROMPT.format(
-            max_calls=max_calls,
-            vector_tool=VECTOR_TOOL_BLOCK if vector_ok else "",
-            hypothesis_line=active_hypothesis_block() if emit_hyp else "",
-        )
-        if mode == "filter":
-            system += "\nIMPORTANT: you may only KEEP or DROP candidates; do not add new sids in FINAL."
-        user = USER_TEMPLATE.format(
-            question=question,
-            date_line=f"QUESTION DATE: {question_date}\n" if question_date else "",
-            hint_line=f"{hint}\n" if hint else "",
-            graph_context=(
-                "GRAPH FACTS (Entities/Relationships; use as supporting evidence):\n"
-                + graph_context
-                if include_filter_graph and graph_context else ""
-            ),
-            candidates=candidates_block(corpus, seed),
-        )
-        session = AgentSession(
-            llm=llm,
-            tools=AgentTools(
-                corpus,
-                seed=seed,
-                artifact_dir=artifact_dir,
-                grep_max_lines=grep_max_lines,
-                vector_enabled=vector_ok,
-                vector_topn=int(p.get("grep_agent_vector_topn", 8)),
-                vector_min_score=float(p.get("grep_agent_vector_min_score", 0.30)),
-            ),
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            trace=trace,
-            emit_hypothesis=emit_hyp,
-        )
-
-        final_raw = session.run(max_calls)
-
-        if not (final_raw and corpus.normalize_sids(final_raw)):
+        final_raw = session.run(config.max_calls)
+        if not (final_raw and prep.corpus.normalize_sids(final_raw)):
             # No FINAL / empty FINAL / unparseable sids -> prompt once for closure.
             # A second prompt is useless (measured: 129 of 138 times the model still
             # returns a tool call). Narrowing the context down to the verified hits
@@ -173,270 +102,38 @@ def refine_context(
             # whereas the noise of all 16 entries acts as cover on hard questions.
             if final_raw:
                 trace["final_raw_unresolved"] = final_raw[:20]
-            final_raw = session.force_final(seed)
-
-        # Uncertainty signal: an agent refusing to FINAL on its own means it found
-        # no confirmable evidence for an answer (_abs abstention questions fall back
-        # 70% of the time). The hint is a conditional abstention prompt, attached
-        # only to the full-context fallback path -- "narrowed context + hint" tested
-        # negative (ordinary questions 46.7 -> 33.3).
-        abstain = False
-        if not (final_raw and corpus.normalize_sids(final_raw)):
-            # Forced verified->FINAL: when the agent will not close on its own, take
-            # the verified sids it actually confirmed via GREP/READ, treat them as
-            # the FINAL, and run the full finalize pipeline (adjudicate + floor +
-            # rebuild) rather than falling back to the whole raw context marked as a
-            # fallback. Rationale:
-            #   - Raising max-calls disproved "force the agent to submit a narrowed
-            #     context" (-6): a bare 1-2 sid FINAL strips the answering model of
-            #     the full-context noise cover and it starts inventing.
-            #   - verified->FINAL is different: aggregation questions routinely
-            #     verify >16 entries (the agent has GREPed dozens of turns), so after
-            #     the cap the size is about the same as the full context, merely
-            #     reordered verified-first. Questions that searched up empty have
-            #     verified=0 -> fall back to the full seed set, keeping the cover.
-            #     Neither end produces a bare narrowed context.
-            #   - Going through finalize_from_raw preserves adjudication's recovery
-            #     of topically relevant seeds plus the floor pad back to 12,
-            #     provenance stays intact, and the no_final marker disappears.
-            # Gate: narrow via finalize only when the agent's verified evidence is
-            # plentiful enough. Insufficient verified evidence -- including _abs
-            # questions that searched up empty, and aggregation questions that only
-            # scraped together a few entries -- keeps the full protective context
-            # (fvf-73: all the harm from narrowing landed on low-verified _abs
-            # questions, while every question with lots of verified evidence was safe
-            # or improved). The threshold defaults to 12, i.e. "at least a full
-            # context's worth of confirmed evidence" before it is trusted to replace
-            # the full set. Note: the evidence_floor blind pad was retired on
-            # 2026-07-20, so its value is no longer borrowed here and the fallback is
-            # written as a literal 12.
-            verified_norm = corpus.normalize_sids(list(session.verified_sids))
-            fvf_min = int(p.get("grep_agent_force_verified_min", 12))
-            # Narrowing requires: the flag on, a non-abstention question, and enough
-            # verified evidence. Fail any one of those -> keep the full context.
-            if (int(p.get("grep_agent_force_verified_final", 0))
-                    and not is_abstention
-                    and len(verified_norm) >= fvf_min):
-                trace["forced_verified_final"] = verified_norm
-                return finalize_from_raw(
-                    final_raw=verified_norm,
-                    context=context, corpus=corpus, seed=seed,
-                    verified_sids=session.verified_sids,
-                    vector_candidate_sids=session.vector_candidate_sids,
-                    question=question, question_date=question_date, category=category,
-                    llm=llm, p=p, trace=trace,
-                )
-            trace["fallback"] = "no_final"
-            trace["verified_sids"] = corpus.normalize_sids(list(session.verified_sids))
-            if bool(p.get("grep_agent_abstention_hint", 0)):
-                trace["abstention_hint"] = True
-                return context + ABSTENTION_HINT, trace
-            return context, trace
-
-        final = corpus.normalize_sids(final_raw)
-        if mode == "filter":
-            seed_set = set(corpus.normalize_sids(seed))
-            final = [s for s in final if s in seed_set]
-        elif mode == "fetch_only":
-            # Add without cutting: keep the baseline context's serendipity while
-            # taking the recall the agent digs up.
-            # Measured on LoCoMo: the agent's all-gold-hit rate rose 19.8pp, but
-            # cutting useful non-gold content cancelled the gain -- hence this mode
-            # decouples the two.
-            seed_norm_ = corpus.normalize_sids(seed)
-            final = seed_norm_ + [s for s in final if s not in set(seed_norm_)]
-
-        # The provenance gate was removed on 2026-07-22: a VECTOR hit now counts as
-        # verified just like GREP/READ (see the VECTOR branch), and evidence pulled
-        # back by GREP/READ/VECTOR is trusted across the board. The only unverified
-        # things left are hallucinated sids, which _rebuild_context drops naturally
-        # because the corpus cannot resolve them.
-        trace["verified_sids"] = corpus.normalize_sids(list(session.verified_sids))
-        trace["vector_candidate_sids"] = corpus.normalize_sids(list(session.vector_candidate_sids))
-        seed_set = set(corpus.normalize_sids(seed))
-        trace["evidence_provenance"] = {
-            s: (
-                "seed+verified" if s in seed_set and s in session.verified_sids
-                else "seed" if s in seed_set
-                else "verified" if s in session.verified_sids
-                else "unverified"
+            final_raw = session.force_final(prep.seed)
+        if not (final_raw and prep.corpus.normalize_sids(final_raw)):
+            return _without_a_final(
+                context=context, prep=prep, session=session, question=question,
+                question_date=question_date, llm=llm, config=config,
+                params=params or {}, trace=trace,
             )
-            for s in final
-        }
-        trace["final_before_cap"] = list(final)  # pre-truncation, for diagnosing top-k truncation
-        final = final[:max_sids]
-        if not final:
-            trace["fallback"] = "empty_final"
-            return context, trace
 
-        # ── Sufficiency loop: when the verifier rules the evidence insufficient,
-        # search again carrying a gap hint. Additive only, never removes. ──
-        verify_rounds = int(p.get("grep_agent_verify_rounds", 0))
-        verify_budget = int(p.get("grep_agent_verify_max_calls", 4))
-        verify_cats = p.get("grep_agent_verify_categories")
-        if verify_cats is not None and category not in verify_cats:
-            verify_rounds = 0  # Selective: skip non-aggregation categories, where verify only dilutes
-        trace["sufficiency"] = []
-        for vr in range(verify_rounds):
-            try:
-                ok, missing = check_sufficiency(
-                    verify_llm(llm), question=question, question_date=question_date,
-                    corpus=corpus, sids=final,
-                )
-            except Exception as exc:  # a verifier crash must not disturb the main flow
-                trace["sufficiency"].append({"round": vr, "error": str(exc)[:200]})
-                break
-            trace["sufficiency"].append({"round": vr, "sufficient": ok, "missing": missing[:300]})
-            if ok:
-                break
-            gap_msg = GAP_HINT_TEMPLATE.format(missing=missing)
-            # Vector top-up search: grep's repair arm comes back empty roughly 87% of
-            # the time because of the paraphrase gap, so embed the gap description,
-            # search the summaries VDB, and hand the semantic neighbours to the agent
-            # to confirm.
-            gap_topn = int(p.get("grep_agent_gap_vector_topn", 0))
-            if artifact_dir is not None and gap_topn > 0:
-                cands = vector_search.search_summaries(
-                    artifact_dir,
-                    f"{question}\n{missing}",
-                    exclude=set(final),
-                    topn=gap_topn,
-                    min_score=float(p.get("grep_agent_gap_vector_min_score", 0.30)),
-                )
-                trace["sufficiency"][-1]["vector_cands"] = [s for s, _ in cands]
-                if cands:
-                    lines = []
-                    for s, sc in cands:
-                        entry = corpus.display_entry(s, max_chars=200) or "(text unavailable)"
-                        lines.append(f"[sid={s}] (score={sc:.2f}) {entry}")
-                    gap_msg += (
-                        "\n\nA semantic search for the missing information surfaced these "
-                        "candidate turns (NOT yet verified — check with READ/GREP before "
-                        "including):\n" + "\n".join(lines)
-                    )
-            session.tell(gap_msg)
-            extra_raw = session.run(verify_budget)
-            if not extra_raw:
-                break
-            extra = corpus.normalize_sids(extra_raw)
-            if mode == "filter":
-                extra = [s for s in extra if s in set(corpus.normalize_sids(seed))]
-            # Monotonic: a verify round may only add, never touch what is chosen
-            added_now = [s for s in extra if s not in set(final)]
-            trace["sufficiency"][-1]["added"] = added_now
-            if not added_now:
-                break
-            final = (final + added_now)[:max_sids]
-
-        seed_norm = corpus.normalize_sids(seed)
-
-        # ── Answer-blind per-item adjudication: the agent's FINAL is an "answer
-        # citation" (the minimal-citation instinct: solve first, then keep only the
-        # smallest turn set containing the answer span), so supporting evidence
-        # without the answer span is discarded systematically -- the root of the
-        # preference and multi-hop failures.
-        # The remedy: an independent adjudication call (blind to the agent's
-        # conversation, so it does not know the "answer") rules KEEP/DROP on each
-        # discarded seed, judging topical relevance to the question. KEEPs are added
-        # back to final (additive only; the agent's own 0.84-precision picks are left
-        # alone). When adjudication succeeds it replaces the evidence_floor blind pad
-        # -- the floor refills in rerank order, which cannot recover preference cues.
-        adj_on = int(p.get("grep_agent_adjudicate", 0))
-        adj_cats = p.get("grep_agent_adjudicate_categories")
-        if adj_cats is not None and category not in adj_cats:
-            adj_on = 0
-        # KEEP-all categories: the gold for KU/temporal holds many supporting turns
-        # that carry no answer but are required for the reasoning (time anchors,
-        # dated mentions), and 20B adjudication judging by "contains the answer"
-        # DROPs them systematically -- the cause of bucket B. These categories switch
-        # to recall-recovery-only: every discarded seed is added back without passing
-        # through an LLM DROP. This differs from min-keep in being a category-level
-        # "do not cut" rather than a question-shape trigger.
-        keep_all_cats = p.get("grep_agent_adjudicate_keep_all_categories")
-        if adj_on and len(final) < max_sids:
-            pending = [s for s in seed_norm if s not in set(final)]
-            if pending and keep_all_cats and category in keep_all_cats:
-                trace["adjudication"] = {"keep_all": True, "kept": pending, "dropped": []}
-                final = (final + [s for s in pending if s not in set(final)])[:max_sids]
-            elif pending:
-                _t0 = time.perf_counter()
-                try:
-                    kept_adj, verdicts = adjudicate_candidates(
-                        llm, question=question, question_date=question_date,
-                        corpus=corpus, pending=pending,
-                    )
-                    verdicts["ms"] = round((time.perf_counter() - _t0) * 1000)
-                    trace["adjudication"] = verdicts
-                    final = (final + [s for s in kept_adj
-                                      if s not in set(final)])[:max_sids]
-                except Exception as exc:  # an adjudication crash must not disturb the main flow; the floor carries on
-                    trace["adjudication"] = {"error": str(exc)[:200]}
-
-        # ── Min-keep (question-driven, not category-specific): aggregation and
-        # latest-value questions (how many / how often / total / most recent /
-        # current...) need every dated mention of the target fact present at once --
-        # counting must be complete, and picking the latest requires something to
-        # compare. When the agent cuts too thin, refill from the seeds in rerank
-        # order. Triggered by question shape, so it generalizes to any dataset.
-        min_keep = int(p.get("grep_agent_min_keep_aggregation", 0))
-        if min_keep and len(final) < min_keep and _AGG_QUESTION_RE.search(question):
-            pad = [s for s in seed_norm if s not in set(final)]
-            trace["min_keep_padded"] = pad[: min_keep - len(final)]
-            final = final + pad[: min_keep - len(final)]
-
-        # ── The evidence_floor blind pad was retired on 2026-07-20 ─────────────
-        # It padded `final` up to a floor in rerank order, which overrode the
-        # agent's per-item decision with a ranking signal the agent had already
-        # seen and rejected. It moved no accuracy, and it made "kept" ambiguous:
-        # a padded sid looks identical to an adjudicated one in the trace.
-        # grep_agent_evidence_floor now defaults to 0; see its note in
-        # experiment_config. Recover the implementation from git if it is ever
-        # revisited -- it should not come back without a metric to justify it.
-
-        trace["final_sids"] = final
-        trace["kept"] = [s for s in final if s in set(seed_norm)]
-        trace["added"] = [s for s in final if s not in set(seed_norm)]
-        trace["dropped"] = [s for s in seed_norm if s not in set(final)]
-
-        # Safety net: if the selector dropped every upstream summary, keep the
-        # original 16-summary context instead of answering from agent-fetched
-        # evidence alone.  This is distinct from a no_final/exception
-        # fallback: the agent completed, but produced zero retained seeds.
-        if not trace["kept"]:
-            trace["fallback"] = "zero_keep"
-            trace["context_sids"] = seed_norm
-            if abstain:
-                return context + ABSTENTION_HINT, trace
-            return context, trace
-
-        if mode == "fetch_only":
-            # Pure append: the original context is left word for word (baseline
-            # evidence may be plain text with no sid, which rebuild would wrongly
-            # delete), with the newly fetched units hung on the end. Guarantees the
-            # information is never less than baseline.
-            if not trace["added"]:
-                trace["fallback"] = "no_addition"
-                return context, trace
-            lines = ["", "### Additional Evidence (agent-retrieved)"]
-            evidence_sids = list(seed_norm)
-            for s in trace["added"]:
-                t = corpus.resolve(s)[0]
-                entry = corpus.display_entry(s)
-                dt = f"[{t.date}]" if t.date else ""
-                lines.append(f"  • {dt}[sid={s}][score=--] {entry} ")
-                evidence_sids.append(s)
-            trace["context_sids"] = evidence_sids
-            return context.rstrip("\n") + "\n".join(lines), trace
-
-        refined, context_sids = rebuild_context(
-            context, corpus, final,
-            include_pair=bool(p.get("grep_agent_include_pair", True)),
-            include_prefix=include_answer_graph,
+        finalizer = EvidenceFinalizer(config)
+        selection = finalizer.select(
+            corpus=prep.corpus, final_raw=final_raw, seed=prep.seed,
+            verified_sids=session.verified_sids,
+            vector_candidate_sids=session.vector_candidate_sids,
+            trace=trace,
         )
-        trace["context_sids"] = context_sids
-        if abstain:
-            refined += ABSTENTION_HINT
-        return refined, trace
+        if selection.fallback:
+            return context, trace
+
+        # Sufficiency: when the verifier rules the evidence insufficient, the agent
+        # searches again carrying a gap hint. Additive only, never removes.
+        selection.final = SufficiencyRepairer(
+            llm=llm, corpus=prep.corpus, config=config, artifact_dir=artifact_dir,
+        ).repair(
+            session=session, question=question, question_date=question_date,
+            category=prep.category, seed=prep.seed, selected=selection.final,
+            trace=trace,
+        )
+        return finalizer.finalize(
+            selection=selection, context=context, corpus=prep.corpus,
+            question=question, question_date=question_date, category=prep.category,
+            llm=llm, trace=trace,
+        )
 
     except Exception:
         trace["fallback"] = "exception"
@@ -444,133 +141,176 @@ def refine_context(
         return context, trace
 
 
-def finalize_from_raw(
+def _prepare(
     *,
-    final_raw,
+    question: str,
     context: str,
-    corpus: Corpus,
-    seed: list[str],
-    verified_sids: set,
-    vector_candidate_sids: set,
+    csv_path: str | Path,
+    category: str | None,
+    corpus: Corpus | None,
+    artifact_dir: str | Path | None,
+    config: AgentFilterConfig,
+    trace: dict,
+) -> _Preparation:
+    """Read the question, its context and its corpus into what the agent needs."""
+    if corpus is None:
+        corpus = load_corpus(csv_path)
+    seed = seed_sids_from_context(context)
+    trace["seed_sids"] = seed
+    trace["seed_scores"] = seed_scores_from_context(context)  # sid -> rerank score
+    graph_context = graph_context_from_context(
+        context, max_chars=config.graph_context_max_chars,
+    )
+    trace["graph_context_available"] = bool(graph_context)
+    trace["filter_graph_context"] = config.filter_include_graph
+    trace["answer_graph_context"] = config.answer_include_graph
+
+    if category is None:
+        category = Path(csv_path).parent.name
+    # _abs abstention questions (the answer is not in the corpus):
+    # force_verified_final must keep the full protective context for these and
+    # never narrow -- fvf-73 measured that narrowing (even with plenty of
+    # verified evidence) tempts the model to abandon the abstention and answer.
+    is_abstention = bool(csv_path) and Path(csv_path).stem.endswith("_abs")
+    trace["is_abstention"] = is_abstention
+
+    # The skill library (driven by question shape) takes precedence; only on a
+    # miss does it fall back to the category hint
+    hint = ""
+    if config.use_skills:
+        from experiment.agent_filter.prompting.skills import select_skills
+        matched = select_skills(question)
+        trace["skills"] = [name for name, _ in matched]
+        hint = "\n\n".join(strategy for _, strategy in matched)
+    if not hint:
+        hint = CATEGORY_HINTS.get(category, "")
+
+    # VECTOR tool: enabled only when this question's summaries VDB is present
+    # (the agent decides for itself when to search semantically -- unlike the
+    # disproven gap-repair approach where the verifier pushed candidates, here
+    # the agent pulls).
+    vector_ok = (
+        config.vector_search
+        and artifact_dir is not None
+        and (Path(artifact_dir) / "summaries_chroma").exists()
+    )
+    trace["vector_tool"] = vector_ok
+    trace["evidence_provenance"] = {}
+    return _Preparation(
+        corpus=corpus, seed=seed, category=category, graph_context=graph_context,
+        hint=hint, is_abstention=is_abstention, vector_ok=vector_ok,
+    )
+
+
+def _open_session(
+    *,
     question: str,
     question_date: str | None,
-    category: str | None,
+    prep: _Preparation,
     llm,
-    p: dict,
+    artifact_dir: str | Path | None,
+    config: AgentFilterConfig,
+    trace: dict,
+) -> AgentSession:
+    """Write the opening prompt and hand it to a session with its tools."""
+    system = SYSTEM_PROMPT.format(
+        max_calls=config.max_calls,
+        vector_tool=VECTOR_TOOL_BLOCK if prep.vector_ok else "",
+        hypothesis_line=active_hypothesis_block() if config.emit_hypothesis else "",
+    )
+    if config.mode == "filter":
+        system += _FILTER_MODE_RULE
+    user = USER_TEMPLATE.format(
+        question=question,
+        date_line=f"QUESTION DATE: {question_date}\n" if question_date else "",
+        hint_line=f"{prep.hint}\n" if prep.hint else "",
+        graph_context=(
+            "GRAPH FACTS (Entities/Relationships; use as supporting evidence):\n"
+            + prep.graph_context
+            if config.filter_include_graph and prep.graph_context else ""
+        ),
+        candidates=candidates_block(prep.corpus, prep.seed),
+    )
+    return AgentSession(
+        llm=llm,
+        tools=AgentTools(
+            prep.corpus,
+            seed=prep.seed,
+            artifact_dir=artifact_dir,
+            grep_max_lines=config.grep_max_lines,
+            vector_enabled=prep.vector_ok,
+            vector_topn=config.vector_topn,
+            vector_min_score=config.vector_min_score,
+        ),
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        trace=trace,
+        emit_hypothesis=config.emit_hypothesis,
+    )
+
+
+def _without_a_final(
+    *,
+    context: str,
+    prep: _Preparation,
+    session: AgentSession,
+    question: str,
+    question_date: str | None,
+    llm,
+    config: AgentFilterConfig,
+    params: dict,
     trace: dict,
 ) -> tuple[str, dict]:
-    """The v1 back half of the pipeline (provenance gate -> filter_fetch ->
-    adjudicate -> floor -> rebuild) pulled out into its own function, so the
-    planner-worker harness can reuse the same v1 mainline logic.
+    """The agent would not close. Decide what the answering model gets instead.
 
-    Behaviour matches lines 811-1011 of refine_context, with one difference: the
-    sufficiency loop needs v1's _run_loop, which planner-worker does not have, so
-    this path skips sufficiency (v1 defaults to verify_rounds=0, so the mainline
-    is unaffected). A None or empty final_raw falls back to the original context."""
-    mode = p.get("grep_agent_mode", "filter_fetch")
-    max_sids = int(p.get("grep_agent_max_sids", 16))
-    include_answer_graph = bool(p.get("grep_agent_answer_include_graph_context", True))
+    Forced verified->FINAL: take the sids the agent actually confirmed, treat
+    them as the FINAL, and run the full finalize pipeline rather than falling
+    back to the whole raw context. Rationale:
+      - Raising max-calls disproved "force the agent to submit a narrowed
+        context" (-6): a bare 1-2 sid FINAL strips the answering model of the
+        full-context noise cover and it starts inventing.
+      - verified->FINAL is different: aggregation questions routinely verify >16
+        entries (the agent has GREPed dozens of turns), so after the cap the size
+        is about the same as the full context, merely reordered verified-first.
+        Questions that searched up empty have verified=0 -> fall back to the full
+        seed set, keeping the cover. Neither end produces a bare narrowed context.
+      - Going through finalize preserves adjudication's recovery of topically
+        relevant seeds, provenance stays intact, and the no_final marker
+        disappears.
+    The gate: the flag on, a non-abstention question, and at least a full
+    context's worth of confirmed evidence (fvf-73: all the harm from narrowing
+    landed on low-verified _abs questions, while every question with lots of
+    verified evidence was safe or improved). Fail any one of those and the full
+    protective context stays.
 
-    if not (final_raw and corpus.normalize_sids(final_raw)):
-        trace["fallback"] = "no_final"
-        trace["verified_sids"] = corpus.normalize_sids(list(verified_sids))
-        return context, trace
+    Uncertainty signal: an agent refusing to FINAL means it found no confirmable
+    evidence for an answer (_abs abstention questions fall back 70% of the time),
+    which is itself the strongest evidence for abstention. The hint is attached
+    only to this full-context path -- "narrowed context + hint" tested negative
+    (ordinary questions 46.7 -> 33.3).
+    """
+    verified_norm = prep.corpus.normalize_sids(list(session.verified_sids))
+    if (config.force_verified_final
+            and not prep.is_abstention
+            and len(verified_norm) >= config.force_verified_min):
+        trace["forced_verified_final"] = verified_norm
+        return finalize_from_raw(
+            final_raw=verified_norm,
+            context=context, corpus=prep.corpus, seed=prep.seed,
+            verified_sids=session.verified_sids,
+            vector_candidate_sids=session.vector_candidate_sids,
+            question=question, question_date=question_date, category=prep.category,
+            llm=llm, p=params, trace=trace,
+        )
 
-    final = corpus.normalize_sids(final_raw)
-    if mode == "filter":
-        seed_set = set(corpus.normalize_sids(seed))
-        final = [s for s in final if s in seed_set]
-    elif mode == "fetch_only":
-        seed_norm_ = corpus.normalize_sids(seed)
-        final = seed_norm_ + [s for s in final if s not in set(seed_norm_)]
-
-    # The provenance gate was removed on 2026-07-22: a VECTOR hit counts as
-    # verified, and anything fetched is trusted.
-    trace["verified_sids"] = corpus.normalize_sids(list(verified_sids))
-    trace["vector_candidate_sids"] = corpus.normalize_sids(list(vector_candidate_sids))
-    seed_set = set(corpus.normalize_sids(seed))
-    trace["evidence_provenance"] = {
-        s: ("seed+verified" if s in seed_set and s in verified_sids
-            else "seed" if s in seed_set
-            else "verified" if s in verified_sids
-            else "unverified")
-        for s in final
-    }
-    trace["final_before_cap"] = list(final)
-    final = final[:max_sids]
-    if not final:
-        trace["fallback"] = "empty_final"
-        return context, trace
-
-    seed_norm = corpus.normalize_sids(seed)
-
-    # Answer-blind per-item adjudication (the v1 mainline; adjudicate adds back the
-    # discarded but topically relevant seeds)
-    adj_on = int(p.get("grep_agent_adjudicate", 0))
-    adj_cats = p.get("grep_agent_adjudicate_categories")
-    if adj_cats is not None and category not in adj_cats:
-        adj_on = 0
-    keep_all_cats = p.get("grep_agent_adjudicate_keep_all_categories")
-    if adj_on and len(final) < max_sids:
-        pending = [s for s in seed_norm if s not in set(final)]
-        if pending and keep_all_cats and category in keep_all_cats:
-            trace["adjudication"] = {"keep_all": True, "kept": pending, "dropped": []}
-            final = (final + [s for s in pending if s not in set(final)])[:max_sids]
-        elif pending:
-            _t0 = time.perf_counter()
-            try:
-                kept_adj, verdicts = adjudicate_candidates(
-                    llm, question=question, question_date=question_date,
-                    corpus=corpus, pending=pending,
-                )
-                verdicts["ms"] = round((time.perf_counter() - _t0) * 1000)
-                trace["adjudication"] = verdicts
-                final = (final + [s for s in kept_adj if s not in set(final)])[:max_sids]
-            except Exception as exc:
-                trace["adjudication"] = {"error": str(exc)[:200]}
-
-    min_keep = int(p.get("grep_agent_min_keep_aggregation", 0))
-    if min_keep and len(final) < min_keep and _AGG_QUESTION_RE.search(question):
-        pad = [s for s in seed_norm if s not in set(final)]
-        trace["min_keep_padded"] = pad[: min_keep - len(final)]
-        final = final + pad[: min_keep - len(final)]
-
-    # The evidence_floor blind pad was retired here too, for the same reason as
-    # in the batch path above. min_keep padding stays: it is a floor on the
-    # agent's own selection, not a rerank-ordered override of it.
-
-    trace["final_sids"] = final
-    trace["kept"] = [s for s in final if s in set(seed_norm)]
-    trace["added"] = [s for s in final if s not in set(seed_norm)]
-    trace["dropped"] = [s for s in seed_norm if s not in set(final)]
-
-    if not trace["kept"]:
-        trace["fallback"] = "zero_keep"
-        trace["context_sids"] = seed_norm
-        return context, trace
-
-    if mode == "fetch_only":
-        if not trace["added"]:
-            trace["fallback"] = "no_addition"
-            return context, trace
-        lines = ["", "### Additional Evidence (agent-retrieved)"]
-        evidence_sids = list(seed_norm)
-        for s in trace["added"]:
-            t = corpus.resolve(s)[0]
-            entry = corpus.display_entry(s)
-            dt = f"[{t.date}]" if t.date else ""
-            lines.append(f"  • {dt}[sid={s}][score=--] {entry} ")
-            evidence_sids.append(s)
-        trace["context_sids"] = evidence_sids
-        return context.rstrip("\n") + "\n".join(lines), trace
-
-    refined, context_sids = rebuild_context(
-        context, corpus, final,
-        include_pair=bool(p.get("grep_agent_include_pair", True)),
-        include_prefix=include_answer_graph,
-    )
-    trace["context_sids"] = context_sids
-    return refined, trace
+    trace["fallback"] = "no_final"
+    trace["verified_sids"] = verified_norm
+    if config.abstention_hint:
+        trace["abstention_hint"] = True
+        return context + ABSTENTION_HINT, trace
+    return context, trace
 
 
 def maybe_refine_context(
