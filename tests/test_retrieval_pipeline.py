@@ -123,3 +123,45 @@ def test_the_dispatch_paths_do_not_all_agree() -> None:
     distinguish a broken dispatch from a working one."""
     results = {m: tuple(_capture(m)["entity_ids"]) for m in FILTER_METHODS}
     assert len(set(results.values())) > 1, f"all five paths returned the same entities: {results}"
+
+
+def test_an_empty_candidate_pool_short_circuits_the_whole_query() -> None:
+    """When nothing is reachable, retrieval returns empty rather than continuing.
+
+    This path is not in the snapshots -- the fixture always finds something --
+    and it was nearly lost when stage 1 became its own method: the bare `return`
+    that used to end the whole query would have ended only the stage. mypy
+    caught it because the return types disagreed. This test catches it whether
+    or not the types happen to.
+    """
+    r = _retriever("similarity")
+
+    class _EmptyGraph:
+        def get_node_subgraph(self, entity_ids):
+            return {}
+
+        def get_edge_subgraph(self, rel_ids):
+            return []
+
+    r.graph = _EmptyGraph()
+    r.cache = {"entities": {}, "relationships": {}}
+
+    entities, relationships, context_text, query_vec = r.assemble_context_from_query(
+        question=QUESTION,
+        low_level_keywords=LOW_LEVEL,
+        high_level_keywords=HIGH_LEVEL,
+        request_id="empty",
+    )
+
+    assert entities == []
+    assert relationships == []
+    assert context_text == ""
+    assert query_vec is not None, "the query vector survives the short circuit"
+
+    # The empty result alone does not prove the short circuit fired: the later
+    # stages would also produce nothing from an empty pool. What distinguishes
+    # them is that they never ran.
+    ran = [c["call"] for c in r.log.entries]
+    assert not [c for c in ran if c.startswith("filter.")], (
+        f"filtering ran after an empty pool: {ran}"
+    )
