@@ -19,6 +19,7 @@ import traceback
 from pathlib import Path
 
 from experiment.agent_filter import vector_search
+from experiment.agent_filter.adjudication import adjudicate_candidates
 from experiment.agent_filter.context import (
     candidates_block,
     graph_context_from_context,
@@ -35,12 +36,9 @@ from experiment.agent_filter.prompting.agent import (
     SYSTEM_PROMPT,
     USER_TEMPLATE,
 )
-from experiment.agent_filter.prompting.verification import (
-    GAP_HINT_TEMPLATE,
-    SUFFICIENCY_SYSTEM,
-    SUFFICIENCY_USER,
-)
+from experiment.agent_filter.prompting.verification import GAP_HINT_TEMPLATE
 from experiment.agent_filter.protocol import extract_final_sids, parse_response
+from experiment.agent_filter.verification import check_sufficiency
 
 # Detects aggregation/latest-value questions (a question-driven trigger for the
 # retention strategy, independent of any dataset category label)
@@ -67,125 +65,6 @@ def _vector_search(
         artifact_dir, query, exclude=exclude, topn=topn, min_score=min_score,
     )
     return vector_search.render_hits(corpus, query, hits)
-
-
-def _check_sufficiency(
-    llm,
-    *,
-    question: str,
-    question_date: str | None,
-    corpus: Corpus,
-    sids: list[str],
-) -> tuple[bool, str]:
-    """An independent audit call: is the evidence enough to answer in full?
-    Returns (sufficient, missing_desc).
-    A parse failure counts as sufficient -- a flaky verifier must not send the
-    loop spinning."""
-    lines = []
-    for s in sids:
-        t = corpus.resolve(s)
-        if not t:
-            continue
-        # Must be as complete as the final context (4000 per side): shown a
-        # truncated version, the verifier misreads "detail buried deep in a long
-        # turn" as missing -- the main driver of the measured 42% false triggers.
-        entry = corpus.display_entry(s, max_chars=4000 * len(t))
-        lines.append(f"[{t[0].date}] {entry}")
-    reply_msgs = [
-        {"role": "system", "content": SUFFICIENCY_SYSTEM},
-        {"role": "user", "content": SUFFICIENCY_USER.format(
-            question=question,
-            date_line=f"QUESTION DATE: {question_date}\n" if question_date else "",
-            evidence="\n".join(lines) or "(none)",
-        )},
-    ]
-    resp = llm.chat(messages=reply_msgs, temperature=0.0, max_tokens=512)
-    reply = (resp.choices[0].message.content or "").strip()
-    for line in reply.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        m = re.match(r"^\**\s*INSUFFICIENT\s*\**\s*[::]?\s*(.*)$", line, re.IGNORECASE)
-        if m:
-            return False, (m.group(1) or reply[:300]).strip()
-        if re.match(r"^\**\s*SUFFICIENT\b", line, re.IGNORECASE):
-            return True, ""
-    return True, ""
-
-
-def _adjudicate_candidates(
-    llm,
-    *,
-    question: str,
-    question_date: str | None,
-    corpus: Corpus,
-    pending: list[str],
-) -> tuple[list[str], dict]:
-    """Answer-blind per-item adjudication: an independent call (no agent search
-    history, so it cannot see the answer the agent already reached) rules
-    KEEP/DROP on every seed that FINAL discarded. The criterion is topical
-    relevance to the question, not "contains the answer".
-    Returns (the KEEP sids, a per-item verdict dict). A candidate given no
-    verdict counts as DROP -- adjudication is an add-only recovery, so no
-    verdict means nothing is added back."""
-    from experiment.agent_filter.prompting.adjudication import (
-        ADJUDICATE_SYSTEM,
-        ADJUDICATE_USER,
-    )
-    lines = []
-    for s in pending:
-        t = corpus.resolve(s)
-        if not t:
-            continue
-        entry = corpus.display_entry(s, max_chars=700)
-        dt = f"[{t[0].date}] " if t[0].date else ""
-        lines.append(f"[sid={s}] {dt}{entry}")
-    msgs = [
-        {"role": "system", "content": ADJUDICATE_SYSTEM},
-        {"role": "user", "content": ADJUDICATE_USER.format(
-            question=question,
-            date_line=f"QUESTION DATE: {question_date}\n" if question_date else "",
-            n=len(lines),
-            candidates="\n".join(lines) or "(none)",
-        )},
-    ]
-    # Reasoning model: hidden thinking precedes the verdicts, so the token budget
-    # has to be generous -- 2048 was measured truncating a 14-verdict output
-    # halfway (in the child run, all 129 unjudged items came from this).
-    resp = llm.chat(messages=msgs, temperature=0.0, max_tokens=4096)
-    reply = (resp.choices[0].message.content or "").strip()
-    kept: list[str] = []
-    # reply = the adjudication call's raw response (one `<sid> KEEP|DROP <short
-    # reason>` per line). The full text is kept so the front end can reconstruct
-    # the adjudication trail, and verdict+reason are extracted per item
-    # (reasons: sid -> "KEEP|DROP: reason").
-    verdicts: dict = {
-        "kept": [], "dropped": [], "unjudged": [],
-        "reply": reply, "reply_chars": len(reply), "reasons": {},
-    }
-    judged: set[str] = set()
-    for line in reply.splitlines():
-        m = re.search(r"\b(KEEP|DROP)\b", line, re.IGNORECASE)
-        if not m:
-            continue
-        for s in pending:
-            if s in judged or s not in line:
-                continue
-            judged.add(s)
-            decision = m.group(1).upper()
-            # Take the short reason after KEEP/DROP on that line, dropping the sid
-            # and the verdict token. The strip set keeps fullwidth punctuation
-            # because the model emits it in reasons.  # allow-cjk
-            reason = line[m.end():].strip(" \t:-—．。")
-            verdicts["reasons"][s] = f"{decision}: {reason}" if reason else decision
-            if decision == "KEEP":
-                kept.append(s)
-                verdicts["kept"].append(s)
-            else:
-                verdicts["dropped"].append(s)
-            break
-    verdicts["unjudged"] = [s for s in pending if s not in judged]
-    return kept, verdicts
 
 
 def refine_context(
@@ -550,7 +429,7 @@ def refine_context(
         trace["sufficiency"] = []
         for vr in range(verify_rounds):
             try:
-                ok, missing = _check_sufficiency(
+                ok, missing = check_sufficiency(
                     verify_llm(llm), question=question, question_date=question_date,
                     corpus=corpus, sids=final,
                 )
@@ -632,7 +511,7 @@ def refine_context(
             elif pending:
                 _t0 = time.perf_counter()
                 try:
-                    kept_adj, verdicts = _adjudicate_candidates(
+                    kept_adj, verdicts = adjudicate_candidates(
                         llm, question=question, question_date=question_date,
                         corpus=corpus, pending=pending,
                     )
@@ -790,7 +669,7 @@ def finalize_from_raw(
         elif pending:
             _t0 = time.perf_counter()
             try:
-                kept_adj, verdicts = _adjudicate_candidates(
+                kept_adj, verdicts = adjudicate_candidates(
                     llm, question=question, question_date=question_date,
                     corpus=corpus, pending=pending,
                 )
