@@ -7,9 +7,9 @@ from typing import Any
 
 import numpy as np
 
-from grace_mem.llm.prompts.hyde_prompting import HYDE_SYSTEM, HYDE_USER
 from grace_mem.llm.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
 from grace_mem.pipeline.ablation import flag_enabled
+from grace_mem.pipeline.hyde import generate_hyde_vector
 from grace_mem.pipeline.keyword_cache import keyword_cache
 from grace_mem.pipeline.query_rewrite import maybe_rewrite_retrieval_question
 from grace_mem.pipeline.rendering import render_context_text
@@ -468,39 +468,6 @@ class Retriever:
         )
         return KeywordExtractionResult()
 
-    def generate_hyde_vector(self, question: str, request_id: str | None = None):
-        """
-        HyDE: generate hypothetical answer-summary sentences for the question,
-        embed them, and return a single normalized vector (mean of sentence
-        embeddings). Returns None on failure so the caller falls back to the
-        plain query vector.
-        """
-        timer = _StepTimer()
-        try:
-            user_prompt = HYDE_USER.format(question=question)
-            raw, sec = self.llm.generate_llm_hyde(HYDE_SYSTEM, user_prompt)
-            sentences = [s.strip(" -•\t") for s in (raw or "").splitlines() if s.strip()]
-            if not sentences:
-                _jlog("hyde_empty", request_id, step="0d", latency_sec=sec)
-                return None
-            vecs = self.searcher.embed(sentences)
-            vec = np.asarray(vecs, dtype=np.float32).mean(axis=0)
-            norm = float(np.linalg.norm(vec))
-            if norm > 0:
-                vec = vec / norm
-            _jlog(
-                "hyde_done",
-                request_id,
-                step="0d",
-                latency_sec=sec,
-                sentence_count=len(sentences),
-                sentences=sentences,
-                elapsed_sec=timer.sec(),
-            )
-            return vec
-        except Exception as exc:
-            _jlog("hyde_error", request_id, step="0d", error=str(exc))
-            return None
 
     def assemble_context_from_query(
         self,
@@ -1788,7 +1755,7 @@ class Retriever:
             # 0d) HyDE: hypothetical-summary vector to blend into summary scoring
             hyde_vec = None
             if self.cfg.summary_hyde_enable:
-                hyde_vec = self.generate_hyde_vector(rewritten_question, request_id=request_id)
+                hyde_vec = generate_hyde_vector(llm=self.llm, searcher=self.searcher, question=rewritten_question, request_id=request_id)
             _scoring_weights = ScoringWeights(
                 relation_weight=self.cfg.summary_relation_weight,
                 entity_weight=self.cfg.summary_entity_weight,
