@@ -1,0 +1,174 @@
+{
+  "calls": [
+    {
+      "args": {
+        "mid": "s1:u"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s1:a"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s2:u"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s2:a"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s3:u"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s3:a"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s4:u"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s4:a"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s5:u"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s5:a"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s6:u"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s6:a"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "threshold": null,
+        "top_k": 4
+      },
+      "call": "vdb.search"
+    },
+    {
+      "args": {
+        "entry_id": "s1:u"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s1:a"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s1"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s2:u"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s2:a"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s2"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s3:u"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s3:a"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s3"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s4:u"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s4:a"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s4"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s1:u"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s1:a"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    },
+    {
+      "args": {
+        "entry_id": "s1"
+      },
+      "call": "vdb.get_text_by_entry_id"
+    }
+  ],
+  "evidence_text": "### Evidence Summary\n  \u2022 [sid=s1:u][score=0.930] raw turn text for s1, longer than the summary \n  \u2022 [sid=s1:a][score=0.930] compressed summary for s1 \n  \u2022 [sid=s1][score=0.930] compressed summary for s1 "
+}
