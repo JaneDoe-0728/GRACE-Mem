@@ -10,6 +10,7 @@ import numpy as np
 from grace_mem.llm.prompts.hyde_prompting import HYDE_SYSTEM, HYDE_USER
 from grace_mem.llm.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
 from grace_mem.pipeline.keyword_cache import keyword_cache
+from grace_mem.pipeline.rendering import render_context_text
 
 # Import modular components
 from grace_mem.pipeline.retrieval_steps import (
@@ -19,7 +20,6 @@ from grace_mem.pipeline.retrieval_steps import (
     SAConfig,
     SpreadingActivationEngine,
     SubgraphPageRank,
-    TemporalRelevanceCalculator,
 )
 from grace_mem.pipeline.retrieval_steps.narrowing import NarrowingModule
 from grace_mem.pipeline.retrieval_steps.summary_scoring import ScoringWeights
@@ -1342,7 +1342,8 @@ class Retriever:
                 pass
 
         # 5) Render context text
-        context_text = self._render_context_text(
+        context_text = render_context_text(
+            cache=self.cache,
             entities=filtered_entities,
             relationships=filtered_rels,
             request_id=request_id,
@@ -1374,74 +1375,6 @@ class Retriever:
 
         return filtered_entities, filtered_rels, context_text, query_vec
 
-    def _render_context_text(
-        self,
-        entities: list[dict],
-        relationships: list[dict],
-        request_id: str | None = None,
-    ) -> str:
-        """Render entities and relationships into readable context text."""
-        timer_render = _StepTimer()
-        lines = []
-
-        ent_id2meta, rel_id2meta = build_id_to_meta_maps(self.cache)
-
-        temporal_types = {"Date", "Event", "Activity"}
-        if entities:
-            lines.append("=== Entities ===")
-            for ent in entities:
-                name = ent.get("name", "")
-                ent_type = ent.get("type", "")
-                desc = ent.get("desc", "")
-                eid = ent.get("id", "")
-                meta = ent_id2meta.get(eid, {}) or {}
-                prov = meta.get("prov") or {}
-                dt_str, _ = TemporalRelevanceCalculator.get_newest_dialogue_datetime(prov, request_id)
-                temporal_tag = f" [mentioned_at:{dt_str}]" if dt_str and ent_type in temporal_types else ""
-                temporal_meta = meta.get("temporal") or {}
-                temporal_suffix = ""
-                if temporal_meta:
-                    parts = []
-                    if temporal_meta.get("display_value"):
-                        parts.append(f"display_value={temporal_meta['display_value']}")
-                    if temporal_meta.get("normalized_start"):
-                        parts.append(f"normalized_start={temporal_meta['normalized_start']}")
-                    if temporal_meta.get("normalized_end"):
-                        parts.append(f"normalized_end={temporal_meta['normalized_end']}")
-                    if temporal_meta.get("original_phrase"):
-                        parts.append(f"original_phrase={temporal_meta['original_phrase']}")
-                    if temporal_meta.get("reference_time"):
-                        parts.append(f"reference_time={temporal_meta['reference_time']}")
-                    if parts:
-                        temporal_suffix = " [" + "; ".join(parts) + "]"
-                lines.append(f"- {name} ({ent_type}): {desc}{temporal_suffix}{temporal_tag}")
-
-        if relationships:
-            lines.append("\n=== Relationships ===")
-            for rel in relationships:
-                src_name = rel.get("source_name", "")
-                tgt_name = rel.get("target_name", "")
-                rel_desc = rel.get("rel_desc", "")
-                rid = rel.get("rel_id", "")
-                rmeta = rel_id2meta.get(rid, {}) or {}
-                rprov = rmeta.get("prov") or {}
-                rdt_str, _ = TemporalRelevanceCalculator.get_newest_dialogue_datetime(rprov, request_id)
-                rtype = rmeta.get("type", "")
-                temporal_tag = f" [mentioned_at:{rdt_str}]" if rdt_str and rtype in temporal_types else ""
-                lines.append(f"- {src_name} -> {tgt_name}: {rel_desc}{temporal_tag}")
-
-        result = "\n".join(lines) if lines else ""
-        _jlog(
-            "context_text_rendered",
-            request_id,
-            step="2",
-            entity_count=len(entities),
-            relationship_count=len(relationships),
-            line_count=len(lines),
-            result_length=len(result),
-            elapsed_sec=timer_render.sec(),
-        )
-        return result
 
 
 
@@ -1737,7 +1670,8 @@ class Retriever:
             novel_ent_threshold=self.cfg.novel_ent_threshold,
         )
 
-        merged_text = self._render_context_text(
+        merged_text = render_context_text(
+            cache=self.cache,
             entities=merged_entities,
             relationships=merged_rels,
             request_id=request_id,
