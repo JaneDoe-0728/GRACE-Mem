@@ -13,15 +13,22 @@ against a plain-text one-command-per-line protocol, parsed with regexes.
 """
 from __future__ import annotations
 
-import json
-import os
 import re
 import time
 import traceback
 from pathlib import Path
 
 from experiment.agent_filter import vector_search
+from experiment.agent_filter.context import (
+    candidates_block,
+    graph_context_from_context,
+    rebuild_context,
+    seed_scores_from_context,
+    seed_sids_from_context,
+)
 from experiment.agent_filter.corpus import Corpus, load_corpus
+from experiment.agent_filter.llm_factory import agent_llm, verify_llm
+from experiment.agent_filter.models import SID_RE, Command
 from experiment.agent_filter.prompting.agent import (
     ABSTENTION_HINT,
     CATEGORY_HINTS,
@@ -33,11 +40,8 @@ from experiment.agent_filter.prompting.verification import (
     SUFFICIENCY_SYSTEM,
     SUFFICIENCY_USER,
 )
+from experiment.agent_filter.protocol import extract_final_sids, parse_response
 
-_EVIDENCE_HEADER = "### Evidence Summary"
-_SID_RE = re.compile(r"\[sid=([^\]\s]+)\]")
-
-_GREP_RE = re.compile(r"^\s*GREP\s+(.+?)\s*$", re.IGNORECASE)
 # Detects aggregation/latest-value questions (a question-driven trigger for the
 # retention strategy, independent of any dataset category label)
 _AGG_QUESTION_RE = re.compile(
@@ -45,275 +49,6 @@ _AGG_QUESTION_RE = re.compile(
     r"number of|most recent(ly)?|latest|currently|current|in total|altogether)\b",
     re.IGNORECASE,
 )
-_READ_RE = re.compile(r"^\s*READ\s+(\S+)(?:\s+(\d+))?\s*$", re.IGNORECASE)
-_VECTOR_RE = re.compile(r"^\s*VECTOR\s+(.+?)\s*$", re.IGNORECASE)
-_FINAL_RE = re.compile(r"^\s*FINAL\s*[::]?\s*(.*?)\s*$", re.IGNORECASE)
-
-
-def seed_sids_from_context(context: str) -> list[str]:
-    """Pull the sids out of the Evidence Summary block in order of appearance,
-    deduplicated but order-preserving."""
-    idx = context.find(_EVIDENCE_HEADER)
-    if idx == -1:
-        return []
-    out: list[str] = []
-    seen: set[str] = set()
-    for m in _SID_RE.finditer(context[idx:]):
-        s = m.group(1).strip()
-        if s and s not in seen:
-            seen.add(s)
-            out.append(s)
-    return out
-
-
-# The rerank score on each Evidence Summary entry: `[sid=...][score=0.615]`
-# (the Score column in the front-end candidate table)
-_SID_SCORE_RE = re.compile(r"\[sid=([^\]\s]+)\][^\[]*?\[score=([-\d.]+)\]")
-
-
-def seed_scores_from_context(context: str) -> dict[str, float]:
-    """Extract the rerank score for each seed sid, keeping the first occurrence.
-    Entries that fail to parse are skipped."""
-    idx = context.find(_EVIDENCE_HEADER)
-    scan = context[idx:] if idx != -1 else context
-    out: dict[str, float] = {}
-    for m in _SID_SCORE_RE.finditer(scan):
-        sid = m.group(1).strip()
-        if sid in out:
-            continue
-        try:
-            out[sid] = float(m.group(2))
-        except ValueError:
-            continue
-    return out
-
-
-def graph_context_from_context(context: str, *, max_chars: int = 12000) -> str:
-    """Return the retrieved graph prefix (Entities/Relationships) if present."""
-    idx = context.find(_EVIDENCE_HEADER)
-    prefix = context[:idx] if idx != -1 else context
-    if "=== Entities ===" not in prefix and "=== Relationships ===" not in prefix:
-        return ""
-    prefix = prefix.strip()
-    return prefix if len(prefix) <= max_chars else prefix[:max_chars] + "\n…(graph context truncated)"
-
-
-def _resp_diag(resp) -> dict:
-    """Response-level diagnostics: tells "the model genuinely replied empty" apart
-    from "the output landed in the reasoning channel / tool_calls where content
-    cannot see it" (common with gpt-oss harmony). Attached to every step trace."""
-    try:
-        choice = resp.choices[0]
-        msg = choice.message
-    except (AttributeError, IndexError):
-        return {"diag": "no_choices"}
-    d: dict = {"finish_reason": getattr(choice, "finish_reason", None)}
-    reasoning = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None)
-    if reasoning:
-        d["reasoning"] = str(reasoning)[:1200]
-    tc = getattr(msg, "tool_calls", None)
-    if tc:
-        d["tool_calls"] = [
-            {"name": getattr(getattr(t, "function", None), "name", None),
-             "arguments": str(getattr(getattr(t, "function", None), "arguments", ""))[:300]}
-            for t in tc
-        ]
-    content = getattr(msg, "content", None)
-    if not (content or "").strip():
-        # Empty content: record which fields the message actually carried, so an
-        # adapter dropping fields can be ruled out
-        d["content_empty"] = True
-        d["message_keys"] = sorted(vars(msg).keys())
-    return d
-
-
-def _response_command_candidates(resp) -> list[tuple[str, str]]:
-    """Return possible command-bearing text from an OpenAI-compatible response.
-
-    gpt-oss/Harmony adapters do not agree on where the visible command goes:
-    some put it in ``content``, some expose native ``tool_calls``, and some
-    (notably older LM Studio adapters) put it in ``reasoning``.  The command
-    parser itself is format-agnostic, so normalize all three surfaces here.
-    """
-    try:
-        message = resp.choices[0].message
-    except (AttributeError, IndexError):
-        return []
-
-    candidates: list[tuple[str, str]] = []
-    content = getattr(message, "content", None)
-    if isinstance(content, str) and content.strip():
-        candidates.append(("content", content.strip()))
-
-    tool_calls = getattr(message, "tool_calls", None) or []
-    for call in tool_calls:
-        function = getattr(call, "function", None)
-        name = getattr(function, "name", None)
-        arguments = getattr(function, "arguments", None)
-        if not name:
-            continue
-        name = str(name).split(".")[-1].upper()
-        if name not in _CMD_NAMES:
-            continue
-        if isinstance(arguments, str):
-            payload = arguments
-        else:
-            payload = json.dumps(arguments or {}, ensure_ascii=False)
-        candidates.append(("tool_calls", f"to={name} <|message|>{payload}"))
-
-    reasoning = getattr(message, "reasoning_content", None) or getattr(message, "reasoning", None)
-    if isinstance(reasoning, str) and reasoning.strip():
-        candidates.append(("reasoning", reasoning.strip()))
-    return candidates
-
-
-# gpt-oss (harmony template) sometimes replies in native tool-call syntax:
-#   <|channel|>commentary to=READ <|constrain|>json<|message|>{"id": "...", "k": 2}
-_HARMONY_RE = re.compile(
-    r"to=(?:\w+\.)?(GREP|READ|VECTOR|FINAL)\b.*?<\|message\|>\s*(\{.*?\})\s*(?:<\|\w+\|>|$)",
-    re.IGNORECASE | re.DOTALL,
-)
-# A messier variant: to=GREP <|constrain|>="pattern" (no <|message|> JSON)
-# Namespace prefixes are treated loosely: functions./tool./any <ns>. is stripped
-# (the model on box 92 emits to=tool.GREP).
-_HARMONY_LOOSE_RE = re.compile(r"to=(?:\w+\.)?(GREP|READ|VECTOR|FINAL)\b(.*)$", re.IGNORECASE)
-
-
-_CMD_NAMES = {"GREP", "READ", "VECTOR", "FINAL"}
-
-
-def _flatten_json(obj) -> tuple[list[str], list[int]]:
-    """Recursively collect the strings and integers in a JSON payload (the model's
-    schema is not predictable)."""
-    strings: list[str] = []
-    ints: list[int] = []
-    stack = [obj]
-    while stack:
-        cur = stack.pop(0)
-        if isinstance(cur, dict):
-            stack.extend(cur.values())
-        elif isinstance(cur, list):
-            stack.extend(cur)
-        elif isinstance(cur, bool):
-            continue
-        elif isinstance(cur, int):
-            ints.append(cur)
-        elif isinstance(cur, str):
-            strings.append(cur)
-    return strings, ints
-
-
-def _parse_harmony(reply: str) -> tuple[str, str] | None:
-    """Parse a Harmony-format reply into its channels.
-
-    Some backends wrap replies in Harmony's channel markup; unwrapping here
-    keeps the callers from having to know which backend produced a reply.
-    """
-    m = None
-    for m in _HARMONY_RE.finditer(reply):
-        pass  # take the last tool call
-    if m is None:
-        return None
-    kind = m.group(1).upper()
-    try:
-        payload = json.loads(m.group(2))
-    except json.JSONDecodeError:
-        return None
-
-    strings, ints = _flatten_json(payload)
-    # If the payload names the command itself (e.g. {"cmd": ["GREP", ...]}), that wins
-    for s in strings:
-        if s.strip().upper() in _CMD_NAMES:
-            kind = s.strip().upper()
-    args = [s for s in strings if s.strip().upper() not in _CMD_NAMES]
-
-    if kind in ("GREP", "VECTOR"):
-        return (kind, _unquote(args[0])) if args else None
-    if kind == "READ":
-        sid = next((s for s in args if ":" in s), None)
-        k = next((i for i in ints if 0 < i <= 10), 2)
-        return ("READ", f"{_unquote(sid)} {k}") if sid else None
-    return ("FINAL", " ".join(s for s in args if ":" in s))
-
-
-def _parse_harmony_loose(reply: str) -> tuple[str, str] | None:
-    """Last resort: JSON-less variants such as `to=GREP <|constrain|>="pattern"`.
-    Take the rest of the line after to=CMD and strip the harmony markers and the
-    constrain/json noise to get the argument."""
-    m = None
-    for line in reply.splitlines():
-        for m2 in _HARMONY_LOOSE_RE.finditer(line):
-            m = m2
-    if m is None:
-        return None
-    kind = m.group(1).upper()
-    tail = re.sub(r"<\|[^|]*\|>", " ", m.group(2))
-    tail = re.sub(r"\b(?:json|commentary|response)\b", " ", tail, flags=re.IGNORECASE)
-    tail = tail.strip().lstrip("=").strip()
-    arg = _unquote(tail)
-    if kind in ("GREP", "VECTOR"):
-        return (kind, arg) if arg else None
-    if kind == "READ":
-        sid = next((s for s in re.split(r"[,\s]+", arg) if ":" in s), None)
-        return ("READ", f"{_unquote(sid)} 2") if sid else None
-    return ("FINAL", arg)
-
-
-def _unquote(s: str) -> str:
-    s = s.strip()
-    if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'`":
-        return s[1:-1]
-    return s
-
-
-def _parse_command(reply: str) -> tuple[str, str] | None:
-    """Parse the command out of the reply's last few lines, tolerating reasoning
-    before it. The plain-text protocol is tried first, then harmony's native
-    tool-call syntax as a fallback.
-    Harmony markers (<|channel|> and friends) are turned into newlines first, so
-    a plain-text command wedged in after <|message|> is still caught by the
-    line-based parse."""
-    sanitized = re.sub(r"<\|[^|]*\|>", "\n", reply)
-    # 120B (gpt-oss) harmony dual-channel run-together: several commands crammed
-    # onto one line, with the whole span repeated ("GREP MelanieGREP Melanie",
-    # "READ 0__2:0 5FINAL 0__2:0"). When the line starts with GREP the entire line
-    # is taken as the pattern and the trailing FINAL is swallowed -- the root cause
-    # of the 49.6% L1 failure rate (2026-07-06). So: an uppercase command word
-    # directly after a lowercase char/digit/quote -> break the line. 20B emits one
-    # command per line and is unaffected.
-    sanitized = re.sub(r"(?<=[a-z0-9\"'\)\].:])((?:GREP|READ|VECTOR)\s|FINAL\b)",
-                       r"\n\1", sanitized)
-    for line in reversed(sanitized.strip().splitlines()):
-        line = line.strip()
-        if not line:
-            continue
-        if m := _FINAL_RE.match(line):
-            if not m.group(1).strip():
-                # Empty FINAL: if the same reply holds other runnable commands,
-                # run those first (120B often dumps the whole plan --
-                # GREP..READ..FINAL -- in one go)
-                continue
-            return ("FINAL", m.group(1))
-        if m := _GREP_RE.match(line):
-            return ("GREP", _unquote(m.group(1)))
-        if m := _READ_RE.match(line):
-            return ("READ", f"{_unquote(m.group(1))} {m.group(2) or 2}")
-        if m := _VECTOR_RE.match(line):
-            return ("VECTOR", _unquote(m.group(1)))
-    return _parse_harmony(reply) or _parse_harmony_loose(reply)
-
-
-def _candidates_block(corpus: Corpus, sids: list[str]) -> str:
-    """Render the candidate turns the agent will decide over."""
-    lines = []
-    for s in sids:
-        entry = corpus.display_entry(s, max_chars=400)
-        if entry is None:
-            lines.append(f"[sid={s}] (raw text unavailable)")
-        else:
-            t = corpus.resolve(s)[0]
-            lines.append(f"[sid={s}] [{t.date}] {entry}")
-    return "\n".join(lines) if lines else "(none)"
 
 
 def _vector_search(
@@ -332,47 +67,6 @@ def _vector_search(
         artifact_dir, query, exclude=exclude, topn=topn, min_score=min_score,
     )
     return vector_search.render_hits(corpus, query, hits)
-
-
-def _rebuild_context(
-    context: str,
-    corpus: Corpus,
-    final_sids: list[str],
-    *,
-    include_pair: bool = True,
-    include_prefix: bool = True,
-) -> tuple[str, list[str]]:
-    """Rebuild the Evidence Summary block. With include_pair=True a selected sid
-    brings its pair partner along (the other half of the same user<->assistant
-    exchange) -- the agent sometimes picks the wrong side of the right pair, and
-    presenting them together keeps the crucial evidence. Returns
-    (context, context_sids)."""
-    idx = context.find(_EVIDENCE_HEADER)
-    if include_prefix:
-        head = context[:idx].rstrip("\n") if idx != -1 else context.rstrip("\n")
-    else:
-        head = ""
-    lines = [head, _EVIDENCE_HEADER] if head else [_EVIDENCE_HEADER]
-
-    entries: list[str] = []  # sids (pair base or split sid), order-preserving dedup
-    seen: set[str] = set()
-    for s in final_sids:
-        key = s.rsplit(":", 1)[0] if include_pair and (s.endswith((":u", ":a"))) else s
-        if key not in seen:
-            seen.add(key)
-            entries.append(key)
-
-    context_sids: list[str] = []
-    for key in entries:
-        turns = corpus.resolve(key)
-        if not turns:
-            continue
-        context_sids.extend(t.sid for t in turns)
-        sid_tags = "".join(f"[sid={t.sid}]" for t in turns)
-        entry = corpus.display_entry(key, max_chars=4000 * len(turns))
-        dt_str = f"[{turns[0].date}]" if turns[0].date else ""
-        lines.append(f"  • {dt_str}{sid_tags}[score=--] {entry} ")
-    return "\n".join(lines), context_sids
 
 
 def _check_sufficiency(
@@ -591,63 +285,32 @@ def refine_context(
                 + graph_context
                 if include_filter_graph and graph_context else ""
             ),
-            candidates=_candidates_block(corpus, seed),
+            candidates=candidates_block(corpus, seed),
         )
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ]
 
-        def _extract_final(arg: str, full_reply: str = "") -> list[str]:
-            """Pull the agent's final sid list out of its reply.
-
-            The reply is free text and the model varies how it presents the list -- a
-            line after "FINAL:", a bullet list, or both. Accepting all the observed
-            shapes matters because a parse miss reads as the agent having selected
-            nothing.
-            """
-            sids = _SID_RE.findall(arg) + [
-                s for s in re.split(r"[,\s]+", _SID_RE.sub("", arg)) if s and ":" in s
-            ]
-            if not sids and full_reply:
-                # Empty FINAL argument: the sids may sit on other lines (a newline
-                # and bullet list after "FINAL:", and so on)
-                sids = _SID_RE.findall(full_reply) + [
-                    s.strip("*•-,.")
-                    for s in re.split(r"[,\s]+", _SID_RE.sub("", full_reply))
-                    if ":" in s and re.search(r":\d+", s)
-                ]
-            return sids
-
-        def _parse_response(resp):
-            """Parse a response without feeding hidden reasoning back to the model."""
-            candidates = _response_command_candidates(resp)
-            raw_reply = candidates[0][1] if candidates else ""
-            for source, candidate in candidates:
-                cmd = _parse_command(candidate)
-                if cmd is not None:
-                    return raw_reply, candidate, cmd, source
-            return raw_reply, raw_reply, None, None
-
         def _run_loop(budget: int) -> list[str] | None:
             """Run one GREP/READ->FINAL tool loop (shared by the main search and the
             verify top-up search)."""
             parse_failures = 0
             repeat_count = 0
-            prev_cmd: tuple[str, str] | None = None
+            prev_cmd: Command | None = None
             for _ in range(budget):
                 _t0 = time.perf_counter()
                 resp = llm.chat(messages=messages, temperature=0.0, max_tokens=1024)
-                diag = _resp_diag(resp)
-                raw_reply, reply, cmd, source = _parse_response(resp)
-                if source:
-                    diag["command_source"] = source
+                parsed = parse_response(resp)
+                cmd, reply, raw_reply, diag = (
+                    parsed.command, parsed.reply, parsed.raw_reply, parsed.diagnostics,
+                )
                 # Only retain the compact command in conversation history.
                 # Raw reasoning is diagnostic data, not useful context, and
                 # replaying it would inflate the next request's input tokens.
                 messages.append({
                     "role": "assistant",
-                    "content": f"{cmd[0]} {cmd[1]}" if cmd else "",
+                    "content": f"{cmd.kind} {cmd.arg}" if cmd else "",
                 })
                 if cmd is None:
                     parse_failures += 1
@@ -661,7 +324,7 @@ def refine_context(
                         "last line: GREP <regex> | READ <sid> [k] | FINAL <sid> ..."})
                     continue
 
-                kind, arg = cmd
+                kind, arg = cmd.kind, cmd.arg
                 if kind == "FINAL":
                     if emit_hyp:
                         # The agent's self-reported answer hypothesis (productionizing
@@ -683,7 +346,7 @@ def refine_context(
                                               "reply": reply[:1200],
                                               "ms": round((time.perf_counter() - _t0) * 1000),
                                               **diag})
-                    return _extract_final(arg, reply)
+                    return extract_final_sids(arg, reply)
 
                 # Broken-record circuit breaker: repeating the same command prompts
                 # for closure, and three in a row jumps straight to a forced FINAL
@@ -701,7 +364,7 @@ def refine_context(
                 repeat_count = 0
                 if kind == "GREP":
                     result = corpus.grep(arg, max_lines=grep_max_lines)
-                    verified_sids.update(corpus.normalize_sids(_SID_RE.findall(result)))
+                    verified_sids.update(corpus.normalize_sids(SID_RE.findall(result)))
                 elif kind == "VECTOR":
                     if vector_ok:
                         result = _vector_search(
@@ -710,7 +373,7 @@ def refine_context(
                             topn=int(p.get("grep_agent_vector_topn", 8)),
                             min_score=float(p.get("grep_agent_vector_min_score", 0.30)),
                         )
-                        _vhits = corpus.normalize_sids(_SID_RE.findall(result))
+                        _vhits = corpus.normalize_sids(SID_RE.findall(result))
                         vector_candidate_sids.update(_vhits)
                         # A VECTOR hit counts as verified outright, on a par with
                         # GREP/READ. The provenance gate is gone: whatever is pulled
@@ -721,7 +384,7 @@ def refine_context(
                 else:  # READ
                     sid, k = arg.rsplit(" ", 1)
                     result = corpus.read_window(sid, k=int(k))
-                    verified_sids.update(corpus.normalize_sids(_SID_RE.findall(result)))
+                    verified_sids.update(corpus.normalize_sids(SID_RE.findall(result)))
                 trace["commands"].append({"cmd": kind, "arg": arg[:300], "result_chars": len(result),
                                           "reply": reply[:1200], "result": result[:1500],
                                           "ms": round((time.perf_counter() - _t0) * 1000),
@@ -758,16 +421,14 @@ def refine_context(
                 _salvage_msgs[min(attempt, 1)].format(seeds=" ".join(seed))})
             _t0 = time.perf_counter()
             resp = llm.chat(messages=messages, temperature=0.0, max_tokens=512)
-            diag = _resp_diag(resp)
-            _, reply, cmd, source = _parse_response(resp)
-            if source:
-                diag["command_source"] = source
+            parsed = parse_response(resp)
+            cmd, reply, diag = parsed.command, parsed.reply, parsed.diagnostics
             messages.append({
                 "role": "assistant",
-                "content": f"{cmd[0]} {cmd[1]}" if cmd else "",
+                "content": f"{cmd.kind} {cmd.arg}" if cmd else "",
             })
-            arg = cmd[1] if cmd and cmd[0] == "FINAL" else ""
-            out = _extract_final(arg, reply)
+            arg = cmd.arg if cmd and cmd.kind == "FINAL" else ""
+            out = extract_final_sids(arg, reply)
             trace["commands"].append({"cmd": "FINAL(forced)", "arg": (arg or reply)[:500],
                                       "reply": reply[:1200],
                                       "ms": round((time.perf_counter() - _t0) * 1000),
@@ -890,7 +551,7 @@ def refine_context(
         for vr in range(verify_rounds):
             try:
                 ok, missing = _check_sufficiency(
-                    _verify_llm(llm), question=question, question_date=question_date,
+                    verify_llm(llm), question=question, question_date=question_date,
                     corpus=corpus, sids=final,
                 )
             except Exception as exc:  # a verifier crash must not disturb the main flow
@@ -1038,7 +699,7 @@ def refine_context(
             trace["context_sids"] = evidence_sids
             return context.rstrip("\n") + "\n".join(lines), trace
 
-        refined, context_sids = _rebuild_context(
+        refined, context_sids = rebuild_context(
             context, corpus, final,
             include_pair=bool(p.get("grep_agent_include_pair", True)),
             include_prefix=include_answer_graph,
@@ -1174,49 +835,13 @@ def finalize_from_raw(
         trace["context_sids"] = evidence_sids
         return context.rstrip("\n") + "\n".join(lines), trace
 
-    refined, context_sids = _rebuild_context(
+    refined, context_sids = rebuild_context(
         context, corpus, final,
         include_pair=bool(p.get("grep_agent_include_pair", True)),
         include_prefix=include_answer_graph,
     )
     trace["context_sids"] = context_sids
     return refined, trace
-
-
-_agent_llm_cache = None
-_verify_llm_cache = None
-
-
-def _agent_llm(default_llm):
-    """GREP_AGENT_LLM_API / GREP_AGENT_MODEL_NAME can point at a different endpoint
-    (following the JUDGE_* convention); when unset, the answering LLM passed in is
-    shared."""
-    global _agent_llm_cache
-    base = os.getenv("GREP_AGENT_LLM_API")
-    name = os.getenv("GREP_AGENT_MODEL_NAME")
-    if not (base or name):
-        return default_llm
-    if _agent_llm_cache is None:
-        from grace_mem.llm import LLMClient
-        _agent_llm_cache = LLMClient(base_url=base or None, model_name=name or None)
-    return _agent_llm_cache
-
-
-def _verify_llm(default_llm):
-    """GREP_AGENT_VERIFY_LLM_API / GREP_AGENT_VERIFY_MODEL_NAME can point the
-    sufficiency verifier alone at a different endpoint (120B, say) without
-    affecting the agent loop or answering. One of the main reasons v3-v6 were
-    closed out was the oss-20b verifier's 43% misjudgement rate; this hook exists
-    to retest with a stronger verifier."""
-    global _verify_llm_cache
-    base = os.getenv("GREP_AGENT_VERIFY_LLM_API")
-    name = os.getenv("GREP_AGENT_VERIFY_MODEL_NAME")
-    if not (base or name):
-        return default_llm
-    if _verify_llm_cache is None:
-        from grace_mem.llm import LLMClient
-        _verify_llm_cache = LLMClient(base_url=base or None, model_name=name or None, timeout=300.0)
-    return _verify_llm_cache
 
 
 def maybe_refine_context(
@@ -1247,7 +872,7 @@ def maybe_refine_context(
         question=question,
         context=context,
         csv_path=csv_path,
-        llm=_agent_llm(llm),
+        llm=agent_llm(llm),
         question_date=question_date,
         category=category,
         params=GREP_AGENT_PARAMS,
