@@ -33,6 +33,260 @@ class EvidenceBuilder:
         self.raw_context_lookup = raw_context_lookup
         self.last_evidence_trace: dict[str, Any] = {}
 
+    def _format_evidence_block(
+        self,
+        *,
+        evidence_items: list,
+        lines: list,
+        snippet_cache: dict,
+        stage_stats: dict,
+        request_id: str | None,
+        timer_render,
+    ) -> str:
+        """Stage 5: render the selected snippets into the block the LLM reads.
+
+        Pure formatting over a settled selection -- by the time anything arrives
+        here, which snippets survive is decided. The only state it touches is
+        `last_evidence_trace`, which the caller reads back for logging.
+        """
+        # ========== Stage 5: Format evidence block ==========
+        if evidence_items:
+            _jlog(
+                "evidence_items",
+                request_id,
+                step="3.5",
+                count=len(evidence_items),
+                items=[
+                    {
+                        "rank": i + 1,
+                        "score": score,
+                        "len": len(snippet) if snippet else 0,
+                        "summary_id": summary_id,
+                        "dialogue_datetime": dt,
+                    }
+                    for i, (score, snippet, summary_id, dt) in enumerate(evidence_items[:20])
+                ],
+            )
+
+        if evidence_items:
+            lines.append("### Evidence Summary")
+            for score, snippet, summary_id, dialogue_datetime in evidence_items:
+                score_str = f"{score:.3f}" if score is not None else "--"
+                summary_id_str = summary_id or "N/A"
+                dt_str = f"[{dialogue_datetime}]" if dialogue_datetime else ""
+                lines.append(f"  • {dt_str}[sid={summary_id_str}][score={score_str}] {snippet} ")
+
+        result = "\n".join(lines)
+        self.last_evidence_trace = {
+            "request_id": request_id,
+            "selected_evidence_count": len(evidence_items),
+            "selected_evidence": [
+                {
+                    "rank": index + 1,
+                    "score": round(float(score), 6),
+                    "summary_id": summary_id,
+                    "dialogue_datetime": dialogue_datetime,
+                    "preview": snippet[:160],
+                }
+                for index, (score, snippet, summary_id, dialogue_datetime) in enumerate(evidence_items)
+            ],
+            "score_pass_count": stage_stats["score_pass"],
+            "score_fail_count": stage_stats["score_fail"],
+            "dedup_skips": stage_stats["dedup_skips"],
+            "fetch_attempts": stage_stats["fetch_attempts"],
+            "fetch_success": stage_stats["fetch_success"],
+        }
+
+        _jlog(
+            "evidence_format_complete",
+            request_id,
+            step="3.5",
+            total_snippets=len(evidence_items),
+            line_count=len(lines),
+            result_length=len(result),
+        )
+
+        _jlog(
+            "build_evidence_complete",
+            request_id,
+            step="3",
+            total_snippets=len(evidence_items),
+            cache_size=len(snippet_cache),
+            result_length=len(result),
+            elapsed_sec=timer_render.sec(),
+        )
+
+
+        return result
+
+    def _fetch_snippet_text(
+        self,
+        *,
+        scored_events: list,
+        snippet_cache: dict,
+        stage_stats: dict,
+        use_full_summary: bool,
+        use_raw_context: bool,
+        fallback_to_raw: bool,
+        summary_vec_threshold: float,
+        request_id: str | None,
+    ) -> list:
+        """Stage 4: fetch text for the selected snippets, and only those.
+
+        Deliberately after selection rather than during it: scoring works on
+        vectors, and fetching text for every candidate would pay for the ones
+        about to be dropped.
+
+        Which text a snippet gets is decided here, not by the scorer -- raw turn
+        text under raw-context mode, the compressed summary otherwise, and the
+        raw turn as a fallback when a summary came back truncated.
+        """
+        # ========== Stage 4: Fetch text for top-K only ==========
+        def fetch_snippet(ev: dict, score: float) -> str | None:
+            """
+            Fetch summary/raw text for events that passed threshold and are in top-K.
+            Updates snippet_cache with text + score.
+            """
+            summary_id = ev.get("summary_id")
+            if not summary_id:
+                return None
+
+            # Use cached snippet if available
+            if summary_id in snippet_cache:
+                cached_snippet, _cached_score = snippet_cache[summary_id]
+                if cached_snippet is not None:
+                    _jlog(
+                        "summary_cache_hit",
+                        request_id,
+                        step="3.4",
+                        summary_id=summary_id,
+                        stage="fetch",
+                    )
+                    return cached_snippet
+                # If only score cached, fetch text below
+
+            t = _StepTimer()
+            snippet: str | None = None
+            stage_stats["fetch_attempts"] += 1
+
+            # 1) Raw context mode: skip summary text, fetch raw turn text from CSV lookup
+            if use_raw_context:
+                try:
+                    if self.raw_context_lookup is None:
+                        raise RuntimeError("use_raw_context=True but raw_context_lookup is not configured (set raw_context_data_dir)")
+                    session_id = ev.get("session_id")
+                    message_id = ev.get("message_id")
+                    if message_id is None:
+                        raise ValueError("Evidence event is missing message_id")
+                    snippet = self.raw_context_lookup.get(str(session_id), int(message_id))
+                    _jlog(
+                        "evidence_raw_context_fetch",
+                        request_id,
+                        step="3.4",
+                        summary_id=summary_id,
+                        session_id=session_id,
+                        message_id=message_id,
+                        fetched=bool(snippet),
+                        raw_len=len(snippet) if snippet else 0,
+                    )
+                except Exception as e:
+                    _jlog(
+                        "evidence_raw_context_failed",
+                        request_id,
+                        step="3.4",
+                        summary_id=summary_id,
+                        error=str(e),
+                    )
+            else:
+                # 2) Fetch summary text
+                if use_full_summary:
+                    try:
+                        snippet = self.summaries_vdb.get_summary_text_by_id(summary_id)
+                    except (AttributeError, TypeError):
+                        xs = self.summaries_vdb.get_summaries_by_ids([summary_id], top_n=1)
+                        snippet = xs[0] if xs else None
+                else:
+                    xs = self.summaries_vdb.get_summaries_by_ids([summary_id], top_n=1)
+                    snippet = xs[0] if xs else None
+
+                # 3) Fallback to raw turn text if enabled and summary is truncated
+                if fallback_to_raw and (not snippet or "…" in (snippet or "")):
+                    try:
+                        session_id, message_id = ev.get("session_id"), ev.get("message_id")
+                        raw = self.vector_db_manager.summary_store.get_raw_turn_text(session_id, message_id)
+                        if raw:
+                            snippet = raw
+                            _jlog(
+                                "evidence_fallback_to_raw",
+                                request_id,
+                                step="3.4",
+                                summary_id=summary_id,
+                                session_id=session_id,
+                                message_id=message_id,
+                                raw_len=len(raw),
+                            )
+                    except Exception as e:
+                        _jlog(
+                            "evidence_fallback_failed",
+                            request_id,
+                            step="3.4",
+                            summary_id=summary_id,
+                            error=str(e),
+                        )
+
+            fetched = bool(snippet)
+            if fetched:
+                stage_stats["fetch_success"] += 1
+
+            # Update cache with snippet + score
+            snippet_cache[summary_id] = (snippet, score if fetched else None)
+
+            _jlog(
+                "summary_fetched",
+                request_id,
+                step="3.4",
+                summary_id=summary_id,
+                fetched=fetched,
+                score=score if fetched else None,
+                passed_threshold=fetched,
+                threshold=summary_vec_threshold,
+                elapsed_sec=t.sec(),
+            )
+
+            return snippet if fetched else None
+
+        # Collect evidence items: (score, snippet, summary_id, dialogue_datetime)
+        evidence_items: list[tuple[float, str, str | None, str | None]] = []
+
+        for score, ev in scored_events:
+            summary_id = ev.get("summary_id")
+            snippet = fetch_snippet(ev, score)
+            if not snippet:
+                continue
+
+            # Extract dialogue_datetime from event or summary metadata
+            dialogue_datetime = ev.get("dialogue_datetime")
+            if dialogue_datetime is None and summary_id:
+                # Try to get from summary metadata
+                for meta in self.summaries_vdb._meta:
+                    if meta.get("summary_id") == summary_id:
+                        dialogue_datetime = meta.get("dialogue_datetime")
+                        break
+
+            evidence_items.append((score, snippet, summary_id, dialogue_datetime))
+
+        _jlog(
+            "evidence_fetch_complete",
+            request_id,
+            step="3.4",
+            fetch_attempts=stage_stats["fetch_attempts"],
+            fetch_success=stage_stats["fetch_success"],
+            evidence_item_count=len(evidence_items),
+        )
+
+
+        return evidence_items
+
     def build_evidence_block(
         self,
         context_entities: list[dict],
@@ -419,217 +673,25 @@ class EvidenceBuilder:
             ],
         )
 
-        # ========== Stage 4: Fetch text for top-K only ==========
-        def fetch_snippet(ev: dict, score: float) -> str | None:
-            """
-            Fetch summary/raw text for events that passed threshold and are in top-K.
-            Updates snippet_cache with text + score.
-            """
-            summary_id = ev.get("summary_id")
-            if not summary_id:
-                return None
-
-            # Use cached snippet if available
-            if summary_id in snippet_cache:
-                cached_snippet, _cached_score = snippet_cache[summary_id]
-                if cached_snippet is not None:
-                    _jlog(
-                        "summary_cache_hit",
-                        request_id,
-                        step="3.4",
-                        summary_id=summary_id,
-                        stage="fetch",
-                    )
-                    return cached_snippet
-                # If only score cached, fetch text below
-
-            t = _StepTimer()
-            snippet: str | None = None
-            stage_stats["fetch_attempts"] += 1
-
-            # 1) Raw context mode: skip summary text, fetch raw turn text from CSV lookup
-            if use_raw_context:
-                try:
-                    if self.raw_context_lookup is None:
-                        raise RuntimeError("use_raw_context=True but raw_context_lookup is not configured (set raw_context_data_dir)")
-                    session_id = ev.get("session_id")
-                    message_id = ev.get("message_id")
-                    if message_id is None:
-                        raise ValueError("Evidence event is missing message_id")
-                    snippet = self.raw_context_lookup.get(str(session_id), int(message_id))
-                    _jlog(
-                        "evidence_raw_context_fetch",
-                        request_id,
-                        step="3.4",
-                        summary_id=summary_id,
-                        session_id=session_id,
-                        message_id=message_id,
-                        fetched=bool(snippet),
-                        raw_len=len(snippet) if snippet else 0,
-                    )
-                except Exception as e:
-                    _jlog(
-                        "evidence_raw_context_failed",
-                        request_id,
-                        step="3.4",
-                        summary_id=summary_id,
-                        error=str(e),
-                    )
-            else:
-                # 2) Fetch summary text
-                if use_full_summary:
-                    try:
-                        snippet = self.summaries_vdb.get_summary_text_by_id(summary_id)
-                    except (AttributeError, TypeError):
-                        xs = self.summaries_vdb.get_summaries_by_ids([summary_id], top_n=1)
-                        snippet = xs[0] if xs else None
-                else:
-                    xs = self.summaries_vdb.get_summaries_by_ids([summary_id], top_n=1)
-                    snippet = xs[0] if xs else None
-
-                # 3) Fallback to raw turn text if enabled and summary is truncated
-                if fallback_to_raw and (not snippet or "…" in (snippet or "")):
-                    try:
-                        session_id, message_id = ev.get("session_id"), ev.get("message_id")
-                        raw = self.vector_db_manager.summary_store.get_raw_turn_text(session_id, message_id)
-                        if raw:
-                            snippet = raw
-                            _jlog(
-                                "evidence_fallback_to_raw",
-                                request_id,
-                                step="3.4",
-                                summary_id=summary_id,
-                                session_id=session_id,
-                                message_id=message_id,
-                                raw_len=len(raw),
-                            )
-                    except Exception as e:
-                        _jlog(
-                            "evidence_fallback_failed",
-                            request_id,
-                            step="3.4",
-                            summary_id=summary_id,
-                            error=str(e),
-                        )
-
-            fetched = bool(snippet)
-            if fetched:
-                stage_stats["fetch_success"] += 1
-
-            # Update cache with snippet + score
-            snippet_cache[summary_id] = (snippet, score if fetched else None)
-
-            _jlog(
-                "summary_fetched",
-                request_id,
-                step="3.4",
-                summary_id=summary_id,
-                fetched=fetched,
-                score=score if fetched else None,
-                passed_threshold=fetched,
-                threshold=summary_vec_threshold,
-                elapsed_sec=t.sec(),
-            )
-
-            return snippet if fetched else None
-
-        # Collect evidence items: (score, snippet, summary_id, dialogue_datetime)
-        evidence_items: list[tuple[float, str, str | None, str | None]] = []
-
-        for score, ev in scored_events:
-            summary_id = ev.get("summary_id")
-            snippet = fetch_snippet(ev, score)
-            if not snippet:
-                continue
-
-            # Extract dialogue_datetime from event or summary metadata
-            dialogue_datetime = ev.get("dialogue_datetime")
-            if dialogue_datetime is None and summary_id:
-                # Try to get from summary metadata
-                for meta in self.summaries_vdb._meta:
-                    if meta.get("summary_id") == summary_id:
-                        dialogue_datetime = meta.get("dialogue_datetime")
-                        break
-
-            evidence_items.append((score, snippet, summary_id, dialogue_datetime))
-
-        _jlog(
-            "evidence_fetch_complete",
-            request_id,
-            step="3.4",
-            fetch_attempts=stage_stats["fetch_attempts"],
-            fetch_success=stage_stats["fetch_success"],
-            evidence_item_count=len(evidence_items),
+        evidence_items = self._fetch_snippet_text(
+            scored_events=scored_events,
+            snippet_cache=snippet_cache,
+            stage_stats=stage_stats,
+            use_full_summary=use_full_summary,
+            use_raw_context=use_raw_context,
+            fallback_to_raw=fallback_to_raw,
+            summary_vec_threshold=summary_vec_threshold,
+            request_id=request_id,
         )
 
-        # ========== Stage 5: Format evidence block ==========
-        if evidence_items:
-            _jlog(
-                "evidence_items",
-                request_id,
-                step="3.5",
-                count=len(evidence_items),
-                items=[
-                    {
-                        "rank": i + 1,
-                        "score": score,
-                        "len": len(snippet) if snippet else 0,
-                        "summary_id": summary_id,
-                        "dialogue_datetime": dt,
-                    }
-                    for i, (score, snippet, summary_id, dt) in enumerate(evidence_items[:20])
-                ],
-            )
-
-        if evidence_items:
-            lines.append("### Evidence Summary")
-            for score, snippet, summary_id, dialogue_datetime in evidence_items:
-                score_str = f"{score:.3f}" if score is not None else "--"
-                summary_id_str = summary_id or "N/A"
-                dt_str = f"[{dialogue_datetime}]" if dialogue_datetime else ""
-                lines.append(f"  • {dt_str}[sid={summary_id_str}][score={score_str}] {snippet} ")
-
-        result = "\n".join(lines)
-        self.last_evidence_trace = {
-            "request_id": request_id,
-            "selected_evidence_count": len(evidence_items),
-            "selected_evidence": [
-                {
-                    "rank": index + 1,
-                    "score": round(float(score), 6),
-                    "summary_id": summary_id,
-                    "dialogue_datetime": dialogue_datetime,
-                    "preview": snippet[:160],
-                }
-                for index, (score, snippet, summary_id, dialogue_datetime) in enumerate(evidence_items)
-            ],
-            "score_pass_count": stage_stats["score_pass"],
-            "score_fail_count": stage_stats["score_fail"],
-            "dedup_skips": stage_stats["dedup_skips"],
-            "fetch_attempts": stage_stats["fetch_attempts"],
-            "fetch_success": stage_stats["fetch_success"],
-        }
-
-        _jlog(
-            "evidence_format_complete",
-            request_id,
-            step="3.5",
-            total_snippets=len(evidence_items),
-            line_count=len(lines),
-            result_length=len(result),
+        return self._format_evidence_block(
+            evidence_items=evidence_items,
+            lines=lines,
+            snippet_cache=snippet_cache,
+            stage_stats=stage_stats,
+            request_id=request_id,
+            timer_render=timer_render,
         )
-
-        _jlog(
-            "build_evidence_complete",
-            request_id,
-            step="3",
-            total_snippets=len(evidence_items),
-            cache_size=len(snippet_cache),
-            result_length=len(result),
-            elapsed_sec=timer_render.sec(),
-        )
-
-        return result
 
     def _fetch_split_raw_text(self, entry_id: str) -> str | None:
         """Raw turn text for a split/single entry: raw_text metadata → stored
