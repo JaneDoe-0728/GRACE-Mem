@@ -27,8 +27,8 @@ from pathlib import Path
 
 import pytest
 
-from grace_mem.pipeline.retriever import Retriever
-from grace_mem.pipeline.retriever_config import RetrieverConfig
+from grace_mem.retrieval.pipeline import Retriever
+from grace_mem.retrieval.config import RetrieverConfig
 from tests.retrieval_fakes import (
     CallLog,
     FakeEvidenceFilter,

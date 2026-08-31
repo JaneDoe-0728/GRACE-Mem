@@ -16,7 +16,7 @@ own the things that produce one.
 import numpy as np
 
 from grace_mem.retrieval.prompts.hyde import HYDE_SYSTEM, HYDE_USER
-from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
+from grace_mem.runtime.logger_config import _StepTimer, make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")
 

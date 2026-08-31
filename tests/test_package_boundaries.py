@@ -10,7 +10,7 @@ Every rule is written against the *current* module paths and holds today. Each
 one is the same rule the target tree needs, so the move commits update the paths
 here and nothing else:
 
-    grace_mem.pipeline.ingest_steps    ->  grace_mem/ingestion/
+    grace_mem.ingestion.steps    ->  grace_mem/ingestion/
     grace_mem.retrieval.steps ->  grace_mem/retrieval/
 """
 
@@ -28,7 +28,7 @@ DOMAIN_MODULES = (
     "grace_mem.domain.relationships",
 )
 # The two capabilities, at their current paths.
-INGESTION_PREFIX = "grace_mem.pipeline.ingest_steps"
+INGESTION_PREFIX = "grace_mem.ingestion.steps"
 RETRIEVAL_PREFIX = "grace_mem.retrieval.steps"
 
 

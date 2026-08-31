@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 
+from grace_mem.adapters.cache.cache import build_id_to_meta_maps
 from grace_mem.domain.extraction import KeywordExtractionResult
 from grace_mem.retrieval.ablation import flag_enabled
 from grace_mem.retrieval.candidates import CandidateSet
@@ -35,9 +36,8 @@ from grace_mem.retrieval.trace import (
     dedupe_preserve_order,
     format_retrieval_stage_trace_text,
 )
-from grace_mem.storage import build_id_to_meta_maps
-from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
-from grace_mem.utils.query_time_parser import parse_query_time
+from grace_mem.runtime.logger_config import _StepTimer, make_module_jlog, setup_logger
+from grace_mem.temporal.query_time_parser import parse_query_time
 
 _jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")
 _trace_jlog = make_module_jlog(name="grace_mem.Retriever.Trace", filename="kg_retrieval_trace.jsonl")

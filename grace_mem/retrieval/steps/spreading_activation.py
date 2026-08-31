@@ -26,8 +26,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from grace_mem.storage import build_id_to_meta_maps
-from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
+from grace_mem.adapters.cache.cache import build_id_to_meta_maps
+from grace_mem.runtime.logger_config import _StepTimer, make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Retrieval.SA", filename="kg_retrieval_sa.jsonl")
 

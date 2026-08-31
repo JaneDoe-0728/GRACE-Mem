@@ -37,7 +37,7 @@ import logging
 import re
 from typing import Any
 
-from grace_mem.utils.logger_config import make_module_jlog
+from grace_mem.runtime.logger_config import make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Retrieval.Narrowing", filename="kg_retrieval_narrowing.jsonl")
 logger = logging.getLogger(__name__)

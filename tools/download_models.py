@@ -6,7 +6,7 @@ vector already written to the stores -- old and new vectors would occupy
 different spaces while still comparing without error. Pinning makes the
 embedding space part of the reproducible configuration.
 
-Run once after cloning; `grace_mem/embeddings.py` falls back to downloading
+Run once after cloning; `grace_mem/adapters/embedding/embeddings.py` falls back to downloading
 from the Hub if these are absent, but then the revision is whatever is current.
 """
 

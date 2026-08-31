@@ -120,7 +120,7 @@ files.
 With FalkorDB and the configured LLM endpoint running:
 
 ```python
-from grace_mem.pipeline.factory import build_pipeline
+from grace_mem.bootstrap import build_pipeline
 
 with build_pipeline() as runtime:
     runtime.ingestor.summarize_and_ingest_turn(
@@ -315,7 +315,7 @@ FalkorDB.
 
 `tools/download_models.py` installs pinned snapshots of
 `Qwen/Qwen3-Embedding-0.6B` and `Qwen/Qwen3-Reranker-0.6B` under `models/`.
-`grace_mem/embeddings.py` uses the local embedding path when available and
+`grace_mem/adapters/embedding/embeddings.py` uses the local embedding path when available and
 otherwise falls back to the Hugging Face model ID.
 
 ### Experiment Configuration
@@ -332,7 +332,14 @@ selection, stage selection, artifact reuse, and output paths. See the
 
 ```text
 GRACE-Mem/
-├── grace_mem/                  # core memory, retrieval, storage, graph, and LLM code
+├── grace_mem/                  # the memory system, grouped by capability
+│   ├── domain/                 # Entity, Relationship, Provenance -- data only
+│   ├── ingestion/              # Turns -> graph, vector store, cache
+│   ├── retrieval/              # Query -> Evidence block
+│   ├── temporal/               # time expressions -> resolved ranges
+│   ├── adapters/               # FalkorDB, Chroma, BM25, OpenAI, the cache
+│   ├── runtime/                # logging, determinism, artifact paths
+│   └── bootstrap.py            # constructs and wires the components
 ├── experiment/
 │   ├── common/                 # shared evaluation and run helpers
 │   ├── locomo/                 # LoCoMo pipeline and analysis
