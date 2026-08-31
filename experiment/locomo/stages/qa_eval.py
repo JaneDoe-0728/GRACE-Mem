@@ -747,7 +747,7 @@ def _render_session_raw_text(session_id: str) -> tuple[str | None, str | None]:
 def _parse_replay_relationship_label(label: str) -> tuple[str, str, str]:
     """Parse a "source -> target" relationship label back into its endpoints.
 
-    The inverse of the renderer in summary_scoring. Replay depends on the pair
+    The inverse of the evidence-block renderer. Replay depends on the pair
     round-tripping, so a change to either side breaks replay against artifacts
     already on disk.
     """

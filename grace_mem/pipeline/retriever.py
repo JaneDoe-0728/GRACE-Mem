@@ -23,7 +23,6 @@ from grace_mem.pipeline.retrieval_steps import (
     SubgraphPageRank,
 )
 from grace_mem.pipeline.retrieval_steps.narrowing import NarrowingModule
-from grace_mem.pipeline.retrieval_steps.summary_scoring import ScoringWeights
 from grace_mem.pipeline.retrieval_steps.temporal import date_within_coarse_range
 from grace_mem.pipeline.retriever_config import RetrieverConfig
 from grace_mem.pipeline.trace import (
@@ -1630,18 +1629,6 @@ class Retriever:
             hyde_vec = None
             if self.cfg.summary_hyde_enable:
                 hyde_vec = generate_hyde_vector(llm=self.llm, searcher=self.searcher, question=rewritten_question, request_id=request_id)
-            _scoring_weights = ScoringWeights(
-                relation_weight=self.cfg.summary_relation_weight,
-                entity_weight=self.cfg.summary_entity_weight,
-                pair_bonus_weight=self.cfg.summary_pair_bonus_weight,
-                semantic_weight=self.cfg.summary_semantic_weight,
-                popularity_penalty_weight=self.cfg.summary_popularity_penalty_weight,
-                redundancy_penalty_weight=self.cfg.summary_redundancy_penalty_weight,
-                enable_pair_bonus=self.cfg.summary_enable_pair_bonus,
-                enable_popularity_penalty=self.cfg.summary_enable_popularity_penalty,
-                enable_redundancy_penalty=self.cfg.summary_enable_redundancy_penalty,
-                rrf_k=self.cfg.summary_rrf_k,
-            )
             # Ablation A: KG_ABLATION_NO_DIRECT_VECTOR=1 -> config closes the direct
             # search channel down to topn=0 (add_direct becomes a no-op); all that is
             # left here is a signal the smoke test can assert on.
@@ -1670,8 +1657,6 @@ class Retriever:
                 split_single_entry_raw=self.cfg.split_single_entry_raw,
                 query_text=rewritten_question,
                 request_id=request_id,
-                summary_filter_mode=self.cfg.summary_filter_mode,
-                scoring_weights=_scoring_weights,
                 hyde_vec=hyde_vec,
                 hyde_weight=self.cfg.summary_hyde_weight,
                 hyde_mode=self.cfg.summary_hyde_mode,

@@ -77,26 +77,6 @@ RERANKER_PARAMS = {
     "sa_rescale_c": 0.4,
     "sa_tau_a": 0.5,
     "sa_max_activated": 20,
-    # ── Summary selection strategy ─────────────────────────────────────────
-    # "semantic"               → baseline cosine-similarity ranking
-    # "graph_count"            → graph link counts only
-    # "graph_semantic"         → graph counts + weak semantic tie-breaker
-    # "graph_semantic_penalty" → graph + semantic + popularity/redundancy penalties
-    # "graph_weighted_sum"     → alias for full weighted-sum (all terms)
-    # "graph_rrf"              → RRF rank-fusion scoring
-    # "graph_rrf_mmr"          → RRF + iterative MMR redundancy control
-    "summary_filter_mode": "semantic",
-    "summary_relation_weight": 2.0,
-    "summary_entity_weight": 1.0,
-    "summary_pair_bonus_weight": 1.5,
-    "summary_semantic_weight": 0.5,
-    "summary_popularity_penalty_weight": 1.0,
-    "summary_redundancy_penalty_weight": 1.0,
-    "summary_enable_pair_bonus": False,
-    "summary_enable_popularity_penalty": False,
-    "summary_enable_redundancy_penalty": False,
-    # RRF-specific (used when summary_filter_mode in {"graph_rrf", "graph_rrf_mmr"})
-    "summary_rrf_k": 60.0,
     # ── HyDE summary retrieval ─────────────────────────────────────────────
     "summary_hyde_enable": False,
     "summary_hyde_weight": 0.1,

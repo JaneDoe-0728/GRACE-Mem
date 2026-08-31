@@ -86,7 +86,7 @@ class EvidenceConfig:
     """How surviving candidates become the Evidence block the LLM reads.
 
     The largest group, because three separable decisions grew together: which
-    summaries to score (`summary_filter_mode` and its weights), which text to
+    text to return for a summary (raw turn, summary, or the :u/:a split), which
     return for them (raw turn vs summary vs the :u/:a split), and how many
     survive (top-k, direct-vector, rerank). If this file splits further, the
     seam runs through here.
@@ -98,24 +98,6 @@ class EvidenceConfig:
     summary_vec_threshold: float = 0.4
     use_full_summary: bool = True
     fallback_to_raw: bool = False
-    # ── Summary selection strategy ────────────────────────────────────────────
-    # "semantic"               → baseline cosine-similarity ranking (default)
-    # "graph_count"            → graph link counts only (semantic_weight=0)
-    # "graph_semantic"         → graph counts + weak semantic tie-breaker
-    # "graph_semantic_penalty" → graph + semantic + popularity/redundancy penalties
-    summary_filter_mode: str = "semantic"
-    # Scoring weights — used when summary_filter_mode != "semantic"
-    summary_relation_weight: float = 2.0
-    summary_entity_weight: float = 1.0
-    summary_pair_bonus_weight: float = 1.5
-    summary_semantic_weight: float = 0.5
-    summary_popularity_penalty_weight: float = 1.0
-    summary_redundancy_penalty_weight: float = 1.0
-    summary_enable_pair_bonus: bool = True
-    summary_enable_popularity_penalty: bool = False
-    summary_enable_redundancy_penalty: bool = False
-    # Used when summary_filter_mode in {"graph_rrf", "graph_rrf_mmr"}
-    summary_rrf_k: float = 60.0
     # ── Which text comes back ─────────────────────────────────────────────────
     # Score and rank on summary vectors as usual, but return the raw turn text
     # for each selected snippet instead of the summary text.

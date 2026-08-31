@@ -3,22 +3,12 @@ Evidence building from provenance and summaries.
 """
 from typing import Any
 
-from grace_mem.pipeline.retrieval_steps.summary_scoring import (
-    ScoringWeights,
-    rank_summaries_by_graph_linked_score,
-    select_summaries_rrf,
-    select_summaries_rrf_mmr,
-)
 from grace_mem.services import Provenance
 from grace_mem.storage import build_id_to_meta_maps
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Retrieval.Evidence", filename="kg_retrieval_evidence.jsonl")
 
-_GRAPH_WEIGHTED_MODES = {
-    "graph_count", "graph_semantic", "graph_semantic_penalty", "graph_weighted_sum"
-}
-_RRF_MODES = {"graph_rrf", "graph_rrf_mmr"}
 
 # Max candidates fed to the cross-encoder reranker (bounds GPU memory).
 _RERANK_POOL_CAP = 40
@@ -61,8 +51,6 @@ class EvidenceBuilder:
         split_single_entry_raw: bool = False,
         query_text: str | None = None,
         request_id: str | None = None,
-        summary_filter_mode: str = "semantic",
-        scoring_weights: ScoringWeights | None = None,
         hyde_vec: Any = None,
         hyde_weight: float = 0.0,
         hyde_mode: str = "blend",
@@ -80,10 +68,6 @@ class EvidenceBuilder:
             use_full_summary: If True, fetch full summary text
             fallback_to_raw: If True, fallback to raw turn text when summary is truncated
             request_id: Request ID for logging
-            summary_filter_mode: Ranking strategy — "semantic" | "graph_count" |
-                "graph_semantic" | "graph_semantic_penalty"
-            scoring_weights: ScoringWeights instance (used when mode != "semantic").
-                Defaults to ScoringWeights() if None.
             hyde_vec: Optional HyDE hypothetical-summary embedding.
             hyde_weight: Blend weight for the HyDE similarity (0.0 = ignore HyDE).
             hyde_mode: How HyDE is used (semantic mode only):
@@ -104,7 +88,6 @@ class EvidenceBuilder:
             Formatted evidence block text
         """
         timer_render = _StepTimer()
-        _weights = scoring_weights if scoring_weights is not None else ScoringWeights()
         _jlog(
             "build_evidence_start",
             request_id,
@@ -115,7 +98,6 @@ class EvidenceBuilder:
             summary_vec_threshold=summary_vec_threshold,
             use_full_summary=use_full_summary,
             fallback_to_raw=fallback_to_raw,
-            summary_filter_mode=summary_filter_mode,
         )
         _jlog(
             "evidence_stage_start",
@@ -362,113 +344,62 @@ class EvidenceBuilder:
         # Graph modes: rerank via graph-linked scoring formula.
         topk = summary_topk_global if isinstance(summary_topk_global, int) else None
 
-        if summary_filter_mode in _GRAPH_WEIGHTED_MODES:
-            graph_ranked = rank_summaries_by_graph_linked_score(
-                scored_events=scored_events,
-                context_entities=context_entities,
-                context_relationships=context_relationships,
-                cache=self.cache,
-                weights=_weights,
-                summaries_vdb=self.summaries_vdb,
-                topk=topk,
+        # Semantic mode: stable descending sort by cosine score
+        scored_events.sort(key=lambda x: x[0], reverse=True)
+
+        # Per-entity quota: guarantee at least summary_per_entity_min snippets
+        # per source entity/relationship before applying global top-K.
+        if summary_per_entity_min > 0 and topk is not None:
+            # Step 1: collect the best `summary_per_entity_min` events per source
+            source_counts: dict[str, int] = {}
+            guaranteed: list[tuple[float, dict]] = []
+            remainder: list[tuple[float, dict]] = []
+            for score, ev in scored_events:
+                src = ev_source.get(id(ev), "")
+                if source_counts.get(src, 0) < summary_per_entity_min:
+                    guaranteed.append((score, ev))
+                    source_counts[src] = source_counts.get(src, 0) + 1
+                else:
+                    remainder.append((score, ev))
+            # Step 2: fill remaining slots from remainder (already sorted by score)
+            n_fill = max(0, topk - len(guaranteed))
+            scored_events = guaranteed + remainder[:n_fill]
+            _jlog(
+                "evidence_per_entity_quota",
+                request_id,
+                step="3.3",
+                per_entity_min=summary_per_entity_min,
+                guaranteed_count=len(guaranteed),
+                remainder_count=len(remainder),
+                filled=min(n_fill, len(remainder)),
+                total_selected=len(scored_events),
             )
-            weighted_reranked: list[tuple[float, dict]] = []
-            for sc, ev in graph_ranked:
-                weighted_reranked.append((sc.final_score, ev))
-                _jlog(
-                    "summary_graph_scored",
-                    request_id,
-                    step="3.3",
-                    **sc.to_log_dict(_weights, summary_filter_mode),
-                )
-            scored_events = weighted_reranked
-        elif summary_filter_mode in _RRF_MODES:
-            if summary_filter_mode == "graph_rrf_mmr":
-                rrf_ranked = select_summaries_rrf_mmr(
-                    scored_events=scored_events,
-                    context_entities=context_entities,
-                    context_relationships=context_relationships,
-                    cache=self.cache,
-                    weights=_weights,
-                    summaries_vdb=self.summaries_vdb,
-                    topk=topk,
-                )
-            else:
-                rrf_ranked = select_summaries_rrf(
-                    scored_events=scored_events,
-                    context_entities=context_entities,
-                    context_relationships=context_relationships,
-                    cache=self.cache,
-                    weights=_weights,
-                    topk=topk,
-                )
-            rrf_reranked: list[tuple[float, dict]] = []
-            for rrf_score, ev in rrf_ranked:
-                rrf_reranked.append((rrf_score.final_score, ev))
-                _jlog(
-                    "summary_rrf_scored",
-                    request_id,
-                    step="3.3",
-                    **rrf_score.to_log_dict(_weights, summary_filter_mode),
-                )
-            scored_events = rrf_reranked
-        else:
-            # Semantic mode: stable descending sort by cosine score
-            scored_events.sort(key=lambda x: x[0], reverse=True)
+        elif topk is not None:
+            scored_events = scored_events[:topk]
 
-            # Per-entity quota: guarantee at least summary_per_entity_min snippets
-            # per source entity/relationship before applying global top-K.
-            if summary_per_entity_min > 0 and topk is not None:
-                # Step 1: collect the best `summary_per_entity_min` events per source
-                source_counts: dict[str, int] = {}
-                guaranteed: list[tuple[float, dict]] = []
-                remainder: list[tuple[float, dict]] = []
-                for score, ev in scored_events:
-                    src = ev_source.get(id(ev), "")
-                    if source_counts.get(src, 0) < summary_per_entity_min:
-                        guaranteed.append((score, ev))
-                        source_counts[src] = source_counts.get(src, 0) + 1
-                    else:
-                        remainder.append((score, ev))
-                # Step 2: fill remaining slots from remainder (already sorted by score)
-                n_fill = max(0, topk - len(guaranteed))
-                scored_events = guaranteed + remainder[:n_fill]
-                _jlog(
-                    "evidence_per_entity_quota",
-                    request_id,
-                    step="3.3",
-                    per_entity_min=summary_per_entity_min,
-                    guaranteed_count=len(guaranteed),
-                    remainder_count=len(remainder),
-                    filled=min(n_fill, len(remainder)),
-                    total_selected=len(scored_events),
-                )
-            elif topk is not None:
-                scored_events = scored_events[:topk]
-
-            # HyDE "fill" mode: backfill any unused top-K slots with HyDE-rescued
-            # summaries (never displaces a query hit).
-            if _hyde_fill and topk is not None and len(scored_events) < topk and fill_events:
-                fill_events.sort(key=lambda x: x[0], reverse=True)
-                used_keys = {key_of(ev) for _, ev in scored_events}
-                n_filled = 0
-                for fill_score, ev in fill_events:
-                    if len(scored_events) >= topk:
-                        break
-                    k = key_of(ev)
-                    if k in used_keys:
-                        continue
-                    scored_events.append((fill_score, ev))
-                    used_keys.add(k)
-                    n_filled += 1
-                _jlog(
-                    "hyde_fill_applied",
-                    request_id,
-                    step="3.3",
-                    fill_candidates=len(fill_events),
-                    slots_filled=n_filled,
-                    final_count=len(scored_events),
-                )
+        # HyDE "fill" mode: backfill any unused top-K slots with HyDE-rescued
+        # summaries (never displaces a query hit).
+        if _hyde_fill and topk is not None and len(scored_events) < topk and fill_events:
+            fill_events.sort(key=lambda x: x[0], reverse=True)
+            used_keys = {key_of(ev) for _, ev in scored_events}
+            n_filled = 0
+            for fill_score, ev in fill_events:
+                if len(scored_events) >= topk:
+                    break
+                k = key_of(ev)
+                if k in used_keys:
+                    continue
+                scored_events.append((fill_score, ev))
+                used_keys.add(k)
+                n_filled += 1
+            _jlog(
+                "hyde_fill_applied",
+                request_id,
+                step="3.3",
+                fill_candidates=len(fill_events),
+                slots_filled=n_filled,
+                final_count=len(scored_events),
+            )
 
         _jlog(
             "evidence_topk_selected",
@@ -476,7 +407,6 @@ class EvidenceBuilder:
             step="3.3",
             requested_topk=summary_topk_global,
             selected_count=len(scored_events),
-            summary_filter_mode=summary_filter_mode,
             sample_top_candidates=[
                 {
                     "rank": i + 1,
