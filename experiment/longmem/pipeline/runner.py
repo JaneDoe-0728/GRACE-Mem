@@ -82,7 +82,8 @@ from grace_mem.embeddings import embedder
 from grace_mem.graph.falkordb import graph_from_env
 from grace_mem.llm import LLMClient, token_tracker
 from grace_mem.pipeline.ingestor import Ingestor
-from grace_mem.pipeline.retriever import Retriever, RetrieverConfig
+from grace_mem.pipeline.retriever import Retriever
+from grace_mem.pipeline.retriever_config import RetrieverConfig
 from grace_mem.services import EntityManager, Provenance, RelationshipManager
 from grace_mem.storage import VDBManager
 from grace_mem.utils.logger_config import make_module_jlog

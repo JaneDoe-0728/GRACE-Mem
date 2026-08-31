@@ -158,7 +158,8 @@ class LongMemRerun:
 
         from grace_mem.embeddings import embedder
         from grace_mem.llm import token_tracker
-        from grace_mem.pipeline.retriever import Retriever, RetrieverConfig
+        from grace_mem.pipeline.retriever import Retriever
+        from grace_mem.pipeline.retriever_config import RetrieverConfig
         from grace_mem.storage import VDBManager
 
         mgr = None
