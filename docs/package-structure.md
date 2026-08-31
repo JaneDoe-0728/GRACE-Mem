@@ -49,8 +49,7 @@ grace_mem/
 │   ├── entities.py             Entity, EntityType, canonical_entity_id
 │   ├── relationships.py        Relationship, canonical_rel_id
 │   ├── extraction.py           ExtractionResult, KeywordExtractionResult
-│   ├── provenance.py           Provenance
-│   └── conversation.py         Turn, Session, Speaker, sid helpers
+│   └── provenance.py           Provenance
 │
 ├── ingestion/                  Turns -> Graph + VDB + Cache
 │   ├── pipeline.py             the ingestion pipeline, end to end
@@ -61,11 +60,8 @@ grace_mem/
 │   │   └── entity_ops/         rules.py, examples.py
 │   ├── steps/
 │   │   ├── compress.py
-│   │   ├── extract.py
+│   │   ├── extract.py          EntityExtractor + RelationshipExtractor
 │   │   └── sync.py
-│   ├── extractors/
-│   │   ├── entity_extractor.py
-│   │   └── relationship_extractor.py
 │   └── managers/
 │       ├── entity_manager.py
 │       └── relationship_manager.py
@@ -121,12 +117,13 @@ grace_mem/
 │   └── analysis_log.py         append_analysis_record / append_pretty_block
 │                               + the closed _JSONL_FILES artifact set
 │
+├── text.py                     tokenize_en: shared by both capabilities
 └── bootstrap.py                composition root -- today's pipeline/factory.py
 ```
 
 ### Deviations from this tree, and why
 
-**`grace_mem/text.py` exists.** `tokenize_en`, `is_date_token` and the stopword
+**`grace_mem/text.py`.** `tokenize_en`, `is_date_token` and the stopword
 set were in `utils/common.py`. Retrieval tokenizes for BM25, ingestion tokenizes
 entity names; neither owns them and they carry no domain meaning. Putting them in
 either capability would have made the other import across the boundary, so they
@@ -141,10 +138,20 @@ been the same boundary violation; sending it to `domain/` deleted a
 docstring calls it "the lexical half of the hybrid entity search" — a sparse
 index whose rankings are fused with the dense ones by RRF, not a vector store.
 
-**`adapters/extractors/` was not created.** `EntityExtractor` and
-`RelationshipExtractor` share one file, `ingestion/steps/extract.py`. Splitting
-one file into two is a refactor, not a move, and belongs in a commit that is not
-claiming to be only a move.
+**No `ingestion/extractors/`.** `EntityExtractor` and `RelationshipExtractor`
+share one file, `ingestion/steps/extract.py`. Splitting one file into two is a
+refactor, not a move, and belongs in a commit that is not claiming to be only a
+move. An earlier draft of the tree above showed the split; it has been removed
+so the tree states the target rather than a wish.
+
+**No `domain/conversation.py`.** An earlier draft placed Turn, Session, Speaker
+and the sid helpers there, taken from the glossary's vocabulary rather than from
+the code. Checked: `Session` is not declared anywhere, `Turn` is declared in
+`experiment/agent_filter/corpus.py` -- outside `grace_mem` entirely -- and
+`Speaker`/`SpeakerTurn` live in `retrieval/evidence_speaker_enricher.py`, where
+they serve evidence assembly. There is nothing to put in the module, so it is
+gone from the tree. Those four remain glossary terms; they are simply not a
+grace_mem module.
 
 **`storage/paths.py` moved with the adapters, not with the runtime commit.** It
 was the last file left in `storage/`, and leaving a one-file package behind for
