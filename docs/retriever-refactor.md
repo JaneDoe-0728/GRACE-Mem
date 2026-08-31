@@ -9,8 +9,7 @@ target directory layout and the rules behind it, and to
 covers the part neither of them does: decomposing `retriever.py`, and proving
 the decomposition is faithful without a live FalkorDB or LLM.
 
-**Status: plan.** Three of its steps have landed (see *Progress*); the rest is
-agreed but unbuilt.
+**Status: done.** See *Progress* at the end.
 
 ---
 
@@ -289,9 +288,43 @@ Also untouched: `evidence.py` (970), `temporal/resolver.py` (1322),
 
 ## Progress
 
-| | |
-| --- | --- |
-| ✅ | `retriever_config.py` extracted, then grouped into Search/Filter/Evidence/Adaptive |
-| ✅ | `keyword_cache.py` extracted as a `KeywordCache` class |
-| ✅ | `trace.py` -- six pure trace builders |
-| | `retriever.py`: 2496 -> 2112 lines |
+All five phases landed. `retriever.py` went from 2496 lines to
+`retrieval/pipeline.py` at 1836, and its 780-line method to 330.
+
+| Phase | | |
+| --- | --- | --- |
+| 0 | ✅ | `retrieval_fakes.py`, five snapshots, injection-verified |
+| 1 | ✅ | config groups, keyword cache, trace, rendering, query rewrite, ablation, HyDE, keywords; `summary_scoring.py` deleted |
+| 2 | ✅ | `_search_candidates` + `CandidateSet`, `_filter_candidates`, `additive_merge` |
+| 3 | ✅ | domain, retrieval, ingestion, temporal, adapters, runtime, bootstrap |
+| 4 | ✅ | `extractors/` split |
+
+Three findings the plan did not anticipate:
+
+**An output-only snapshot proved nothing.** The reranker recovery unions
+its result with the filter's, so a deliberately broken filter top-k left
+the returned entity list identical. The doubles record the whole
+conversation with the collaborators, not just what came back, and that
+is what makes the snapshots protective.
+
+**Stage 1 stayed a method.** It has fourteen free variables and needs
+twelve things from `self`, eight of them name-resolution helpers. A
+module function would take about twenty parameters. All nineteen uses of
+those helpers are logging, so the logic is separable from its
+instrumentation -- that separation is what a later step should do.
+
+**`_adaptive_research` cannot leave the class.** It calls
+`assemble_context_from_query` to run the second pass; moving it out
+means passing the Retriever in, which is a circular dependency wearing a
+parameter's clothes.
+
+Two things nearly broke silently and were caught by something other than
+the tests: a bare `return` inside stage 1 that used to end the whole
+query (caught by mypy, on disagreeing return types), and
+`_DEFAULT_ARTIFACTS_DIR` following `paths.py` out of `storage/` and
+orphaning 123 MB of Chroma state (caught by checking the resolved path
+against the old one).
+
+Still untouched, each its own job: `evidence.py` (900),
+`temporal/resolver.py` (1322), `ingestion/pipeline.py` (1074),
+`retrieval/steps/filtering.py` (894).
