@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 
 # Default working dir: grace_mem/storage/artifacts (this file lives in grace_mem/storage/).
-_DEFAULT_ART_DIR = Path(__file__).resolve().parent / "artifacts"
+_DEFAULT_ARTIFACTS_DIR = Path(__file__).resolve().parent / "artifacts"
 
 # Env var that overrides the working artifacts directory (per-process isolation).
 ARTIFACTS_DIR_ENV = "KG_ARTIFACTS_DIR"
@@ -32,7 +32,7 @@ def resolve_artifacts_dir(*, create: bool = False) -> Path:
     parents) is created if missing.
     """
     override = os.environ.get(ARTIFACTS_DIR_ENV, "").strip()
-    art_dir = (Path(override).expanduser() if override else _DEFAULT_ART_DIR).resolve()
+    artifacts_dir = (Path(override).expanduser() if override else _DEFAULT_ARTIFACTS_DIR).resolve()
     if create:
-        art_dir.mkdir(parents=True, exist_ok=True)
-    return art_dir
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+    return artifacts_dir

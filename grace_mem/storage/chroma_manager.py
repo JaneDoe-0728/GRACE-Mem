@@ -348,7 +348,7 @@ class VDBManager:
 
         # Clear cache in memory.
         CacheStore.clear(self.cache)
-def _resolve_art_dir() -> Path:
+def _resolve_artifacts_dir() -> Path:
     """Resolve and create the artifacts directory used by storage singletons.
 
     Honors KG_ARTIFACTS_DIR so parallel processes can be isolated onto separate
@@ -356,5 +356,5 @@ def _resolve_art_dir() -> Path:
     return resolve_artifacts_dir(create=True)
 
 # Singleton: every call site imports this one instance
-ART_DIR = _resolve_art_dir()
-MGR = VDBManager(ART_DIR)
+ARTIFACTS_DIR = _resolve_artifacts_dir()
+MGR = VDBManager(ARTIFACTS_DIR)

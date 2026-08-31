@@ -337,13 +337,13 @@ def main():
             continue
         if args.categories and subdir.name not in args.categories:
             continue
-        for art_dir in sorted(subdir.iterdir()):
+        for artifact_dir in sorted(subdir.iterdir()):
             if (
-                art_dir.is_dir()
-                and art_dir.name.startswith("artifacts_")
-                and art_dir.name not in (args.exclude or [])
+                artifact_dir.is_dir()
+                and artifact_dir.name.startswith("artifacts_")
+                and artifact_dir.name not in (args.exclude or [])
             ):
-                artifact_dirs.append(art_dir)
+                artifact_dirs.append(artifact_dir)
 
     print(f"Found {len(artifact_dirs)} artifact directories")
 
@@ -351,19 +351,19 @@ def main():
         print("EXPORT ONLY mode — reading from existing ChromaDB\n")
         ok = skip = error = 0
         t0 = time.time()
-        for i, art_dir in enumerate(artifact_dirs, 1):
+        for i, artifact_dir in enumerate(artifact_dirs, 1):
             try:
-                result = export_artifact(art_dir)
+                result = export_artifact(artifact_dir)
                 status = result.get("status")
                 if status == "ok":
                     ok += 1
-                    print(f"[{i}/{len(artifact_dirs)}] {art_dir.name}: {result['entries']} entries → {Path(result['path']).name}")
+                    print(f"[{i}/{len(artifact_dirs)}] {artifact_dir.name}: {result['entries']} entries → {Path(result['path']).name}")
                 else:
                     skip += 1
-                    print(f"[{i}/{len(artifact_dirs)}] {art_dir.name}: SKIP — {result.get('reason')}")
+                    print(f"[{i}/{len(artifact_dirs)}] {artifact_dir.name}: SKIP — {result.get('reason')}")
             except Exception as e:
                 error += 1
-                print(f"[{i}/{len(artifact_dirs)}] {art_dir.name}: ERROR — {e}")
+                print(f"[{i}/{len(artifact_dirs)}] {artifact_dir.name}: ERROR — {e}")
         elapsed = time.time() - t0
         print(f"\nDone in {elapsed:.1f}s — ok={ok}  skip={skip}  error={error}")
         return
@@ -382,19 +382,19 @@ def main():
 
     ok = skip = error = 0
     t0 = time.time()
-    for i, art_dir in enumerate(artifact_dirs, 1):
+    for i, artifact_dir in enumerate(artifact_dirs, 1):
         try:
-            result = rebuild_artifact(art_dir, lookup, compressor, args.dry_run)
+            result = rebuild_artifact(artifact_dir, lookup, compressor, args.dry_run)
             status = result.get("status")
             if status in ("ok", "dry_run"):
                 ok += 1
-                print(f"[{i}/{len(artifact_dirs)}] {art_dir.name}: {result}")
+                print(f"[{i}/{len(artifact_dirs)}] {artifact_dir.name}: {result}")
             else:
                 skip += 1
-                print(f"[{i}/{len(artifact_dirs)}] {art_dir.name}: SKIP — {result.get('reason')}")
+                print(f"[{i}/{len(artifact_dirs)}] {artifact_dir.name}: SKIP — {result.get('reason')}")
         except Exception as e:
             error += 1
-            print(f"[{i}/{len(artifact_dirs)}] {art_dir.name}: ERROR — {e}")
+            print(f"[{i}/{len(artifact_dirs)}] {artifact_dir.name}: ERROR — {e}")
 
     elapsed = time.time() - t0
     print(f"\nDone in {elapsed:.1f}s — ok={ok}  skip={skip}  error={error}")
