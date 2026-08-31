@@ -25,6 +25,12 @@ from grace_mem.pipeline.retrieval_steps.narrowing import NarrowingModule
 from grace_mem.pipeline.retrieval_steps.summary_scoring import ScoringWeights
 from grace_mem.pipeline.retrieval_steps.temporal import date_within_coarse_range
 from grace_mem.pipeline.retriever_config import RetrieverConfig
+from grace_mem.pipeline.trace import (
+    build_adaptive_trace,
+    build_stage_trace_snapshot,
+    dedupe_preserve_order,
+    format_retrieval_stage_trace_text,
+)
 from grace_mem.storage import build_id_to_meta_maps
 from grace_mem.utils.common import KeywordExtractionResult
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
@@ -322,18 +328,6 @@ class Retriever:
                     seen.add(name)
         return names
 
-    @staticmethod
-    def _dedupe_preserve_order(items: list[str]) -> list[str]:
-        """Deduplicate strings while preserving the original order."""
-        out: list[str] = []
-        seen: set[str] = set()
-        for item in items:
-            value = (item or "").strip()
-            if not value or value in seen:
-                continue
-            out.append(value)
-            seen.add(value)
-        return out
 
     def _relationship_name_from_edge(self, edge: dict[str, Any]) -> str:
         """Render one edge-subgraph record into a readable label."""
@@ -350,7 +344,7 @@ class Retriever:
             names.append(self_meta.get("name") or node_id)
             for neighbor in (payload or {}).get("neighbors") or []:
                 names.append(neighbor.get("neighbor_name") or neighbor.get("neighbor_id"))
-        return self._dedupe_preserve_order(names)
+        return dedupe_preserve_order(names)
 
     def _relationship_names_from_node_subgraph(self, node_subgraph: dict[str, dict]) -> list[str]:
         """Collect all edge labels present in a node subgraph."""
@@ -362,7 +356,7 @@ class Retriever:
                 tgt_name = neighbor.get("neighbor_name") or neighbor.get("neighbor_id")
                 desc = (neighbor.get("rel_desc") or "").strip()
                 labels.append(f"{src_name} -> {tgt_name}" if not desc else f"{src_name} -> {tgt_name} | {desc}")
-        return self._dedupe_preserve_order(labels)
+        return dedupe_preserve_order(labels)
 
     def _entity_names_from_edge_subgraph(self, edge_subgraph: list[dict[str, Any]]) -> list[str]:
         """Collect all endpoint entity names present in an edge subgraph."""
@@ -370,132 +364,16 @@ class Retriever:
         for edge in edge_subgraph or []:
             names.append(edge.get("source_name") or self._entity_name_by_id(edge.get("source_id")))
             names.append(edge.get("target_name") or self._entity_name_by_id(edge.get("target_id")))
-        return self._dedupe_preserve_order(names)
+        return dedupe_preserve_order(names)
 
     def _relationship_names_from_edge_subgraph(self, edge_subgraph: list[dict[str, Any]]) -> list[str]:
         """Collect all readable edge labels present in an edge subgraph."""
-        return self._dedupe_preserve_order(
+        return dedupe_preserve_order(
             [self._relationship_name_from_edge(edge) for edge in (edge_subgraph or [])]
         )
 
-    def _build_stage_trace_snapshot(
-        self,
-        *,
-        step: str,
-        stage: str,
-        entity_names: list[str],
-        relationship_names: list[str],
-        previous: dict[str, Any] | None = None,
-        skipped: bool = False,
-        reason: str | None = None,
-    ) -> dict[str, Any]:
-        """Build one readable stage snapshot with additions/removals from the previous stage."""
-        current_entities = self._dedupe_preserve_order(entity_names)
-        current_relationships = self._dedupe_preserve_order(relationship_names)
-        prev_entities = (previous or {}).get("entity_names") or []
-        prev_relationships = (previous or {}).get("relationship_names") or []
-        prev_entity_set = set(prev_entities)
-        prev_relationship_set = set(prev_relationships)
-        current_entity_set = set(current_entities)
-        current_relationship_set = set(current_relationships)
 
-        return {
-            "step": step,
-            "stage": stage,
-            "skipped": skipped,
-            "reason": reason,
-            "entity_count": len(current_entities),
-            "relationship_count": len(current_relationships),
-            "entity_names": current_entities,
-            "relationship_names": current_relationships,
-            "added_entity_names": [name for name in current_entities if name not in prev_entity_set],
-            "removed_entity_names": [name for name in prev_entities if name not in current_entity_set],
-            "added_relationship_names": [name for name in current_relationships if name not in prev_relationship_set],
-            "removed_relationship_names": [name for name in prev_relationships if name not in current_relationship_set],
-        }
 
-    @staticmethod
-    def _format_trace_names(names: list[str]) -> str:
-        """Render a readable names list for the pretty waterfall trace."""
-        if not names:
-            return "-"
-        return "; ".join(names)
-
-    def _format_retrieval_stage_trace_text(
-        self,
-        *,
-        request_id: str | None,
-        question: str,
-        low_level_keywords: list[str],
-        high_level_keywords: list[str],
-        local_branch: list[dict[str, Any]],
-        global_branch: list[dict[str, Any]],
-        merged_branch: list[dict[str, Any]],
-        graph_override: bool,
-        stop_reason: str | None,
-        elapsed_sec: float | None,
-    ) -> str:
-        """Format one retrieval request as a readable waterfall trace block."""
-        lines = [
-            "=" * 80,
-            f"request_id: {request_id or '-'}",
-            f"question: {question}",
-            f"low_level_keywords: {self._format_trace_names(low_level_keywords)}",
-            f"high_level_keywords: {self._format_trace_names(high_level_keywords)}",
-            f"graph_override: {graph_override}",
-            f"stop_reason: {stop_reason or '-'}",
-            f"elapsed_sec: {round(elapsed_sec, 4) if elapsed_sec is not None else '-'}",
-            "",
-        ]
-
-        def append_branch(branch_name: str, stages: list[dict[str, Any]]) -> None:
-            """Record one retrieval branch's state into the trace.
-
-            What the differential analysis in `derive_drop_reasons` later diffs: each
-            stage appends the entities and relationships still standing, and what
-            disappeared between consecutive entries is what that stage dropped. A stage
-            that does not append here is invisible to failure analysis, and its drops
-            get attributed to the next stage that does.
-            """
-            lines.append(f"[{branch_name}]")
-            if not stages:
-                lines.append("  (no stages)")
-                lines.append("")
-                return
-
-            for stage in stages:
-                header = f"{stage['step']} {stage['stage']}"
-                if stage.get("skipped"):
-                    header += f" (skipped: {stage.get('reason') or 'unknown'})"
-                lines.append(header)
-                lines.append(
-                    f"  entities[{stage['entity_count']}]: "
-                    f"{self._format_trace_names(stage.get('entity_names') or [])}"
-                )
-                lines.append(
-                    f"  relationships[{stage['relationship_count']}]: "
-                    f"{self._format_trace_names(stage.get('relationship_names') or [])}"
-                )
-                lines.append(
-                    f"  + entities: {self._format_trace_names(stage.get('added_entity_names') or [])}"
-                )
-                lines.append(
-                    f"  - entities: {self._format_trace_names(stage.get('removed_entity_names') or [])}"
-                )
-                lines.append(
-                    "  + relationships: "
-                    f"{self._format_trace_names(stage.get('added_relationship_names') or [])}"
-                )
-                lines.append(
-                    "  - relationships: "
-                    f"{self._format_trace_names(stage.get('removed_relationship_names') or [])}"
-                )
-                lines.append("")
-
-        append_branch("local", local_branch)
-        append_branch("global", global_branch)
-        append_branch("merged", merged_branch)
-        return "\n".join(lines).rstrip()
 
     def _emit_retrieval_stage_trace(
         self,
@@ -526,7 +404,7 @@ class Retriever:
                 "merged": merged_branch,
             },
         }
-        waterfall_text = self._format_retrieval_stage_trace_text(
+        waterfall_text = format_retrieval_stage_trace_text(
             request_id=request_id,
             question=question,
             low_level_keywords=low_level_keywords,
@@ -768,7 +646,7 @@ class Retriever:
             """Append one step record to the retrieval trace."""
             previous = branch[-1] if branch else None
             branch.append(
-                self._build_stage_trace_snapshot(
+                build_stage_trace_snapshot(
                     step=step,
                     stage=stage,
                     entity_names=entity_names,
@@ -1565,69 +1443,7 @@ class Retriever:
         )
         return result
 
-    @staticmethod
-    def _compute_overlap_metrics(
-        pass1_ids: list[str],
-        pass2_ids: list[str],
-    ) -> tuple[int, float | None]:
-        """Return intersection size and Jaccard overlap for unique IDs."""
-        pass1 = set(pass1_ids)
-        pass2 = set(pass2_ids)
-        union = pass1 | pass2
-        if not union:
-            return 0, None
-        overlap_count = len(pass1 & pass2)
-        return overlap_count, overlap_count / len(union)
 
-    def _build_adaptive_trace(
-        self,
-        *,
-        pass2_triggered: bool,
-        pass1_entity_ids: list[str],
-        pass1_relation_ids: list[str],
-        pass2_entity_ids: list[str] | None = None,
-        pass2_relation_ids: list[str] | None = None,
-        conf_pass1: float | None = None,
-        conf_pass2: float | None = None,
-        conf_final: float | None = None,
-        rewritten_query: str | None = None,
-        adaptive_skip_reason: str | None = None,
-    ) -> dict[str, Any]:
-        """Build a stable trace from pre-merge pass results."""
-        entity_ids_2 = list(pass2_entity_ids or []) if pass2_triggered else []
-        relation_ids_2 = list(pass2_relation_ids or []) if pass2_triggered else []
-        if pass2_triggered:
-            entity_overlap_count, entity_overlap_pct = self._compute_overlap_metrics(
-                pass1_entity_ids,
-                entity_ids_2,
-            )
-            relation_overlap_count, relation_overlap_pct = self._compute_overlap_metrics(
-                pass1_relation_ids,
-                relation_ids_2,
-            )
-        else:
-            entity_overlap_count = relation_overlap_count = 0
-            entity_overlap_pct = relation_overlap_pct = None
-
-        config = getattr(self, "cfg", None)
-        trace = {
-            "pass2_triggered": pass2_triggered,
-            "conf_pass1": conf_pass1,
-            "conf_pass2": conf_pass2,
-            "conf_final": conf_final,
-            "tau_confidence": getattr(config, "tau_confidence", None),
-            "rewritten_query": rewritten_query,
-            "adaptive_skip_reason": adaptive_skip_reason,
-            "pass1_entity_ids": list(pass1_entity_ids),
-            "pass2_entity_ids": entity_ids_2,
-            "pass1_relation_ids": list(pass1_relation_ids),
-            "pass2_relation_ids": relation_ids_2,
-            "entity_overlap_count": entity_overlap_count,
-            "entity_overlap_pct": entity_overlap_pct,
-            "relation_overlap_count": relation_overlap_count,
-            "relation_overlap_pct": relation_overlap_pct,
-        }
-        return trace
 
     def _adaptive_research(
         self,
@@ -1704,7 +1520,8 @@ class Retriever:
                 conf_final=conf_1,
                 elapsed_sec=timer_adaptive.sec(),
             )
-            self._last_adaptive_trace = self._build_adaptive_trace(
+            self._last_adaptive_trace = build_adaptive_trace(
+            config=self.cfg,
                 pass2_triggered=False,
                 pass1_entity_ids=ent_ids_1,
                 pass1_relation_ids=rel_ids_1,
@@ -1735,7 +1552,8 @@ class Retriever:
         if rewritten_q.strip() == question.strip():
             _jlog("adaptive_skip", request_id, reason="rewrite_identical")
             print("[Adaptive] Rewrite returned original query — skipping pass-2.")
-            self._last_adaptive_trace = self._build_adaptive_trace(
+            self._last_adaptive_trace = build_adaptive_trace(
+            config=self.cfg,
                 pass2_triggered=False,
                 pass1_entity_ids=ent_ids_1,
                 pass1_relation_ids=rel_ids_1,
@@ -1837,7 +1655,8 @@ class Retriever:
             merged_relationship_count=len(merged_rels),
             elapsed_sec=timer_adaptive.sec(),
         )
-        self._last_adaptive_trace = self._build_adaptive_trace(
+        self._last_adaptive_trace = build_adaptive_trace(
+            config=self.cfg,
             pass2_triggered=True,
             pass1_entity_ids=ent_ids_1,
             pass1_relation_ids=rel_ids_1,
