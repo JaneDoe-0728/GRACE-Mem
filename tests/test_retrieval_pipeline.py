@@ -27,8 +27,8 @@ from pathlib import Path
 
 import pytest
 
-from grace_mem.retrieval.pipeline import Retriever
 from grace_mem.retrieval.config import RetrieverConfig
+from grace_mem.retrieval.pipeline import Retriever
 from tests.retrieval_fakes import (
     CallLog,
     FakeEvidenceFilter,
@@ -169,3 +169,38 @@ def test_an_empty_candidate_pool_short_circuits_the_whole_query() -> None:
     assert not [c for c in ran if c.startswith("filter.")], (
         f"filtering ran after an empty pool: {ran}"
     )
+
+
+def test_agent_filter_closes_vdb_when_switching_question_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LongMem replay keeps at most one summaries client per worker thread."""
+    from experiment.agent_filter import vector_search
+    from grace_mem.adapters.vector_store import chroma_vdb
+
+    clients = []
+
+    class FakeSummariesVDB:
+        def __init__(self, dim: int, path: str, collection_name: str) -> None:
+            self.dim = dim
+            self.path = path
+            self.collection_name = collection_name
+            self.closed = False
+            clients.append(self)
+
+        def close(self) -> None:
+            self.closed = True
+
+    vector_search.close_vector_search_vdb()
+    monkeypatch.setattr(chroma_vdb, "SummariesVDB", FakeSummariesVDB)
+
+    first = vector_search._get_vdb(tmp_path / "question-1")
+    assert vector_search._get_vdb(tmp_path / "question-1") is first
+    second = vector_search._get_vdb(tmp_path / "question-2")
+
+    assert first.closed is True
+    assert second.closed is False
+    assert len(clients) == 2
+    vector_search.close_vector_search_vdb()
+    assert second.closed is True

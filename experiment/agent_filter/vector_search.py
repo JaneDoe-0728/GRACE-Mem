@@ -5,18 +5,20 @@ literal span anywhere in the corpus, so GREP cannot reach it. The VECTOR
 command, which the agent drives itself, is its one caller.
 
 The VDB holds the :u/:a split summaries produced by rebuild_split_summaries.py.
-Both the VDB client and the embedder are lazily cached globally (the embedder
-takes 2-3GB of GPU and is loaded only once).
+The embedder is cached globally because it takes 2-3GB of GPU.  A VDB client is
+cached per worker thread and closed when that worker switches artifacts, so a
+LongMem replay cannot retain one Chroma client per question indefinitely.
 """
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 
 import numpy as np
 
-_lock = threading.Lock()
-_vdb_cache: dict[str, object] = {}
+logger = logging.getLogger(__name__)
+_vdb_local = threading.local()
 _embed_fn = None
 
 
@@ -31,16 +33,29 @@ def _get_embed():
 
 
 def _get_vdb(artifact_dir: Path):
-    key = str(artifact_dir)
-    with _lock:
-        if key not in _vdb_cache:
-            from grace_mem.adapters.vector_store.chroma_vdb import SummariesVDB
-            _vdb_cache[key] = SummariesVDB(
-                dim=1024,
-                path=str(Path(artifact_dir) / "summaries_chroma"),
-                collection_name="summaries",
-            )
-        return _vdb_cache[key]
+    key = str(artifact_dir.resolve())
+    if getattr(_vdb_local, "key", None) == key:
+        return _vdb_local.client
+
+    close_vector_search_vdb()
+    from grace_mem.adapters.vector_store.chroma_vdb import SummariesVDB
+    client = SummariesVDB(
+        dim=1024,
+        path=str(artifact_dir / "summaries_chroma"),
+        collection_name="summaries",
+    )
+    _vdb_local.key = key
+    _vdb_local.client = client
+    return client
+
+
+def close_vector_search_vdb() -> None:
+    """Close the current worker thread's question-local summaries client."""
+    client = getattr(_vdb_local, "client", None)
+    _vdb_local.key = None
+    _vdb_local.client = None
+    if client is not None:
+        client.close()
 
 
 def search_summaries(
@@ -72,6 +87,7 @@ def search_summaries(
                 break
         return out
     except Exception:
+        logger.exception("Agent Filter VECTOR search failed for %s", artifact_dir)
         return []
 
 
