@@ -23,7 +23,7 @@ from experiment.experiment_config import (
 )
 
 # LongMem-only: must match the value used when these artifacts were ingested.
-USE_SPLIT_SUMMARY = bool(INGEST_PARAMS.get("use_split_summary", True))
+USE_SPLIT_SUMMARY = bool(INGEST_PARAMS["use_split_summary"])
 from experiment.common.error_analysis import (
     append_analysis_record,
     append_pretty_block,

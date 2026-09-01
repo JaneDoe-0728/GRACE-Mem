@@ -39,7 +39,7 @@ PUT_SPEAKER_PREFIX = True           # keep "Caroline: ..." in text if present
 # experiment/experiment_config.py; it is threaded down as an explicit argument (never
 # read from the environment) so the orchestrator, each worker subprocess and the
 # snapshot builder cannot silently disagree about the chunk size.
-CHUNK_TURNS = int(INGEST_PARAMS.get("chunk_turns", 8) or 0)
+CHUNK_TURNS = int(INGEST_PARAMS["chunk_turns"] or 0)
 
 
 def _iter_dialogue_chunks(dialogue: list[str], chunk_turns: int | None = None):

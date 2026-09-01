@@ -457,28 +457,9 @@ def _extract_facts_for_evidence(raw_text: str, date_time: str | None) -> list[st
     except Exception:
         return [raw_text]
 
+from experiment.experiment_config import RERANKER_PARAMS, RETRIEVAL_PARAMS
 from experiment.locomo.helpers.dataset import load_qa_items, resolve_dataset_path
 
-try:
-    from experiment.experiment_config import RERANKER_PARAMS, RETRIEVAL_PARAMS
-except Exception:
-    RETRIEVAL_PARAMS = {
-        "ent_topk": 20,
-        "rel_topk": 10,
-        "ent_threshold": 0.2,
-        "rel_threshold": 0.2,
-        "filter_ent_topk": 10,
-        "filter_rel_topk": 10,
-        "filter_ent_threshold": 0.4,
-        "filter_rel_threshold": 0.4,
-        "summary_topk_per_item": 6,
-        "summary_vec_threshold": 0.4,
-    }
-    RERANKER_PARAMS = {
-        "use_reranker": True,
-        "reranker_threshold": -3.0,
-        "reranker_topk": 3,
-    }
 
 def scrub(piece: str) -> str:
     """Remove provider-specific tags/noise if any."""
@@ -1110,16 +1091,16 @@ def _extract_latest_t_tag(kg_context: str) -> str | None:
 def rag_answer(
     query: str,
     *,
-    ent_topk: int = RETRIEVAL_PARAMS.get("ent_topk", 20),
-    rel_topk: int = RETRIEVAL_PARAMS.get("rel_topk", 10),
-    ent_threshold: float = RETRIEVAL_PARAMS.get("ent_threshold", 0.2),
-    rel_threshold: float = RETRIEVAL_PARAMS.get("rel_threshold", 0.2),
-    filter_ent_topk: int = RETRIEVAL_PARAMS.get("filter_ent_topk", 10),
-    filter_rel_topk: int = RETRIEVAL_PARAMS.get("filter_rel_topk", 10),
-    filter_ent_threshold: float = RETRIEVAL_PARAMS.get("filter_ent_threshold", 0.4),
-    filter_rel_threshold: float = RETRIEVAL_PARAMS.get("filter_rel_threshold", 0.4),
-    summary_topk_per_item: int = RETRIEVAL_PARAMS.get("summary_topk_per_item", 6),
-    summary_vec_threshold: float = RETRIEVAL_PARAMS.get("summary_vec_threshold", 0.4),
+    ent_topk: int = RETRIEVAL_PARAMS["ent_topk"],
+    rel_topk: int = RETRIEVAL_PARAMS["rel_topk"],
+    ent_threshold: float = RETRIEVAL_PARAMS["ent_threshold"],
+    rel_threshold: float = RETRIEVAL_PARAMS["rel_threshold"],
+    filter_ent_topk: int = RETRIEVAL_PARAMS["filter_ent_topk"],
+    filter_rel_topk: int = RETRIEVAL_PARAMS["filter_rel_topk"],
+    filter_ent_threshold: float = RETRIEVAL_PARAMS["filter_ent_threshold"],
+    filter_rel_threshold: float = RETRIEVAL_PARAMS["filter_rel_threshold"],
+    summary_topk_per_item: int = RETRIEVAL_PARAMS["summary_topk_per_item"],
+    summary_vec_threshold: float = RETRIEVAL_PARAMS["summary_vec_threshold"],
 ):
     """
     Pure retrieval + answer (no writes).

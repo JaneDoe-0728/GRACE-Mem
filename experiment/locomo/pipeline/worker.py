@@ -29,6 +29,9 @@ from experiment.common.error_analysis import (
     derive_failure_type,
     render_failure_digest,
 )
+from experiment.experiment_config import INGEST_PARAMS as _INGEST_PARAMS
+from experiment.experiment_config import RERANKER_PARAMS as _RERANKER_PARAMS
+from experiment.experiment_config import RETRIEVAL_PARAMS as _RETRIEVAL_PARAMS
 from experiment.locomo.helpers.sample_hooks import (
     artifact_dir_for_sample,
     ensure_worker_repo_path,
@@ -56,34 +59,18 @@ from experiment.locomo.utils.io import (
 )
 from experiment.locomo.utils.log import log_event
 
-try:
-    from experiment.experiment_config import RERANKER_PARAMS
-    from experiment.experiment_config import RETRIEVAL_PARAMS as _RETRIEVAL_PARAMS
-except Exception:
-    RERANKER_PARAMS = {
-        "use_reranker": True,
-        "reranker_threshold": -3.0,
-        "reranker_topk": 3,
-    }
-    _RETRIEVAL_PARAMS = {}
-
 # Merge both param dicts so retriever_initialized log reflects the full config.
 # RETRIEVAL_PARAMS keys match RetrieverConfig field names exactly.
 # RERANKER_PARAMS takes precedence where keys overlap.
-RERANKER_PARAMS = {**_RETRIEVAL_PARAMS, **RERANKER_PARAMS}
-
-try:
-    from experiment.experiment_config import INGEST_PARAMS as _INGEST_PARAMS
-except Exception:
-    _INGEST_PARAMS = {}
+RERANKER_PARAMS = {**_RETRIEVAL_PARAMS, **_RERANKER_PARAMS}
 
 # Map experiment_config.py INGEST_PARAMS keys to IngestorConfig field names so
 # that the ingestor_initialized log reflects the actual values used at runtime.
 _INGESTOR_CONFIG = {
-    "ingest_mode": _INGEST_PARAMS.get("ingest_mode", "turn_pairs"),
-    "summary_context_prev_k_default": _INGEST_PARAMS.get("prev_k", 2),
-    "similar_entity_top_k": _INGEST_PARAMS.get("entity_sim_topk", 3),
-    "entity_sim_threshold": _INGEST_PARAMS.get("entity_sim_threshold", 0.6),
+    "ingest_mode": _INGEST_PARAMS["ingest_mode"],
+    "summary_context_prev_k_default": _INGEST_PARAMS["prev_k"],
+    "similar_entity_top_k": _INGEST_PARAMS["entity_sim_topk"],
+    "entity_sim_threshold": _INGEST_PARAMS["entity_sim_threshold"],
 }
 
 

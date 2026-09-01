@@ -26,15 +26,7 @@ from experiment.locomo.models import RunConfig, SamplePlan
 
 PIPELINE_MODULE = "experiment.locomo.pipeline.runner"
 
-try:
-    from experiment.experiment_config import INGEST_PARAMS
-except Exception:
-    INGEST_PARAMS = {
-        "prev_k": 2,
-        "entity_sim_topk": 4,
-        "entity_sim_threshold": 0.5,
-    }
-
+from experiment.experiment_config import INGEST_PARAMS
 
 VALID_STAGES = ("ingest", "qa_eval", "judge")
 DEFAULT_STAGES = VALID_STAGES
@@ -53,13 +45,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--sessions-jsonl", default=None)
     parser.add_argument("--dataset-json", default=None)
-    parser.add_argument("--prev-k", type=int, default=INGEST_PARAMS.get("prev_k", 2))
-    parser.add_argument("--entity-sim-topk", type=int, default=INGEST_PARAMS.get("entity_sim_topk", 4))
-    parser.add_argument("--entity-sim-threshold", type=float, default=INGEST_PARAMS.get("entity_sim_threshold", 0.5))
+    parser.add_argument("--prev-k", type=int, default=INGEST_PARAMS["prev_k"])
+    parser.add_argument("--entity-sim-topk", type=int, default=INGEST_PARAMS["entity_sim_topk"])
+    parser.add_argument("--entity-sim-threshold", type=float, default=INGEST_PARAMS["entity_sim_threshold"])
     parser.add_argument(
         "--chunk-turns",
         type=int,
-        default=INGEST_PARAMS.get("chunk_turns", 8),
+        default=INGEST_PARAMS["chunk_turns"],
         help="Turns per ingest chunk. Each session is split into consecutive windows "
         "of this many turns, each becoming its own summary (message_id = chunk index). "
         "0 = one summary per whole session. Must match the run that produced any "
