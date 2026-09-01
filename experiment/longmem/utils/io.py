@@ -132,44 +132,6 @@ def write_csv_frame(df: pd.DataFrame, path: Path, **kwargs) -> None:
     _atomic_replace(temp_path, path)
 
 
-def upsert_csv_row(
-    path: Path,
-    row: dict[str, Any],
-    *,
-    key_columns: list[str],
-    read_kwargs: dict[str, Any] | None = None,
-    write_kwargs: dict[str, Any] | None = None,
-) -> None:
-    """Insert or replace one row in a CSV, matched on a key column.
-
-    Upsert rather than append so re-running one dataset replaces its row instead
-    of adding a second -- two rows for one dataset would be double-counted by
-    every aggregate that reads this file.
-
-    Caller is responsible for holding the lock when other processes may write.
-    """
-    row_str = {key: str(value) for key, value in row.items()}
-    if path.exists():
-        df = read_csv_frame(path, **(read_kwargs or {"dtype": str}))
-    else:
-        df = pd.DataFrame()
-
-    if all(column in df.columns for column in key_columns) and key_columns:
-        mask = pd.Series(True, index=df.index)
-        for column in key_columns:
-            mask = mask & (df[column].astype(str) == row_str.get(column, ""))
-    else:
-        mask = pd.Series([], dtype=bool)
-
-    if mask.any():
-        for key, value in row_str.items():
-            df.loc[mask, key] = value
-    else:
-        df = pd.concat([df, pd.DataFrame([row_str])], ignore_index=True)
-
-    write_csv_frame(df, path, **(write_kwargs or {}))
-
-
 def read_csv_dict_rows(path: Path, *, encoding: str = "utf-8-sig", newline: str = "") -> tuple[list[str], list[dict[str, str]]]:
     with open(path, newline=newline, encoding=encoding) as handle:
         reader = csv.DictReader(handle)

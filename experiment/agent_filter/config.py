@@ -13,10 +13,24 @@ GREP_AGENT_PARAMS in full.
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 # Categories may be restricted per layer; None means "every category".
 Categories = tuple[str, ...] | None
+
+#: Keys still accepted from a GREP_AGENT_PARAMS mapping that no longer reach any
+#: decision. Key -> why. Old traces, sweep scripts and archived configs still
+#: carry them, so reading such a mapping must not fail -- but it must not look
+#: like the setting took effect either.
+INERT_PARAMS = {
+    "grep_agent_require_verified_additions": (
+        "the provenance gate was removed on 2026-07-22; a VECTOR hit counts as "
+        "verified like GREP/READ, and only hallucinated sids are dropped"
+    ),
+}
+
+_warned: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -60,6 +74,16 @@ class AgentFilterConfig:
         """Read a GREP_AGENT_PARAMS-shaped mapping, keeping the harness defaults
         for anything it does not name."""
         p = params or {}
+        for key in INERT_PARAMS.keys() & p.keys():
+            if key in _warned:
+                continue
+            _warned.add(key)
+            warnings.warn(
+                f"{key} no longer affects anything and was ignored "
+                f"({INERT_PARAMS[key]})",
+                FutureWarning,
+                stacklevel=2,
+            )
 
         def flag(key: str, default: bool) -> bool:
             # Several of these ship as 0/1 rather than False/True.

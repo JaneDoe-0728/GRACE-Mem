@@ -206,9 +206,9 @@ class FakeGraph(_Logged):
 
 
 class FakeEvidenceFilter(_Logged):
-    """Threshold, RRF and reranker filtering.
+    """Subgraph intersection and cross-encoder reranking.
 
-    Every method applies the threshold and top-k it was handed, so a stage that
+    Both methods apply the threshold and top-k they were handed, so a stage that
     forgets to pass one shows up as a changed result as well as a changed call.
     """
 
@@ -224,39 +224,6 @@ class FakeEvidenceFilter(_Logged):
                         edge_ids=[e.get("rel_id") for e in edge_subgraph], use_union=use_union)
         return set(node_subgraph), {e.get("rel_id") for e in edge_subgraph if e.get("rel_id")}
 
-    def filter_by_similarity(self, entity_ids, relationship_ids, query_vec,
-                             filter_entity_threshold, filter_relationship_threshold,
-                             filter_entity_top_k=None, filter_relationship_top_k=None,
-                             request_id=None):
-        self.log.record("filter.filter_by_similarity", entity_ids=entity_ids,
-                        relationship_ids=relationship_ids,
-                        filter_entity_threshold=filter_entity_threshold,
-                        filter_relationship_threshold=filter_relationship_threshold,
-                        filter_entity_top_k=filter_entity_top_k,
-                        filter_relationship_top_k=filter_relationship_top_k)
-        return (self._cut(entity_ids, ENTITY_SCORES, filter_entity_threshold, filter_entity_top_k),
-                self._cut(relationship_ids, RELATIONSHIP_SCORES, filter_relationship_threshold,
-                          filter_relationship_top_k))
-
-    def compute_cosine_scores(self, entity_ids, query_vec):
-        self.log.record("filter.compute_cosine_scores", entity_ids=entity_ids)
-        return {i: ENTITY_SCORES.get(i, 0.0) for i in entity_ids}
-
-    def filter_by_rrf(self, entity_ids, relationship_ids, query_vec, rrf_k,
-                      filter_entity_top_k, filter_relationship_top_k,
-                      entity_emb_scores, entity_bm25_scores, rel_endpoint_scores,
-                      rel_emb_scores, node_subgraph_rel_ids, filter_method="rrf",
-                      request_id=None):
-        self.log.record("filter.filter_by_rrf", entity_ids=entity_ids,
-                        relationship_ids=relationship_ids, rrf_k=rrf_k,
-                        filter_entity_top_k=filter_entity_top_k,
-                        filter_relationship_top_k=filter_relationship_top_k,
-                        filter_method=filter_method,
-                        node_subgraph_rel_ids=node_subgraph_rel_ids)
-        ents = self._cut(entity_ids, ENTITY_SCORES, 0.0, filter_entity_top_k)
-        rels = self._cut(relationship_ids, RELATIONSHIP_SCORES, 0.0, filter_relationship_top_k)
-        return ents, rels, {i: 1.0 / (rrf_k + n + 1) for n, i in enumerate(ents)}
-
     def rerank_filter(self, question, entity_ids, relationship_ids,
                       entity_top_k, relationship_top_k, threshold, request_id=None):
         self.log.record("filter.rerank_filter", question=question, entity_ids=entity_ids,
@@ -265,25 +232,6 @@ class FakeEvidenceFilter(_Logged):
         return (self._cut(entity_ids, RERANKER_SCORES, threshold, entity_top_k),
                 self._cut(relationship_ids, RELATIONSHIP_RERANKER_SCORES, threshold,
                           relationship_top_k))
-
-    def rerank_and_recover(self, question, all_entity_ids, all_relationship_ids,
-                           filtered_entity_ids, filtered_relationship_ids,
-                           reranker_threshold, reranker_top_k, request_id=None):
-        self.log.record("filter.rerank_and_recover", question=question,
-                        all_entity_ids=all_entity_ids, all_relationship_ids=all_relationship_ids,
-                        filtered_entity_ids=filtered_entity_ids,
-                        filtered_relationship_ids=filtered_relationship_ids,
-                        reranker_threshold=reranker_threshold, reranker_top_k=reranker_top_k)
-        recovered = self._cut(all_entity_ids, RERANKER_SCORES, reranker_threshold, reranker_top_k)
-        return set(filtered_entity_ids) | set(recovered), set(filtered_relationship_ids)
-
-
-class FakePageRank(_Logged):
-    def run_ppr(self, entity_ids, rrf_scores, subgraph_edges, alpha, top_k, inverse_degree_weight):
-        self.log.record("ppr.run_ppr", entity_ids=entity_ids, subgraph_edges=subgraph_edges,
-                        alpha=alpha, top_k=top_k, inverse_degree_weight=inverse_degree_weight)
-        ranked = sorted(entity_ids, key=lambda i: -ENTITY_SCORES.get(i, 0.0))[:top_k]
-        return ranked, {i: ENTITY_SCORES.get(i, 0.0) * alpha for i in ranked}
 
 
 class FakeSpreadingActivation(_Logged):

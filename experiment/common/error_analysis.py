@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import csv
 import json
-import re
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -38,13 +37,11 @@ __all__ = [
     "append_pretty_block",
     "build_bridge_label",
     "build_top_miss_snapshot",
-    "coerce_bool",
     "coerce_float",
     "compact_json",
     "derive_anomaly_flags",
     "derive_drop_reasons",
     "derive_failure_type",
-    "extract_context_session_ids",
     "is_temporal_question",
     "read_reranker_rows",
     "render_failure_digest",
@@ -137,21 +134,6 @@ def build_top_miss_snapshot(
     return snapshots
 
 
-def extract_context_session_ids(text: str) -> list[str]:
-    """Pull the session ids out of a rendered retrieval context.
-
-    The context handed to the generator is formatted text, so recovering which
-    sessions it drew on means parsing it back out. That is what makes evidence
-    coverage measurable: compare these against the gold sessions.
-
-    Sorted numerically rather than lexically, so 10 follows 9 instead of 1 --
-    these ids end up in reports read side by side across runs.
-    """
-    if not isinstance(text, str):
-        return []
-    return sorted(set(re.findall(r"\[session=(\d+),", text)), key=lambda value: int(value))
-
-
 def is_temporal_question(question: str) -> bool:
     """Guess whether a question is about time, by keyword.
 
@@ -182,10 +164,6 @@ def coerce_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
-
-
-def coerce_bool(value: Any) -> bool:
-    return str(value).strip().lower() in {"1", "true", "yes"}
 
 
 def compact_json(value: Any) -> str:

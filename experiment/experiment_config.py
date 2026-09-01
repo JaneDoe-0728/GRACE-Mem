@@ -124,10 +124,6 @@ GREP_AGENT_PARAMS = {
     "grep_agent_max_calls": 10,
     "grep_agent_max_sids": 16,
     "grep_agent_grep_max_lines": 30,
-    # The provenance gate was removed on 2026-07-22 (harness.py): a VECTOR hit now
-    # counts as verified just like GREP/READ, so this parameter is a no-op and is
-    # kept only so older traces and scripts that reference it still work.
-    "grep_agent_require_verified_additions": True,
     # Entity/Relationship graph facts are independently switchable on the
     # filter prompt and on the final answer context for ablation experiments.
     "grep_agent_filter_include_graph_context": False,
