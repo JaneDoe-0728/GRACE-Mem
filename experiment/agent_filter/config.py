@@ -8,8 +8,8 @@ dataclass.
 
 The defaults below are the harness's own, which are deliberately not the same as
 experiment_config's: a caller passing an incomplete mapping gets the
-conservative reading (adjudication off, no verify rounds, no padding), while a
-benchmark run passes GREP_AGENT_PARAMS in full.
+conservative reading (adjudication off), while a benchmark run passes
+GREP_AGENT_PARAMS in full.
 """
 from __future__ import annotations
 
@@ -45,26 +45,14 @@ class AgentFilterConfig:
     vector_topn: int = 8
     vector_min_score: float = 0.30
 
-    # ── The sufficiency verifier, and the gap search its verdict triggers ─
-    verify_rounds: int = 0
-    verify_max_calls: int = 4
-    verify_categories: Categories = None
-    gap_vector_topn: int = 0
-    gap_vector_min_score: float = 0.30
-
     # ── Answer-blind adjudication of the discarded seeds ────────────────
     adjudicate: bool = False
     adjudicate_categories: Categories = None
-    # Recall-recovery only: every discarded seed comes back without an LLM DROP.
-    adjudicate_keep_all_categories: Categories = None
 
     # ── What to do when the agent will not close ────────────────────────
-    force_verified_final: bool = False
-    force_verified_min: int = 12
     abstention_hint: bool = False
 
     # ── Rebuilding the context ──────────────────────────────────────────
-    min_keep_aggregation: int = 0
     include_pair: bool = True
 
     @classmethod
@@ -94,25 +82,10 @@ class AgentFilterConfig:
             vector_search=flag("grep_agent_vector_search", cls.vector_search),
             vector_topn=int(p.get("grep_agent_vector_topn", cls.vector_topn)),
             vector_min_score=float(p.get("grep_agent_vector_min_score", cls.vector_min_score)),
-            verify_rounds=int(p.get("grep_agent_verify_rounds", cls.verify_rounds)),
-            verify_max_calls=int(p.get("grep_agent_verify_max_calls", cls.verify_max_calls)),
-            verify_categories=p.get("grep_agent_verify_categories", cls.verify_categories),
-            gap_vector_topn=int(p.get("grep_agent_gap_vector_topn", cls.gap_vector_topn)),
-            gap_vector_min_score=float(p.get(
-                "grep_agent_gap_vector_min_score", cls.gap_vector_min_score)),
             adjudicate=flag("grep_agent_adjudicate", cls.adjudicate),
             adjudicate_categories=p.get(
                 "grep_agent_adjudicate_categories", cls.adjudicate_categories),
-            adjudicate_keep_all_categories=p.get(
-                "grep_agent_adjudicate_keep_all_categories",
-                cls.adjudicate_keep_all_categories),
-            force_verified_final=flag(
-                "grep_agent_force_verified_final", cls.force_verified_final),
-            force_verified_min=int(p.get(
-                "grep_agent_force_verified_min", cls.force_verified_min)),
             abstention_hint=flag("grep_agent_abstention_hint", cls.abstention_hint),
-            min_keep_aggregation=int(p.get(
-                "grep_agent_min_keep_aggregation", cls.min_keep_aggregation)),
             include_pair=flag("grep_agent_include_pair", cls.include_pair),
         )
 

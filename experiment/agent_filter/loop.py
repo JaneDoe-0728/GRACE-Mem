@@ -135,8 +135,8 @@ class AgentSession:
 
     The session owns the conversation and everything accumulated across it --
     which sids the tools have confirmed, and which came from VECTOR -- so the
-    sufficiency repair round can pick the same conversation back up rather than
-    starting a second one.
+    salvage prompts continue the same conversation rather than starting a second
+    one.
     """
 
     def __init__(

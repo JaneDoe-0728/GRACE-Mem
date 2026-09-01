@@ -137,9 +137,6 @@ GREP_AGENT_PARAMS = {
     "grep_agent_filter_include_graph_context": False,
     "grep_agent_answer_include_graph_context": True,
     "grep_agent_graph_context_max_chars": 12000,
-    # The evidence_floor blind pad force-fed entries in rerank order, bypassing the
-    # agent's decision. Disabled globally: 0 = no blind padding.
-    "grep_agent_evidence_floor": 0,
     # A selected sid brings its pair partner (the other side of the same exchange)
     # into the final context, fixing the case where the agent picks the wrong side
     # of the right pair.
@@ -157,31 +154,6 @@ GREP_AGENT_PARAMS = {
         "single_session_preference", "multi_session",
         "temporal_reasoning", "knowledge_update",
     ),
-    # KEEP-all categories: adjudication becomes recall-recovery-only, adding back
-    # every discarded seed. () = off.
-    "grep_agent_adjudicate_keep_all_categories": (),
-    # Forced verified->FINAL: on no_final, treat the verified sids as the FINAL and
-    # run finalize. 0 = off.
-    "grep_agent_force_verified_final": 0,
-    # The narrowing gate threshold: only narrow via finalize when the verified count
-    # is at least this value and the question is not _abs.
-    "grep_agent_force_verified_min": 12,
-    # ── Sufficiency loop ──────────────────────────────────────────────────
-    # After FINAL, an independent verifier judges whether the evidence suffices for
-    # a complete answer. If not, the agent searches again carrying a hint about what
-    # is missing (additive only, monotonic). 0 = disabled.
-    "grep_agent_verify_rounds": 0,  # Disabled by default; see experiment/agent_filter/README.md.
-    "grep_agent_verify_max_calls": 4,
-    "grep_agent_verify_categories": ("multi_session", "knowledge_update"),
-    # Gap vector top-up: when the verifier rules the evidence insufficient, embed
-    # "question + missing" and search the summaries VDB, pulling back the semantic
-    # neighbours grep cannot reach for the agent to confirm. Fixes the paraphrase
-    # gap. 0 = disabled.
-    "grep_agent_gap_vector_topn": 6,
-    "grep_agent_gap_vector_min_score": 0.30,
-    # Min-keep (question-driven): when an aggregation or latest-value question ends
-    # with fewer than N entries in FINAL, refill from the seeds in rerank order.
-    "grep_agent_min_keep_aggregation": 0,  # v9 paired verification: repair rate was indistinguishable from noise, so neutral -> off by default
     # The skill library: question-shape driven search tactics (skills.py) that
     # replace the category hint when one fires.
     # Off by default since 2026-07-22: hints are decoupled from filter_fetch, and

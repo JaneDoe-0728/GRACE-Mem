@@ -170,7 +170,7 @@ def process_row(row: dict, corpus: Corpus, params: dict, trace_fh, lock,
     out["retrieved_context"] = new_ctx
     out["model_answer"] = ans
     with lock:
-        # Write the full trace (timing, commands, sufficiency, dropped), matching
+        # Write the full trace (timing, commands, dropped), matching
         # LongMem's.
         # Keep the LongMem replay's timing and agent fields for experiment/common/evaluation/score.py.
         trace_fh.write(json.dumps({"question": q[:120], **trace}, ensure_ascii=False) + "\n")

@@ -122,10 +122,8 @@ def process_one(src_csv: Path, out_path: Path, trace_path: Path, cat: str,
             f.write(line)
 
     fb = trace.get("fallback")
-    suff = trace.get("sufficiency", [])
     tag = f"fb={fb}" if fb else (
-        f"kept={len(trace.get('kept', []))} added={len(trace.get('added', []))} "
-        f"suff={'!' if any(not s.get('sufficient', True) for s in suff) else '-'}"
+        f"kept={len(trace.get('kept', []))} added={len(trace.get('added', []))}"
     ) if trace else "no-agent"
     return f"{src_csv.stem}: {tag}"
 

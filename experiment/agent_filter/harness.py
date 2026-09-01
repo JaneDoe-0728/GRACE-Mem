@@ -8,14 +8,12 @@ The flow this module orchestrates, and nothing else:
     search    the agent verifies candidates with GREP/READ/VECTOR and hunts down
               the evidence retrieval missed, until it replies FINAL
         │
-    verify    an independent verifier may send it back out for what is missing
-        │
     finalize  the selection policy decides what the answering model sees
 
 Safety net at every step: if the agent fails, emits invalid output, or blows the
 budget, the original context is handed back untouched. Each stage lives in its
-own module -- protocol, loop, verification, adjudication, finalization -- and
-this file is the sequence they run in.
+own module -- protocol, loop, adjudication, finalization -- and this file is the
+sequence they run in.
 """
 from __future__ import annotations
 
@@ -31,7 +29,7 @@ from experiment.agent_filter.context import (
     seed_sids_from_context,
 )
 from experiment.agent_filter.corpus import Corpus, load_corpus
-from experiment.agent_filter.finalization import EvidenceFinalizer, finalize_from_raw
+from experiment.agent_filter.finalization import EvidenceFinalizer
 from experiment.agent_filter.llm_factory import agent_llm
 from experiment.agent_filter.loop import AgentSession, AgentTools
 from experiment.agent_filter.prompting.agent import (
@@ -42,7 +40,6 @@ from experiment.agent_filter.prompting.agent import (
     VECTOR_TOOL_BLOCK,
     active_hypothesis_block,
 )
-from experiment.agent_filter.verification import SufficiencyRepairer
 
 _FILTER_MODE_RULE = (
     "\nIMPORTANT: you may only KEEP or DROP candidates; do not add new sids in FINAL."
@@ -57,7 +54,6 @@ class _Preparation:
     category: str | None
     graph_context: str
     hint: str
-    is_abstention: bool
     vector_ok: bool
 
 
@@ -105,9 +101,8 @@ def refine_context(
             final_raw = session.force_final(prep.seed)
         if not (final_raw and prep.corpus.normalize_sids(final_raw)):
             return _without_a_final(
-                context=context, prep=prep, session=session, question=question,
-                question_date=question_date, llm=llm, config=config,
-                params=params or {}, trace=trace,
+                context=context, prep=prep, session=session, config=config,
+                trace=trace,
             )
 
         finalizer = EvidenceFinalizer(config)
@@ -120,15 +115,6 @@ def refine_context(
         if selection.fallback:
             return context, trace
 
-        # Sufficiency: when the verifier rules the evidence insufficient, the agent
-        # searches again carrying a gap hint. Additive only, never removes.
-        selection.final = SufficiencyRepairer(
-            llm=llm, corpus=prep.corpus, config=config, artifact_dir=artifact_dir,
-        ).repair(
-            session=session, question=question, question_date=question_date,
-            category=prep.category, seed=prep.seed, selected=selection.final,
-            trace=trace,
-        )
         return finalizer.finalize(
             selection=selection, context=context, corpus=prep.corpus,
             question=question, question_date=question_date, category=prep.category,
@@ -167,12 +153,11 @@ def _prepare(
 
     if category is None:
         category = Path(csv_path).parent.name
-    # _abs abstention questions (the answer is not in the corpus):
-    # force_verified_final must keep the full protective context for these and
-    # never narrow -- fvf-73 measured that narrowing (even with plenty of
-    # verified evidence) tempts the model to abandon the abstention and answer.
-    is_abstention = bool(csv_path) and Path(csv_path).stem.endswith("_abs")
-    trace["is_abstention"] = is_abstention
+    # _abs abstention questions (the answer is not in the corpus) are recorded
+    # for the trace: every retention experiment has had to be read separately for
+    # them, because narrowing an abstention context tempts the model to abandon
+    # the abstention and answer.
+    trace["is_abstention"] = bool(csv_path) and Path(csv_path).stem.endswith("_abs")
 
     # The skill library (driven by question shape) takes precedence; only on a
     # miss does it fall back to the category hint
@@ -198,7 +183,7 @@ def _prepare(
     trace["evidence_provenance"] = {}
     return _Preparation(
         corpus=corpus, seed=seed, category=category, graph_context=graph_context,
-        hint=hint, is_abstention=is_abstention, vector_ok=vector_ok,
+        hint=hint, vector_ok=vector_ok,
     )
 
 
@@ -256,34 +241,15 @@ def _without_a_final(
     context: str,
     prep: _Preparation,
     session: AgentSession,
-    question: str,
-    question_date: str | None,
-    llm,
     config: AgentFilterConfig,
-    params: dict,
     trace: dict,
 ) -> tuple[str, dict]:
-    """The agent would not close. Decide what the answering model gets instead.
+    """The agent would not close. Hand back the full protective context.
 
-    Forced verified->FINAL: take the sids the agent actually confirmed, treat
-    them as the FINAL, and run the full finalize pipeline rather than falling
-    back to the whole raw context. Rationale:
-      - Raising max-calls disproved "force the agent to submit a narrowed
-        context" (-6): a bare 1-2 sid FINAL strips the answering model of the
-        full-context noise cover and it starts inventing.
-      - verified->FINAL is different: aggregation questions routinely verify >16
-        entries (the agent has GREPed dozens of turns), so after the cap the size
-        is about the same as the full context, merely reordered verified-first.
-        Questions that searched up empty have verified=0 -> fall back to the full
-        seed set, keeping the cover. Neither end produces a bare narrowed context.
-      - Going through finalize preserves adjudication's recovery of topically
-        relevant seeds, provenance stays intact, and the no_final marker
-        disappears.
-    The gate: the flag on, a non-abstention question, and at least a full
-    context's worth of confirmed evidence (fvf-73: all the harm from narrowing
-    landed on low-verified _abs questions, while every question with lots of
-    verified evidence was safe or improved). Fail any one of those and the full
-    protective context stays.
+    Narrowing here has been disproved twice: raising max-calls to force a
+    submitted selection (-6), and rebuilding from the sids the agent did confirm
+    -- a bare 1-2 sid context strips the answering model of the full-context
+    noise cover and it starts inventing.
 
     Uncertainty signal: an agent refusing to FINAL means it found no confirmable
     evidence for an answer (_abs abstention questions fall back 70% of the time),
@@ -291,22 +257,8 @@ def _without_a_final(
     only to this full-context path -- "narrowed context + hint" tested negative
     (ordinary questions 46.7 -> 33.3).
     """
-    verified_norm = prep.corpus.normalize_sids(list(session.verified_sids))
-    if (config.force_verified_final
-            and not prep.is_abstention
-            and len(verified_norm) >= config.force_verified_min):
-        trace["forced_verified_final"] = verified_norm
-        return finalize_from_raw(
-            final_raw=verified_norm,
-            context=context, corpus=prep.corpus, seed=prep.seed,
-            verified_sids=session.verified_sids,
-            vector_candidate_sids=session.vector_candidate_sids,
-            question=question, question_date=question_date, category=prep.category,
-            llm=llm, p=params, trace=trace,
-        )
-
     trace["fallback"] = "no_final"
-    trace["verified_sids"] = verified_norm
+    trace["verified_sids"] = prep.corpus.normalize_sids(list(session.verified_sids))
     if config.abstention_hint:
         trace["abstention_hint"] = True
         return context + ABSTENTION_HINT, trace

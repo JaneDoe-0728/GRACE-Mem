@@ -1,12 +1,8 @@
 """Semantic search over a question's summaries VDB.
 
-Two callers share it, for the same reason -- the paraphrase gap. What the
-question asks for is often not a literal span anywhere in the corpus, so GREP
-cannot reach it:
-
-  - the VECTOR command, which the agent drives itself, and
-  - the sufficiency repair arm, which embeds the verifier's gap description
-    (the grep repair arm alone comes back empty about 87% of the time).
+It exists for the paraphrase gap: what the question asks for is often not a
+literal span anywhere in the corpus, so GREP cannot reach it. The VECTOR
+command, which the agent drives itself, is its one caller.
 
 The VDB holds the :u/:a split summaries produced by rebuild_split_summaries.py.
 Both the VDB client and the embedder are lazily cached globally (the embedder

@@ -22,13 +22,12 @@ configuration defaults, not invariants for every run.
 
 | Purpose | File |
 |---|---|
-| Orchestration: prepare, search, verify, finalize | [`harness.py`](harness.py) |
+| Orchestration: prepare, search, finalize | [`harness.py`](harness.py) |
 | Configuration read from `GREP_AGENT_PARAMS` | [`config.py`](config.py) |
 | The per-question corpus, and the GREP/READ tools | [`corpus.py`](corpus.py) |
 | Command parsing across every reply format | [`protocol.py`](protocol.py) |
 | Reading and rebuilding the answer context | [`context.py`](context.py) |
 | The search loop and its tools | [`loop.py`](loop.py) |
-| Sufficiency verification and its repair round | [`verification.py`](verification.py) |
 | Answer-blind adjudication | [`adjudication.py`](adjudication.py) |
 | Evidence selection policy | [`finalization.py`](finalization.py) |
 | Semantic search over the summaries VDB | [`vector_search.py`](vector_search.py) |
