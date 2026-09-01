@@ -51,6 +51,33 @@ _trace_pretty_log = setup_logger(
 
 
 
+#: Set to anything but 0/empty/false to make a retrieval failure raise instead of
+#: degrading to an empty context. Off by default: an online caller wants the
+#: degraded answer, and every existing run was produced that way.
+STRICT_ENV = "KG_RETRIEVAL_STRICT"
+
+
+class RetrievalFailedError(RuntimeError):
+    """Retrieval raised, and the run asked to hear about it rather than degrade.
+
+    The tolerant default returns "(no KG context)" on any exception, which is
+    right for a service and wrong for a benchmark: the answering model still
+    produces an answer, the row still gets written, and a FalkorDB timeout is
+    scored as if the memory system had simply found nothing. That is a
+    technical failure counted as a retrieval-quality result.
+
+    Under KG_RETRIEVAL_STRICT the exception reaches the caller instead, so a
+    benchmark can record the question as failed rather than as answered. Either
+    way `last_retrieval_trace["retrieval_failed"]` is set, so a tolerant run can
+    still tell the two apart afterwards.
+    """
+
+
+def strict_retrieval_enabled() -> bool:
+    """True when this process was asked to raise on retrieval failure."""
+    return os.getenv(STRICT_ENV, "0").lower() not in ("0", "", "false")
+
+
 class Retriever:
     """
     Refactored Knowledge Graph Retriever using modular components.
@@ -1699,5 +1726,13 @@ class Retriever:
                 "exception": str(e),
                 "error_type": type(e).__name__,
                 "stop_reason": "build_kg_context_failed",
+                # Distinguishes "retrieval ran and found nothing" from
+                # "retrieval never ran"; both used to return the same string.
+                "retrieval_failed": True,
             }
+            if strict_retrieval_enabled():
+                raise RetrievalFailedError(
+                    f"retrieval failed for request {request_id}: "
+                    f"{type(e).__name__}: {e}"
+                ) from e
             return "(no KG context)"

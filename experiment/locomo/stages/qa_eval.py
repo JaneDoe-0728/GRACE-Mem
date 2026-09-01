@@ -459,6 +459,7 @@ def _extract_facts_for_evidence(raw_text: str, date_time: str | None) -> list[st
 
 from experiment.experiment_config import RERANKER_PARAMS, RETRIEVAL_PARAMS
 from experiment.locomo.helpers.dataset import load_qa_items, resolve_dataset_path
+from grace_mem.retrieval.pipeline import RetrievalFailedError
 
 
 def scrub(piece: str) -> str:
@@ -1300,6 +1301,11 @@ def evaluate_item(
             prediction = replay_summary_fact_from_run_answer(item)
         else:
             prediction = rag_answer(question)
+    except RetrievalFailedError:
+        # Strict mode (KG_RETRIEVAL_STRICT): a technical retrieval failure must
+        # not be written out as an answered question, so it propagates and the
+        # sample is recorded as failed instead of scored.
+        raise
     except Exception as exc:
         prediction = prediction_fallback(exc)
 
