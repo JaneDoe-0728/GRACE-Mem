@@ -18,6 +18,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+# Repository-level configuration and downloaded model weights live beside the
+# ``grace_mem`` package in a source checkout.  Keep this calculation here so
+# adapters do not each guess a different number of ``parents``.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 # Default working dir: grace_mem/storage/artifacts. Anchored on the package root
 # rather than on this file's own directory, because this module moved out of
 # grace_mem/storage/ and the default must not move with it -- existing runs and
@@ -26,6 +31,11 @@ _DEFAULT_ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "storage" / "arti
 
 # Env var that overrides the working artifacts directory (per-process isolation).
 ARTIFACTS_DIR_ENV = "KG_ARTIFACTS_DIR"
+
+
+def resolve_project_root() -> Path:
+    """Return the source-checkout root containing ``grace_mem`` and ``models``."""
+    return PROJECT_ROOT
 
 
 def resolve_artifacts_dir(*, create: bool = False) -> Path:

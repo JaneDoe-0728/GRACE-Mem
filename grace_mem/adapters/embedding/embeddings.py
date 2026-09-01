@@ -13,14 +13,15 @@ process instead of once per caller.
 
 import os
 from collections.abc import Sequence
-from pathlib import Path
 
 import numpy as np
 import torch
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+from grace_mem.runtime.paths import resolve_project_root
+
+_REPO_ROOT = resolve_project_root()
 load_dotenv(_REPO_ROOT / ".env")
 
 class HFTextEmbedding:
@@ -66,7 +67,10 @@ class HFTextEmbedding:
         if os.path.isdir(path):
             print(f"[HFTextEmbedding] using local embedding model: {path}  (device={device})")
         else:
-            print(f"[HFTextEmbedding] {path} not found locally, falling back to HF Hub: BAAI/bge-m3  (device={device})")
+            print(
+                f"[HFTextEmbedding] {path} not found locally, falling back to "
+                f"HF Hub: Qwen/Qwen3-Embedding-0.6B  (device={device})"
+            )
             path = "Qwen/Qwen3-Embedding-0.6B"
 
         self.device = device

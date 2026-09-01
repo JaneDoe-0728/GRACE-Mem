@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from grace_mem.ingestion.pipeline import Ingestor, IngestorConfig
+from grace_mem.runtime.paths import resolve_project_root
 from tests.ingestion_fakes import (
     ASSISTANT_TEXT,
     DIALOGUE_DATETIME,
@@ -143,3 +144,12 @@ def test_the_modes_do_not_all_agree() -> None:
     convos = {m: json.dumps(_capture(**o)["calls"], sort_keys=True, default=str)
               for m, o in MODES.items()}
     assert len(set(convos.values())) > 1, "all modes produced the same conversation"
+
+
+def test_repository_paths_resolve_above_grace_mem_package() -> None:
+    """Adapters must find the root .env and downloaded models from any cwd."""
+    project_root = resolve_project_root()
+
+    assert project_root == Path(__file__).resolve().parent.parent
+    assert (project_root / "grace_mem").is_dir()
+    assert (project_root / ".env.example").is_file()
