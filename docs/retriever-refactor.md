@@ -11,6 +11,12 @@ the decomposition is faithful without a live FalkorDB or LLM.
 
 **Status: done.** See *Progress* at the end.
 
+**This file is a record of a completed refactor, not a description of the
+current tree.** Two modules it moves have since been deleted: `hyde.py`, because
+`summary_hyde_enable` was False in every configuration, and
+`steps/pagerank.py`, with the four unused filter strategies. Their rows below
+describe what the refactor did at the time, and are left as written.
+
 ---
 
 ## Why `retriever.py`, measured

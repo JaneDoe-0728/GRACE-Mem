@@ -85,8 +85,9 @@ The repository keeps a one-way dependency direction:
 ```text
 benchmarks / analysis / tools
         -> experiment orchestration
-        -> grace_mem pipeline facades
-        -> grace_mem services, storage, graph, and LLM utilities
+        -> grace_mem bootstrap
+        -> grace_mem ingestion / retrieval / temporal
+        -> grace_mem domain, adapters, runtime
 ```
 
 - **Core (`grace_mem/`)**: ingestion, retrieval, graph synchronization, storage,
@@ -318,6 +319,27 @@ FalkorDB.
 `grace_mem/adapters/embedding/embeddings.py` uses the local embedding path when available and
 otherwise falls back to the Hugging Face model ID.
 
+### Advanced and experiment-only variables
+
+None of these are needed for the Quick Start. They are listed because the
+runtime reads them, and a run that behaves unexpectedly is often a run with one
+of them set.
+
+| Variable | Purpose |
+|---|---|
+| `KG_ARTIFACTS_DIR` | Per-process artifacts directory; set it to isolate concurrent ingests |
+| `KG_NARROWING_ENABLED` | `0` turns post-evidence narrowing into a passthrough (default on) |
+| `KG_RETRIEVAL_STRICT` | `1` raises on a retrieval failure instead of returning an empty context |
+| `KG_KEYWORD_CACHE_DISABLE` / `KG_KEYWORD_CACHE_PATH` | Bypass or relocate the keyword cache |
+| `KG_RERANKER_BATCH_SIZE` | Cross-encoder batch size |
+| `KG_ABLATION_*` | One switch per removed retrieval channel; see `grace_mem/retrieval/ablation.py` |
+| `KG_TRACE_PRETTY_LOG_DIR` | Where the human-readable ingest trace is written |
+| `LONGMEM_ARTIFACT_ROOT` | LongMem root holding per-question summary VDBs, for Agent Filter `VECTOR` |
+| `GREP_AGENT_COUNTING_SKILL` | `1` injects the disabled counting skill into the Agent Filter prompt |
+
+Determinism is configured in `experiment_config.py`
+(`REPRODUCIBILITY_PARAMS`), not through the environment.
+
 ### Experiment Configuration
 
 `experiment/experiment_config.py` centralizes reproducibility, ingest,
@@ -355,8 +377,15 @@ GRACE-Mem/
 
 </details>
 
-Datasets, generated artifacts, model weights, logs, secrets, and local test
-suites are intentionally excluded from version control.
+Datasets, generated artifacts, model weights, logs, and secrets are excluded
+from version control.
+
+`tests/` is excluded by default and a deterministic subset is force-tracked:
+that public suite is what `uv run pytest -q` runs in a fresh clone and what CI
+runs on every pull request. The larger local regression suite -- including
+probes that need a live endpoint, FalkorDB, or downloaded weights -- stays out
+of version control, so a green run here is narrower than a green run on a
+maintainer's machine.
 
 ## Reproducibility
 

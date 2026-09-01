@@ -182,7 +182,7 @@ uv run python -m experiment.longmem.pipeline.watchdog \
 | `--force` | Reprocess work that completion checks would otherwise skip |
 
 In batch mode, the watchdog launches `experiment.longmem.pipeline.batch` as a
-module, which delegates each question CSV to `MultiDatasetProcessor`. It records
+module, which delegates each question CSV to `DatasetRunner`. It records
 completion state and restarts incomplete work up to `--max-restarts`. In
 retrieval-only mode it runs
 `LongMemRerun` in-process, restores graph state from the artifact cache, and

@@ -26,7 +26,7 @@ python3 .claude/skills/uncle-dev-ubiquitous-language/scripts/scan_terms.py --top
 
 ## Knowledge graph core
 
-The objects GRACE-Mem stores. All live in `grace_mem/utils/common.py`.
+The objects GRACE-Mem stores. All live in `grace_mem/domain/`.
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ graph plus its summaries.
 ## Ingestion
 
 `ingest` is a **stage**. `compress`, `extract`, and `sync` are its **steps**
-(`grace_mem/pipeline/ingest_steps/`), not stages of their own.
+(`grace_mem/ingestion/steps/`), not stages of their own.
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
@@ -68,11 +68,11 @@ graph plus its summaries.
 
 ## Retrieval
 
-`grace_mem/pipeline/retrieval_steps/`.
+`grace_mem/retrieval/`, with its steps in `grace_mem/retrieval/steps/`.
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **Retrieval** | The stage that turns a question into an evidence block. | search (reserve for the vector/BM25 step), lookup, recall |
+| **Retrieval** | The **capability** that turns a question into an evidence block, and the name of the `retrieval/` package. It is not a **Stage**: the three stages are `ingest`, `qa_eval` and `judge`, and retrieval is what `qa_eval` invokes. | search (reserve for the vector/BM25 step), lookup, recall, the retrieval stage |
 | **Query** | The question as reformulated for search, after rewriting and embedding. | prompt, request, input |
 | **Evidence** | The assembled block of entities, relationships, provenance, and summaries handed to the answering LLM. | context (see *Flagged ambiguities*), passages, snippets, retrieved docs |
 | **Filtering** | The step that narrows and reranks retrieved entities and relationships. | pruning, selection, cleanup |
@@ -83,7 +83,7 @@ graph plus its summaries.
 
 ## Temporal
 
-`grace_mem/utils/temporal/`. The vocabulary here is already precise — treat it as fixed.
+`grace_mem/temporal/`. The vocabulary here is already precise — treat it as fixed.
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
@@ -182,9 +182,9 @@ Two benchmarks — **LoCoMo** (`experiment/locomo/`) and **LongMem**
 ## Flagged ambiguities
 
 **1. "Context" means two unrelated things.** `ContextFilter`
-([filtering.py:38](../grace_mem/pipeline/retrieval_steps/filtering.py#L38)) operates on
+([filtering.py:38](../grace_mem/retrieval/steps/filtering.py#L38)) operates on
 retrieved entities and relationships; `TimeContext`
-([types.py:97](../grace_mem/utils/temporal/types.py#L97)) is a temporal reference frame.
+([types.py:97](../grace_mem/temporal/types.py#L97)) is a temporal reference frame.
 Nothing connects them.
 *Recommendation:* keep **TimeContext** as-is — it is the precise term for a
 reference frame. Retire "context" everywhere else in favour of **Evidence**;
@@ -197,14 +197,14 @@ breaks accuracy down by question class.
 The evaluation side should be **QuestionCategory** to make the prefix explicit;
 `CATEGORIES` / `LONGMEM_CATEGORIES` become `QUESTION_CATEGORIES`.
 
-**3. "Runner" and "Processor" are the same concept under two names.**
-`experiment/locomo/pipeline/runner.py` and `MultiDatasetProcessor`
-([processor.py:93](../experiment/longmem/pipeline/processor.py#L93)) both plan units of
-work and drive per-unit execution. The names diverged because the benchmarks
-were written separately.
-*Recommendation:* **Runner** is canonical. Rename `MultiDatasetProcessor` →
-`DatasetRunner`. Keep `EntityOpsProcessor` — "Processor" there means "adjudicates
-a batch", a different and legitimate role.
+**3. "Runner" and "Processor" were the same concept under two names.** ✅ Resolved.
+`experiment/locomo/pipeline/runner.py` and the LongMem orchestrator both plan
+units of work and drive per-unit execution; the names diverged because the
+benchmarks were written separately. **Runner** is canonical, and the LongMem side
+is now `DatasetRunner`
+([runner.py:95](../experiment/longmem/pipeline/runner.py#L95)). `EntityOpsProcessor`
+keeps its name — "Processor" there means "adjudicates a batch", a different and
+legitimate role.
 
 **4. "qa_eval" does not evaluate.** The stage retrieves and generates; judging
 happens in `judge` and scoring happens after that. The name has made every

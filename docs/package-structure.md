@@ -9,10 +9,12 @@ Every directory name below is a term defined there; introducing a directory
 whose name is not in the glossary means adding the term first.
 
 **Status: implemented.** The three branches below have landed; `grace_mem/` now
-has this shape. Five things came out differently from the plan, each recorded in
-place: `grace_mem/text.py`, `Provenance` in `domain/`, `sparse_index/` instead of
+has this shape. Four things came out differently from the plan, each recorded in
+place: `Provenance` in `domain/`, `sparse_index/` instead of
 `vector_store/bm25.py`, `paths.py` moving one commit early, and `extractors/`
-not being created.
+being created after all. `grace_mem/text.py` was described here before it
+existed; it landed later, in the commit that stopped retrieval importing
+`ingestion/parsing.py` for `tokenize_en`.
 
 ---
 
@@ -138,11 +140,11 @@ been the same boundary violation; sending it to `domain/` deleted a
 docstring calls it "the lexical half of the hybrid entity search" — a sparse
 index whose rankings are fused with the dense ones by RRF, not a vector store.
 
-**No `ingestion/extractors/`.** `EntityExtractor` and `RelationshipExtractor`
-share one file, `ingestion/steps/extract.py`. Splitting one file into two is a
-refactor, not a move, and belongs in a commit that is not claiming to be only a
-move. An earlier draft of the tree above showed the split; it has been removed
-so the tree states the target rather than a wish.
+**`ingestion/extractors/` exists.** An earlier revision of this document said
+it would not be created, on the grounds that splitting `ingestion/steps/extract.py`
+into two files is a refactor rather than a move. The split was made anyway:
+`EntityExtractor` and `RelationshipExtractor` now live in
+`ingestion/extractors/entity_extractor.py` and `relationship_extractor.py`.
 
 **No `domain/conversation.py`.** An earlier draft placed Turn, Session, Speaker
 and the sid helpers there, taken from the glossary's vocabulary rather than from
@@ -203,8 +205,13 @@ Two rules follow, and they are the ones worth enforcing in review:
 - **`domain/` imports nothing from the rest of `grace_mem/`.** If a domain model
   needs a vector store, the model is wrong.
 - **`ingestion/` and `retrieval/` never import each other.** They share through
-  `domain/` and `adapters/`. Today they already respect this; the layout should
-  make breaking it obvious.
+  `domain/`, `adapters/` and `text.py`. This was stated here while
+  `retrieval/steps/search.py` imported `ingestion.parsing.tokenize_en`; the
+  import is gone and `tests/test_package_boundaries.py` now asserts the rule
+  across the whole of both packages rather than their `steps/` subpackages.
+- **`adapters/` imports no capability.** An adapter wraps a technology. When
+  `LLMClient` built an `EntityOpsProcessor`, the central ingestion judgement
+  lived inside the HTTP client that made the call for it.
 
 ### Why there is no `ports/` (decided)
 
@@ -274,12 +281,11 @@ experiment/
 │   └── artifacts/
 │
 └── agent_filter/               a study, not a benchmark; grouped by responsibility
-    ├── harness.py              orchestration: prepare → search → verify → finalize
+    ├── harness.py              orchestration: prepare → search → finalize
     ├── corpus.py               the per-question haystack, and the GREP/READ tools
     ├── protocol.py             one reply → one Command, whatever channel it arrived in
     ├── context.py              read the seeds out of a context, write one back
     ├── loop.py                 AgentSession and AgentTools
-    ├── verification.py         the sufficiency verifier and its repair round
     ├── adjudication.py         the answer-blind auditor
     ├── finalization.py         evidence selection policy, one copy
     ├── vector_search.py        semantic search over a question's summaries VDB
@@ -312,9 +318,8 @@ Symmetric, and should stay so:
   has a **watchdog / rerun / decision** loop LoCoMo has no equivalent of.
 
 So LongMem has no `worker.py`, and adding one would be an execution-model change,
-not a file move. The one thing that *should* converge is the name: the LongMem
-orchestrator is currently `MultiDatasetProcessor` and should become a **Runner**
-per the glossary.
+not a file move. The one thing that *should* converge was the name, and it has:
+the LongMem orchestrator is `DatasetRunner`, a **Runner** per the glossary.
 
 ---
 
@@ -666,7 +671,9 @@ across `tests/` is part of every move commit.
 
 ### Per-commit gate
 
-Every commit, not every PR:
+This is the local gate, run before each commit. CI runs the same checks on every
+pull request and on push to `main`, across Python 3.10 and 3.13; `ruff format`
+and `mypy` are advisory there.
 
 ```bash
 ruff check grace_mem experiment
