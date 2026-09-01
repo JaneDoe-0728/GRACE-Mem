@@ -301,7 +301,7 @@ def test_graph_verification_uses_stable_entity_ids_not_manager_lookup_keys() -> 
     relationship_service = Mock()
     relationship_service.upsert_from_extraction.return_value = [{"id": "rel_user_event"}]
     llm = Mock()
-    llm.generate_entity_ops.return_value = {}
+    llm.generate_llm_extract.return_value = {"results": []}
     syncer = ExtractionSyncer(
         llm=llm,
         graph=graph,

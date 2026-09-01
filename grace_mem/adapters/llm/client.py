@@ -28,7 +28,6 @@ from openai import OpenAI
 
 from grace_mem.adapters.llm.token_tracking import token_tracker
 from grace_mem.domain.extraction import SCHEMA_keyword
-from grace_mem.ingestion.managers.entity_manager import EntityOpsConfig, EntityOpsProcessor
 from grace_mem.runtime.paths import resolve_project_root
 from grace_mem.runtime.reproducibility import get_runtime_reproducibility
 
@@ -92,10 +91,6 @@ class LLMClient:
             base_url=base_url,
             api_key=resolved_api_key,
             http_client=httpx.Client(timeout=timeout),
-        )
-        self.entity_ops = EntityOpsProcessor(
-            generate_fn=self.generate_llm_extract,
-            config=EntityOpsConfig()
         )
 
     def close(self) -> None:
@@ -251,6 +246,3 @@ class LLMClient:
             token_tracker.record("generate_llm_keyword", usage["prompt_tokens"], usage["completion_tokens"], elapsed)
         return data["choices"][0]["message"]["content"], elapsed
 
-    def generate_entity_ops(self, new_entities: list[dict], similar_map: dict) -> dict:
-        """Generate entity operations, delegating to EntityOpsProcessor."""
-        return self.entity_ops.process_batch(new_entities, similar_map)

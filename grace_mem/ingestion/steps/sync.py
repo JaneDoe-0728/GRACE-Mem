@@ -2,6 +2,7 @@
 from typing import Any
 
 from grace_mem.domain.extraction import ExtractionResult
+from grace_mem.ingestion.managers.entity_manager import EntityOpsProcessor
 from grace_mem.runtime.logger_config import _StepTimer, make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Ingestor", filename="kg_ingestor.jsonl")
@@ -11,8 +12,15 @@ class ExtractionSyncer:
     """Apply entity ops, upsert relationships, and sync to FalkorDB."""
 
     def __init__(self, *, llm: Any, graph: Any, entity_service: Any, relationship_service: Any, cfg: Any) -> None:
-        """Store the collaborators used to apply extraction results and sync storage."""
+        """Store the collaborators used to apply extraction results and sync storage.
+
+        The entity-op adjudicator is built here rather than handed over by the
+        LLM client. Deciding which extracted entity is which existing node is an
+        ingestion decision, and it needs the client only for one generate call,
+        so owning it here keeps the adapter free of ingestion.
+        """
         self._llm = llm
+        self._entity_ops = EntityOpsProcessor(generate_fn=llm.generate_llm_extract)
         self._graph = graph
         self._entity_service = entity_service
         self._relationship_service = relationship_service
@@ -59,8 +67,8 @@ class ExtractionSyncer:
 
         # 2) Generate entity operations
         timer_ops = _StepTimer()
-        ops_data = self._llm.generate_entity_ops(
-            new_entities=[
+        ops_data = self._entity_ops.process_batch(
+            [
                 {
                     "entity_name": e.entity_name,
                     "entity_type": e.entity_type,
@@ -69,7 +77,7 @@ class ExtractionSyncer:
                 }
                 for e in new_entities
             ],
-            similar_map=similar_map,
+            similar_map,
         )
         _jlog("generate_entity_ops_done", request_id, elapsed_sec=timer_ops.sec())
 

@@ -38,10 +38,10 @@ from grace_mem.domain.entities import _entity_key, canonical_entity_id
 from grace_mem.ingestion.parsing import (
     _parse_entity_ops_block,
     canonicalize_entity_type_label,
-    tokenize_en,
 )
 from grace_mem.ingestion.prompts.entity_ops import ENTITY_OPS_FEW_SHOT, ENTITY_OPS_RULES_V2
 from grace_mem.runtime.logger_config import make_module_jlog
+from grace_mem.text import tokenize_en
 
 
 @dataclass

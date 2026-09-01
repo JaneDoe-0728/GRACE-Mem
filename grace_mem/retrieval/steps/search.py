@@ -7,9 +7,9 @@ from typing import Any
 import faiss
 import numpy as np
 
-from grace_mem.ingestion.parsing import tokenize_en
 from grace_mem.retrieval.ablation import flag_enabled
 from grace_mem.runtime.logger_config import _StepTimer, make_module_jlog
+from grace_mem.text import tokenize_en
 
 _jlog = make_module_jlog(name="grace_mem.Retrieval.Search", filename="kg_retrieval_search.jsonl")
 
