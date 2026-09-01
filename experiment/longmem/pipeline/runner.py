@@ -212,11 +212,11 @@ class DatasetRunner:
         turn_count: int,
         error: Exception,
     ) -> None:
-        """Record a session that failed to ingest, and carry on with the rest.
+        """Record a session that failed before aborting for checkpoint retry.
 
-        One bad session must not cost the dataset. The failure is recorded so the
-        resulting graph is known to be incomplete -- otherwise its lower recall
-        looks like a retrieval regression.
+        A failed session must not enter the completed set or let QA run against
+        an incomplete graph.  The watchdog can restart from the last durable
+        checkpoint, while this record explains why the attempt stopped.
         """
         append_jsonl(
             self._session_failure_log_path(config),
@@ -260,7 +260,7 @@ class DatasetRunner:
                     entity_sim_threshold=config.entity_sim_threshold,
                 ).get(sid, [])
             except Exception as exc:
-                print(f"  [{sid_idx}] Session {sid} - failed, skipping: {exc}")
+                print(f"  [{sid_idx}] Session {sid} - failed, preserving checkpoint: {exc}")
                 logger.exception("Session ingest failed for dataset %s session %s", config.name, sid)
                 self._record_session_failure(
                     config,
@@ -274,16 +274,18 @@ class DatasetRunner:
                     "error": str(exc),
                     "turn_count": len(g),
                 }
-                processed.add(sid)
+                if self.current_mgr:
+                    self.current_mgr.flush_persist()
                 self._save_checkpoint(
                     config,
                     processed,
                     total_sessions=total_sessions,
                     stage="ingest_in_progress",
                 )
-                if self.current_mgr:
-                    self.current_mgr.flush_persist()
-                continue
+                raise RuntimeError(
+                    f"Dataset {config.name} session {sid} ingest failed; "
+                    "checkpoint preserved for retry"
+                ) from exc
 
             processed.add(sid)
             if config.checkpoint_every_n_sessions > 0 and len(processed) % config.checkpoint_every_n_sessions == 0:
@@ -337,7 +339,7 @@ class DatasetRunner:
                     entity_sim_threshold=config.entity_sim_threshold,
                 ).get(sid, {})
             except Exception as exc:
-                print(f"  [{sid_idx}] Session {sid} - failed, skipping: {exc}")
+                print(f"  [{sid_idx}] Session {sid} - failed, preserving checkpoint: {exc}")
                 logger.exception("Session ingest failed for dataset %s session %s", config.name, sid)
                 self._record_session_failure(
                     config,
@@ -351,16 +353,18 @@ class DatasetRunner:
                     "error": str(exc),
                     "turn_count": len(g),
                 }
-                processed.add(sid)
+                if self.current_mgr:
+                    self.current_mgr.flush_persist()
                 self._save_checkpoint(
                     config,
                     processed,
                     total_sessions=total_sessions,
                     stage="ingest_in_progress",
                 )
-                if self.current_mgr:
-                    self.current_mgr.flush_persist()
-                continue
+                raise RuntimeError(
+                    f"Dataset {config.name} session {sid} ingest failed; "
+                    "checkpoint preserved for retry"
+                ) from exc
 
             processed.add(sid)
             if config.checkpoint_every_n_sessions > 0 and len(processed) % config.checkpoint_every_n_sessions == 0:

@@ -73,6 +73,31 @@ _trace_pretty_log = setup_logger(
 )
 
 
+class IngestionFailedError(RuntimeError):
+    """Raised when neither the primary nor fallback ingest produced durable graph state."""
+
+
+def _require_successful_ingest(results: list[tuple[str, bool, Any]]) -> dict[str, Any]:
+    """Return the sync payload or raise when an ingest stage reported failure."""
+    if not results:
+        raise IngestionFailedError("ingest returned no stage result")
+
+    failed = [(stage, payload) for stage, success, payload in results if not success]
+    if failed:
+        stage, payload = failed[0]
+        raise IngestionFailedError(f"{stage} failed: {payload}")
+
+    payload = results[0][2]
+    if not isinstance(payload, dict):
+        raise IngestionFailedError("ingest did not return a sync payload")
+    if payload.get("graph_sync_ok", True) is False:
+        error_count = payload.get("graph_sync_error_count", 0)
+        raise IngestionFailedError(
+            f"graph synchronization failed ({error_count} reported errors)"
+        )
+    return payload
+
+
 @dataclass(frozen=True)
 class IngestorConfig:
     """Tuning knobs for one ingestion run.
@@ -417,6 +442,7 @@ class Ingestor:
                 _jlog("relationship_extraction_success", request_id, relationship_count=len(relationships))
             else:
                 _jlog("relationship_extraction_failed", request_id, error=relationships_or_error)
+                return [("relationship_extraction", False, relationships_or_error)]
         else:
             _jlog("relationship_extraction_skipped", request_id,
                   reason="No template" if not relationship_template else "No entities")
@@ -438,7 +464,7 @@ class Ingestor:
             _jlog(
                 "ingest_turn_complete",
                 request_id,
-                success=True,
+                success=_sync_ok,
                 entity_count=len(entities),
                 relationship_count=len(relationships),
                 total_elapsed_sec=timer_total.sec(),
@@ -450,7 +476,7 @@ class Ingestor:
             if isinstance(result, dict):
                 result["extracted_entities"] = entities
                 result["extracted_relationships"] = relationships
-            return [("two_step_extraction", True, result)]
+            return [("two_step_extraction", _sync_ok, result)]
 
         except Exception as processing_error:
             _jlog("apply_entity_ops_failed", request_id, error=str(processing_error), error_type=type(processing_error).__name__)
@@ -481,6 +507,7 @@ class Ingestor:
               session_id=session_id, message_id=message_id,
               user_text_length=len(user_text), assistant_text_length=len(assistant_text), prev_k=prev_k)
 
+        summary_id: str | None = None
         try:
             # Step 0: Deterministic temporal parsing.
             # Rewrite relative temporal phrases directly to resolved absolute values.
@@ -581,9 +608,9 @@ class Ingestor:
                 temporal_hints=temporal_hints if temporal_hints else None,
                 tctx=_tctx)
 
+            sync_payload = _require_successful_ingest(results)
             _jlog("llm_extraction_and_syncKG_done", request_id)
             _jlog("summarize_and_ingest_turn_complete", request_id, success=True, total_elapsed_sec=timer_total.sec())
-            sync_payload = results[0][2] if results and results[0][1] and isinstance(results[0][2], dict) else {}
 
             # Post-extraction guardrail: warn if any entity name is a temporal literal that
             # the parser already resolved — indicates LLM ignored the pre-resolved hints.
@@ -653,9 +680,11 @@ class Ingestor:
             _jlog("summarize_and_ingest_turn_failed", request_id,
                   error=str(e), error_type=type(e).__name__, total_elapsed_sec=timer_total.sec())
 
-            # Fallback: try with two-step extraction directly on original text
+            # Fallback: try with two-step extraction directly on original text.
+            # A successful fallback is safe to checkpoint; a failed fallback
+            # raises so benchmark runners cannot mark this session complete.
             try:
-                _jlog("fallback_ingest_start", request_id, reason="summary_generation_failed")
+                _jlog("fallback_ingest_start", request_id, reason="primary_ingest_failed")
                 if assistant_text and assistant_text.strip():
                     curr_text = f"User: {user_text.strip()}\nAssistant: {assistant_text.strip()}"
                 else:
@@ -669,11 +698,22 @@ class Ingestor:
                     "relationship_extraction": relationship_extraction_only["relationship_extraction"]
                 }
 
+                fallback_provenance = None
+                if summary_id is not None:
+                    fallback_provenance = {
+                        "summary_ids": [summary_id],
+                        "session_id": session_id,
+                        "message_id": message_id,
+                    }
+                    if dialogue_datetime is not None:
+                        fallback_provenance["dialogue_datetime"] = dialogue_datetime
+
                 fallback_results = self.ingest_turn(
                     prompt_vars=prompt_vars, prompt_templates=fallback_template,
-                    provenance=None, request_id=request_id,
+                    provenance=fallback_provenance, request_id=request_id,
                     entity_sim_topk=entity_sim_topk, entity_sim_threshold=entity_sim_threshold)
 
+                _require_successful_ingest(fallback_results)
                 _jlog("fallback_ingest_complete", request_id)
                 append_analysis_record(
                     _TRACE_PRETTY_LOG_DIR,
@@ -687,7 +727,11 @@ class Ingestor:
                         "error": str(e),
                     },
                 )
-                return {"request_id": request_id, "error": str(e), "ingest_results": fallback_results}
+                return {
+                    "request_id": request_id,
+                    "recovered_error": str(e),
+                    "ingest_results": fallback_results,
+                }
             except Exception as fallback_error:
                 if is_context_length_exceeded_error(fallback_error):
                     _jlog(
@@ -716,4 +760,6 @@ class Ingestor:
                         "fallback_error": str(fallback_error),
                     },
                 )
-                return {"request_id": request_id, "error": str(e), "fallback_error": str(fallback_error)}
+                raise IngestionFailedError(
+                    f"primary ingest failed: {e}; fallback ingest failed: {fallback_error}"
+                ) from fallback_error

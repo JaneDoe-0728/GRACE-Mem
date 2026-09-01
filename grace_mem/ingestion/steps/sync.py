@@ -118,7 +118,15 @@ class ExtractionSyncer:
         if graph_sync_ok and hasattr(self._graph, "check_entity_ids"):
             timer_verify = _StepTimer()
             try:
-                expected_ent_ids = list(entity_idx.keys())
+                # ``entity_idx`` is keyed by the manager's normalized lookup
+                # key (for example ``user::person``), while FalkorDB stores the
+                # stable id in each metadata value (``person_user``).  Verify
+                # the ids that were actually passed to ``sync_entities``.
+                expected_ent_ids = [
+                    str(meta["id"])
+                    for meta in entity_idx.values()
+                    if meta and meta.get("id")
+                ]
                 expected_rel_ids = [m["id"] for m in relationship_metas if m.get("id")]
 
                 found_ent = set(self._graph.check_entity_ids(expected_ent_ids))
@@ -146,6 +154,8 @@ class ExtractionSyncer:
                 if missing_ents or missing_rels:
                     graph_sync_ok = False
             except Exception as ve:
+                graph_sync_ok = False
+                graph_sync_error_count += 1
                 _jlog(
                     "falkordb_sync_verify_failed",
                     request_id,
