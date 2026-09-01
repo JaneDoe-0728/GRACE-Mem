@@ -135,6 +135,21 @@ class VDBManager:
         return self._summaries_vdb
 
     # ========== Persist / Reset ==========
+    def _persist_all(self) -> None:
+        """Write every initialized store, saving the extraction cache last."""
+        if self._entities_vdb:
+            self._entities_vdb.save()
+            self._entities_vdb.export_metadatas_jsonl(str(self.ENT_META))
+        if self._entities_bm25:
+            self._entities_bm25.save(str(self.ENT_BM25))
+        if self._relationships_vdb:
+            self._relationships_vdb.save()
+            self._relationships_vdb.export_metadatas_jsonl(str(self.REL_META))
+        if self._summaries_vdb:
+            self._summaries_vdb.save()
+            self._summaries_vdb.export_metadatas_jsonl(str(self.SUM_META))
+        CacheStore.save(self.cache, cache_dir=self.ART)
+
     def persist_async(self) -> None:
         """Persist every initialized store on a background thread.
 
@@ -157,41 +172,23 @@ class VDBManager:
             would skip work whose output was never written.
             """
             try:
-                if self._entities_vdb:
-                    self._entities_vdb.save()
-                    self._entities_vdb.export_metadatas_jsonl(str(self.ENT_META))
-                if self._entities_bm25:
-                    self._entities_bm25.save(str(self.ENT_BM25))
-                if self._relationships_vdb:
-                    self._relationships_vdb.save()
-                    self._relationships_vdb.export_metadatas_jsonl(str(self.REL_META))
-                if self._summaries_vdb:
-                    self._summaries_vdb.save()
-                    self._summaries_vdb.export_metadatas_jsonl(str(self.SUM_META))
-                CacheStore.save(self.cache, cache_dir=self.ART)
+                self._persist_all()
             except Exception as exc:
                 self._persist_error = exc
         with self._persist_lock:
+            # Entity and relationship managers can request persistence back to
+            # back during one turn.  Wait while holding the scheduling lock so
+            # two callers cannot both observe the same completed writer and
+            # launch overlapping writes to the same Chroma/pickle files.
+            self._wait_for_persist_locked()
             self._persist_error = None
             t = threading.Thread(target=_task, daemon=True)
             t.start()
             self._persist_thread = t
 
-    def _wait_for_persist(self) -> None:
-        """Join any in-flight persist thread and re-raise what it swallowed.
-
-        The 30-second join is bounded rather than indefinite because a hung
-        Chroma write would otherwise hang the run with no diagnostic. Timing
-        out is reported as an error in its own right: the on-disk state is
-        genuinely unknown at that point, and continuing would build on it.
-
-        Raises:
-            RuntimeError: If the persist thread timed out, or if the background
-                write failed. The stored error is cleared either way, so it is
-                reported once.
-        """
-        with self._persist_lock:
-            thread = self._persist_thread
+    def _wait_for_persist_locked(self) -> None:
+        """Wait for the current writer while the caller holds `_persist_lock`."""
+        thread = self._persist_thread
         if thread is not None:
             thread.join(timeout=30)
             if thread.is_alive():
@@ -204,6 +201,22 @@ class VDBManager:
             self._persist_error = None
             raise RuntimeError(f"Background persist failed: {error}") from error
 
+    def _wait_for_persist(self) -> None:
+        """Join the in-flight persist thread and re-raise what it swallowed.
+
+        The 30-second join is bounded rather than indefinite because a hung
+        Chroma write would otherwise hang the run with no diagnostic. Timing
+        out is reported as an error in its own right: the on-disk state is
+        genuinely unknown at that point, and continuing would build on it.
+
+        Raises:
+            RuntimeError: If the persist thread timed out, or if the background
+                write failed. The stored error is cleared either way, so it is
+                reported once.
+        """
+        with self._persist_lock:
+            self._wait_for_persist_locked()
+
     def flush_persist(self) -> None:
         """Block until everything is on disk. Call before reading artifacts.
 
@@ -212,20 +225,10 @@ class VDBManager:
         may have started before the most recent mutations, so joining it alone
         does not establish that current state was saved.
         """
-        self._wait_for_persist()
-        if self._entities_vdb:
-            self._entities_vdb.save()
-            self._entities_vdb.export_metadatas_jsonl(str(self.ENT_META))
-        if self._entities_bm25:
-            self._entities_bm25.save(str(self.ENT_BM25))
-        if self._relationships_vdb:
-            self._relationships_vdb.save()
-            self._relationships_vdb.export_metadatas_jsonl(str(self.REL_META))
-        if self._summaries_vdb:
-            self._summaries_vdb.save()
-            self._summaries_vdb.export_metadatas_jsonl(str(self.SUM_META))
-        CacheStore.save(self.cache, cache_dir=self.ART)
-        self.validate_artifacts()
+        with self._persist_lock:
+            self._wait_for_persist_locked()
+            self._persist_all()
+            self.validate_artifacts()
 
     def validate_artifacts(self) -> None:
         """Raise RuntimeError if any persisted artifact file is missing or empty."""

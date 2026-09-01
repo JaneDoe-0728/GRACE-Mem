@@ -28,6 +28,7 @@ from pathlib import Path
 
 import pytest
 
+from grace_mem.adapters.vector_store.chroma_manager import VDBManager
 from grace_mem.ingestion.pipeline import Ingestor, IngestorConfig
 from grace_mem.runtime.paths import resolve_project_root
 from tests.ingestion_fakes import (
@@ -153,3 +154,71 @@ def test_repository_paths_resolve_above_grace_mem_package() -> None:
     assert project_root == Path(__file__).resolve().parent.parent
     assert (project_root / "grace_mem").is_dir()
     assert (project_root / ".env.example").is_file()
+
+
+def test_persist_requests_never_write_the_same_store_concurrently(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Back-to-back entity/relationship persists must serialize disk writes."""
+    first_started = threading.Event()
+    release_first = threading.Event()
+    second_started = threading.Event()
+    second_request_entered = threading.Event()
+    second_request_completed = threading.Event()
+
+    class BlockingStore:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.active = 0
+            self.max_active = 0
+            self.lock = threading.Lock()
+
+        def save(self) -> None:
+            with self.lock:
+                self.calls += 1
+                call_number = self.calls
+                self.active += 1
+                self.max_active = max(self.max_active, self.active)
+            try:
+                if call_number == 1:
+                    first_started.set()
+                    assert release_first.wait(timeout=2)
+                else:
+                    second_started.set()
+            finally:
+                with self.lock:
+                    self.active -= 1
+
+        def export_metadatas_jsonl(self, _path: str) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "grace_mem.adapters.vector_store.chroma_manager.CacheStore.save",
+        lambda *_args, **_kwargs: None,
+    )
+    manager = VDBManager(tmp_path / "artifacts")
+    store = BlockingStore()
+    manager._entities_vdb = store
+
+    manager.persist_async()
+    assert first_started.wait(timeout=2)
+
+    def request_second_persist() -> None:
+        second_request_entered.set()
+        manager.persist_async()
+        second_request_completed.set()
+
+    requester = threading.Thread(target=request_second_persist)
+    requester.start()
+    assert second_request_entered.wait(timeout=2)
+    assert not second_started.wait(timeout=0.1)
+    assert not second_request_completed.is_set()
+
+    release_first.set()
+    requester.join(timeout=2)
+    assert not requester.is_alive()
+    manager._wait_for_persist()
+
+    assert second_started.is_set()
+    assert store.max_active == 1
