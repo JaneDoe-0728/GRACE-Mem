@@ -47,7 +47,6 @@ MODES = {
     "split_single_entry_raw": {"use_split_embeddings": True, "split_single_entry_raw": True},
     "direct_vector": {"use_split_embeddings": True, "summary_direct_vector_topn": 4},
     "per_entity_quota": {"summary_per_entity_min": 2},
-    "hyde_blend": {"hyde_vec": _vec(1), "hyde_weight": 0.3, "hyde_mode": "blend"},
     "rerank_cosine_only": {
         "use_split_embeddings": True,
         "summary_direct_vector_topn": 4,

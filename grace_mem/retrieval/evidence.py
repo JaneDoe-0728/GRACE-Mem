@@ -295,9 +295,6 @@ class EvidenceBuilder:
         summary_per_entity_min: int,
         request_id: str | None,
         ev_source: dict,
-        key_of,
-        hyde_fill: bool,
-        fill_events: list,
     ) -> list:
         """Stage 3: order the candidates and take the global top-K.
 
@@ -343,30 +340,6 @@ class EvidenceBuilder:
         elif topk is not None:
             scored_events = scored_events[:topk]
 
-        # HyDE "fill" mode: backfill any unused top-K slots with HyDE-rescued
-        # summaries (never displaces a query hit).
-        if hyde_fill and topk is not None and len(scored_events) < topk and fill_events:
-            fill_events.sort(key=lambda x: x[0], reverse=True)
-            used_keys = {key_of(ev) for _, ev in scored_events}
-            n_filled = 0
-            for fill_score, ev in fill_events:
-                if len(scored_events) >= topk:
-                    break
-                k = key_of(ev)
-                if k in used_keys:
-                    continue
-                scored_events.append((fill_score, ev))
-                used_keys.add(k)
-                n_filled += 1
-            _jlog(
-                "hyde_fill_applied",
-                request_id,
-                step="3.3",
-                fill_candidates=len(fill_events),
-                slots_filled=n_filled,
-                final_count=len(scored_events),
-            )
-
         _jlog(
             "evidence_topk_selected",
             request_id,
@@ -406,9 +379,6 @@ class EvidenceBuilder:
         split_single_entry_raw: bool = False,
         query_text: str | None = None,
         request_id: str | None = None,
-        hyde_vec: Any = None,
-        hyde_weight: float = 0.0,
-        hyde_mode: str = "blend",
         summary_per_entity_min: int = 0,
     ) -> str:
         """
@@ -423,15 +393,6 @@ class EvidenceBuilder:
             use_full_summary: If True, fetch full summary text
             fallback_to_raw: If True, fallback to raw turn text when summary is truncated
             request_id: Request ID for logging
-            hyde_vec: Optional HyDE hypothetical-summary embedding.
-            hyde_weight: Blend weight for the HyDE similarity (0.0 = ignore HyDE).
-            hyde_mode: How HyDE is used (semantic mode only):
-                "blend" → score = (1-hyde_weight)*sim_query + hyde_weight*sim_hyde
-                          (HyDE competes for top-K slots; can displace query hits).
-                "fill"  → query similarity alone selects top-K; HyDE only rescues
-                          summaries that fail the query threshold to fill *unused*
-                          slots when query yields fewer than top-K candidates.
-                          Never displaces a query hit.
             summary_per_entity_min: Minimum snippets guaranteed per source entity/
                 relationship (0 = disabled, use global top-K only). When > 0, each
                 source that has at least one passing candidate contributes its best
@@ -488,10 +449,6 @@ class EvidenceBuilder:
 
         # Cache: summary_id -> (snippet or None, score or None)
         snippet_cache: dict[str, tuple[str | None, float | None]] = {}
-        # "fill" mode: candidates that fail the query threshold but pass it on the
-        # HyDE vector, collected as (sim_hyde, ev) to backfill unused top-K slots.
-        fill_events: list[tuple[float, dict]] = []
-        _hyde_fill = (hyde_mode == "fill" and hyde_vec is not None and hyde_weight > 0.0)
         stage_stats = {
             "entity_events": 0,
             "relationship_events": 0,
@@ -556,31 +513,10 @@ class EvidenceBuilder:
 
             score = float(raw_score)
             effective_threshold = summary_vec_threshold if isinstance(summary_vec_threshold, (int, float)) else 0.0
-            # HyDE "blend" mode: combine query similarity with hypothetical-summary
-            # similarity so HyDE-favored summaries can compete for top-K slots.
-            if hyde_mode == "blend" and hyde_vec is not None and hyde_weight > 0.0:
-                hyde_raw = self.summaries_vdb.compare_by_id_raw(
-                    summary_id,
-                    hyde_vec,
-                    request_id=request_id,
-                    debug_context={"step": "3.1", "source": "summary_score_hyde"},
-                )
-                if hyde_raw is not None:
-                    score = (1.0 - hyde_weight) * score + hyde_weight * float(hyde_raw)
             passed = score >= effective_threshold
 
             if not passed:
                 snippet_cache[summary_id] = (None, None)
-                # HyDE "fill" mode: rescue query-rejected summaries for backfill only.
-                if _hyde_fill:
-                    hyde_raw = self.summaries_vdb.compare_by_id_raw(
-                        summary_id,
-                        hyde_vec,
-                        request_id=request_id,
-                        debug_context={"step": "3.1", "source": "summary_score_hyde_fill"},
-                    )
-                    if hyde_raw is not None and float(hyde_raw) >= effective_threshold:
-                        fill_events.append((float(hyde_raw), ev))
                 _jlog(
                     "summary_scored",
                     request_id,
@@ -700,9 +636,6 @@ class EvidenceBuilder:
             summary_per_entity_min=summary_per_entity_min,
             request_id=request_id,
             ev_source=ev_source,
-            key_of=key_of,
-            hyde_fill=_hyde_fill,
-            fill_events=fill_events,
         )
 
         evidence_items = self._fetch_snippet_text(

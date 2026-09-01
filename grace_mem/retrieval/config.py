@@ -51,10 +51,8 @@ class SearchConfig:
 class FilterConfig:
     """Stages 3-4: how the candidate pool is narrowed and reranked.
 
-    `filter_method` is the single axis everything hangs off, and each value
-    activates a different subset. The rrf_*/ppr_*/rrk_* knobs are inert under a
-    method that ignores them -- deliberately: one flat set swept by one flag
-    beats five parallel config objects.
+    The reranker is the filter: what survives the intersection goes to the
+    cross-encoder, and the rrk_* knobs are what shape the cut.
     """
 
     # post-intersection filtering
@@ -130,12 +128,6 @@ class EvidenceConfig:
     # rebuild ran. False against never-rebuilt artifacts makes every provenance
     # candidate miss silently.
     split_single_entry_raw: bool = True
-    # ── HyDE summary retrieval ────────────────────────────────────────────────
-    # Embed hypothetical answer sentences and blend their summary similarity with
-    # the query's: score = (1-w)*sim_query + w*sim_hyde.
-    summary_hyde_enable: bool = False
-    summary_hyde_weight: float = 0.3       # w in the blend; 0.0 reproduces baseline
-    summary_hyde_mode: str = "blend"       # "blend" (compete for top-K) | "fill" (backfill unused slots only)
     # Per-entity quota: guarantee this many snippets per source entity/relationship
     # before filling the remaining top-K slots by score. 0 = disabled.
     summary_per_entity_min: int = 0

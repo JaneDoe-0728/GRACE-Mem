@@ -12,7 +12,6 @@ from grace_mem.domain.extraction import KeywordExtractionResult
 from grace_mem.retrieval.ablation import flag_enabled
 from grace_mem.retrieval.candidates import CandidateSet
 from grace_mem.retrieval.config import RetrieverConfig
-from grace_mem.retrieval.hyde import generate_hyde_vector
 from grace_mem.retrieval.keywords import generate_query_keywords
 from grace_mem.retrieval.query_rewrite import maybe_rewrite_retrieval_question
 from grace_mem.retrieval.raw_turn_lookup import RawContextLookup
@@ -716,10 +715,10 @@ class Retriever:
     ) -> tuple:
         """Stage 3: pass the intersected pool through to the reranker.
 
-        Five strategies behind one flag -- "similarity", "rrf", "ppr",
-        "rrf+ppr", "reranker_only" -- so that changing which one a run uses is
-        one config value rather than a code path. This is the retrieval policy;
-        the stages either side of it are mechanism.
+        It does no cutting of its own: everything that survives the intersection
+        goes forward, sorted so the order the reranker sees does not depend on
+        set iteration. This is the retrieval policy; the stages either side of
+        it are mechanism.
 
         Takes the CandidateSet rather than its six fields, which is the reason
         that type exists.
@@ -1548,10 +1547,6 @@ class Retriever:
 
             # 3) Build evidence block
             timer_evidence = _StepTimer()
-            # 0d) HyDE: hypothetical-summary vector to blend into summary scoring
-            hyde_vec = None
-            if self.cfg.summary_hyde_enable:
-                hyde_vec = generate_hyde_vector(llm=self.llm, searcher=self.searcher, question=rewritten_question, request_id=request_id)
             # Ablation A: KG_ABLATION_NO_DIRECT_VECTOR=1 -> config closes the direct
             # search channel down to topn=0 (add_direct becomes a no-op); all that is
             # left here is a signal the smoke test can assert on.
@@ -1580,9 +1575,6 @@ class Retriever:
                 split_single_entry_raw=self.cfg.split_single_entry_raw,
                 query_text=rewritten_question,
                 request_id=request_id,
-                hyde_vec=hyde_vec,
-                hyde_weight=self.cfg.summary_hyde_weight,
-                hyde_mode=self.cfg.summary_hyde_mode,
                 summary_per_entity_min=self.cfg.summary_per_entity_min,
             )
             _jlog(

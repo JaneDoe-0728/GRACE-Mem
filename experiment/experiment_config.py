@@ -70,10 +70,6 @@ RERANKER_PARAMS = {
     "sa_rescale_c": 0.4,
     "sa_tau_a": 0.5,
     "sa_max_activated": 20,
-    # ── HyDE summary retrieval ─────────────────────────────────────────────
-    "summary_hyde_enable": False,
-    "summary_hyde_weight": 0.1,
-    "summary_hyde_mode": "fill",
     # ── Relationship vector search keyword source ──────────────────────────
     # "high_level" → abstract reasoning words (baseline; noisy for rel search)
     # "low_level"  → concrete entity/topic anchors

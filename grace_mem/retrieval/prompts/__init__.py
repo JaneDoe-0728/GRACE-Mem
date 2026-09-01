@@ -1,1 +1,1 @@
-"""Prompts used during retrieval: keyword extraction, HyDE, adaptive rewriting."""
+"""Prompts used during retrieval: keyword extraction and adaptive rewriting."""

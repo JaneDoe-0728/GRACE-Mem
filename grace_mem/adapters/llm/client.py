@@ -19,7 +19,6 @@ disappears from those reports.
 import logging
 import os
 import time
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -30,9 +29,10 @@ from openai import OpenAI
 from grace_mem.adapters.llm.token_tracking import token_tracker
 from grace_mem.domain.extraction import SCHEMA_keyword
 from grace_mem.ingestion.managers.entity_manager import EntityOpsConfig, EntityOpsProcessor
+from grace_mem.runtime.paths import resolve_project_root
 from grace_mem.runtime.reproducibility import get_runtime_reproducibility
 
-ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+ENV_PATH = resolve_project_root() / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
 LLM_API = os.getenv("LLM_API")
 MODEL_NAME = os.getenv("MODEL_NAME")
@@ -249,25 +249,6 @@ class LLMClient:
         usage = data.get("usage", {})
         if usage:
             token_tracker.record("generate_llm_keyword", usage["prompt_tokens"], usage["completion_tokens"], elapsed)
-        return data["choices"][0]["message"]["content"], elapsed
-
-    def generate_llm_hyde(self, system_prompt: str, user_prompt: str,
-                          max_tokens: int = 512, temperature: float = 0) -> tuple[str, float]:
-        """Run HyDE hypothetical-summary generation and return raw text plus latency."""
-        t0 = time.perf_counter()
-        data = self._post({
-            "model": self.model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        })
-        elapsed = time.perf_counter() - t0
-        usage = data.get("usage", {})
-        if usage:
-            token_tracker.record("generate_llm_hyde", usage["prompt_tokens"], usage["completion_tokens"], elapsed)
         return data["choices"][0]["message"]["content"], elapsed
 
     def generate_entity_ops(self, new_entities: list[dict], similar_map: dict) -> dict:
