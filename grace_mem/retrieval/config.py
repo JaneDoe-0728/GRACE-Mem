@@ -18,7 +18,31 @@ Field names *are* config keys. Renaming a field renames the key used by
 experiment_config.py, every sweep script, and every recorded run metadata file.
 """
 
-from dataclasses import dataclass
+import warnings
+from dataclasses import dataclass, fields
+
+#: Knobs that are still accepted and still recorded, but no longer reach any
+#: decision. Field -> why it stopped mattering.
+#:
+#: They are kept rather than deleted because run metadata, sweep scripts and
+#: trace readers written against older runs still carry them; removing the
+#: fields would turn those into a TypeError. What they must not do is stay
+#: silent: a sweep over `reranker_topk` that produces a different metadata file
+#: and an identical result set is how a research conclusion goes wrong. Setting
+#: of them away from its default now warns once, and the set is recorded in the
+#: `retriever_initialized` log for every run.
+INERT_FIELDS = {
+    "filter_ent_topk": "stage 3 does no cutting; the reranker is the filter",
+    "filter_rel_topk": "stage 3 does no cutting; the reranker is the filter",
+    "filter_ent_threshold": "stage 3 does no cutting; the reranker is the filter",
+    "filter_rel_threshold": "stage 3 does no cutting; the reranker is the filter",
+    "use_reranker": "stage 4 always reranks; there is no non-reranked path left",
+    "reranker_threshold": "superseded by rrk_threshold",
+    "reranker_topk": "superseded by rrk_ent_topk / rrk_rel_topk",
+    "sa_max_activated": "spreading activation no longer caps its result set",
+}
+
+_warned: set[tuple[str, ...]] = set()
 
 
 @dataclass(frozen=True)
@@ -41,7 +65,7 @@ class SearchConfig:
     sa_max_hops: int = 2
     sa_rescale_c: float = 0.4
     sa_tau_a: float = 0.5
-    sa_max_activated: int = 20
+    sa_max_activated: int = 20   # inert: see INERT_FIELDS
     # Keyword source for relationship vector search:
     # "high_level" (abstract reasoning words, baseline) | "low_level" (concrete anchors) | "both"
     relation_search_keywords: str = "high_level"
@@ -52,15 +76,16 @@ class FilterConfig:
     """Stages 3-4: how the candidate pool is narrowed and reranked.
 
     The reranker is the filter: what survives the intersection goes to the
-    cross-encoder, and the rrk_* knobs are what shape the cut.
+    cross-encoder, and the rrk_* knobs are what shape the cut. Everything above
+    them is inert -- accepted, recorded, and without effect. See INERT_FIELDS.
     """
 
-    # post-intersection filtering
+    # post-intersection filtering -- inert, see INERT_FIELDS
     filter_ent_topk: int = 3
     filter_rel_topk: int = 3
     filter_ent_threshold: float = 0.5
     filter_rel_threshold: float = 0.5
-    # reranker for recovering filtered items
+    # the pre-rrk_* reranker knobs -- inert, see INERT_FIELDS
     use_reranker: bool = True
     reranker_threshold: float = -3.0
     reranker_topk: int = 5
@@ -155,3 +180,35 @@ class RetrieverConfig(SearchConfig, FilterConfig, EvidenceConfig, AdaptiveConfig
     Adds nothing of its own. It exists so the four groups can be named
     separately while callers keep one object with one flat namespace.
     """
+
+    def __post_init__(self) -> None:
+        overrides = self.inert_overrides()
+        if not overrides:
+            return
+        # Once per distinct set, not once per Retriever: LoCoMo builds one per
+        # sample, and a warning repeated 10 times is a warning nobody reads.
+        key = tuple(sorted(overrides))
+        if key in _warned:
+            return
+        _warned.add(key)
+        warnings.warn(
+            "these retrieval knobs no longer affect selection and were ignored: "
+            + "; ".join(f"{name}={value!r} ({INERT_FIELDS[name]})"
+                        for name, value in sorted(overrides.items())),
+            FutureWarning,
+            stacklevel=3,
+        )
+
+    def inert_overrides(self) -> dict:
+        """The inert knobs this config sets away from their default.
+
+        Empty for a config that only sets knobs that still do something. The
+        `retriever_initialized` log records it so a run's own trace says which
+        of its configured values were decoration.
+        """
+        defaults = {f.name: f.default for f in fields(RetrieverConfig)}
+        return {
+            name: getattr(self, name)
+            for name in INERT_FIELDS
+            if getattr(self, name) != defaults[name]
+        }

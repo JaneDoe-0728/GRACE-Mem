@@ -144,11 +144,15 @@ class Retriever:
             enabled=os.getenv("KG_NARROWING_ENABLED", "1").lower() not in ("0", "false", ""),
         )
 
-        # [LOG] Retriever initialization with effective config
+        # [LOG] Retriever initialization with effective config.
+        # `inert_config` is the part of `config` that was accepted and ignored,
+        # recorded so a run's own trace can be read back without knowing which
+        # knobs were retired (see retrieval/config.INERT_FIELDS).
         _jlog(
             "retriever_initialized",
             request_id="INIT",
             config={k: v for k, v in self.cfg.__dict__.items()},
+            inert_config=self.cfg.inert_overrides(),
         )
 
     def _entity_name_by_id(self, entity_id: str | None) -> str:
@@ -729,14 +733,17 @@ class Retriever:
         """
         # 3) Filter candidates (step 2.6)
         timer_filter = _StepTimer()
+        # The two topk values are logged as what they are -- requested and not
+        # applied -- so a trace reader cannot mistake them for the cut that
+        # produced `filtered_entities` below.
         _jlog(
             "filter_step_start",
             request_id,
             step="2.6",
             entity_candidate_count=len(intersect_entity_ids),
             relationship_candidate_count=len(intersect_rel_ids),
-            filter_ent_topk=filter_ent_topk,
-            filter_rel_topk=filter_rel_topk,
+            requested_ignored_filter_ent_topk=filter_ent_topk,
+            requested_ignored_filter_rel_topk=filter_rel_topk,
         )
 
 
