@@ -23,12 +23,21 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Deprecated process-wide fallback. Created at import time so the legacy
-# no-argument path keeps working; pass an explicit cache_dir instead.
+# Deprecated process-wide fallback for the legacy no-argument path; pass an
+# explicit cache_dir instead. The directory is created when that path is
+# actually taken, not at import: importing a module must not write to whatever
+# happens to be the caller's working directory, and it used to fail outright
+# under a read-only cwd.
 CACHE_DIR = Path("vdb_cache")
-CACHE_DIR.mkdir(exist_ok=True)
 ENTITY_CACHE_FILE = CACHE_DIR / "entities_cache.pkl"
 RELATIONSHIP_CACHE_FILE = CACHE_DIR / "relationships_cache.pkl"
+
+
+def _resolve_cache_files(cache_dir: Path | str | None) -> tuple[Path, Path]:
+    """Return (entity_file, relationship_file), creating the directory."""
+    directory = CACHE_DIR if cache_dir is None else Path(cache_dir)
+    directory.mkdir(exist_ok=True, parents=True)
+    return (directory / "entities_cache.pkl", directory / "relationships_cache.pkl")
 
 class CacheStore:
     """Load, save, and clear the entity/relationship extraction cache.
@@ -56,15 +65,7 @@ class CacheStore:
             A dict with keys entities, entities_full, relationships,
             relationships_full -- always all four, even on a cold start.
         """
-        if cache_dir is None:
-            # Backward compatibility: use global cache
-            entity_cache_file = ENTITY_CACHE_FILE
-            relationship_cache_file = RELATIONSHIP_CACHE_FILE
-        else:
-            cache_dir = Path(cache_dir)
-            cache_dir.mkdir(exist_ok=True, parents=True)
-            entity_cache_file = cache_dir / "entities_cache.pkl"
-            relationship_cache_file = cache_dir / "relationships_cache.pkl"
+        entity_cache_file, relationship_cache_file = _resolve_cache_files(cache_dir)
 
         def _load(p: Path) -> dict[str, dict]:
             """Load a cached shard from disk and fall back to an empty mapping on error."""
@@ -106,15 +107,7 @@ class CacheStore:
         Raises:
             Exception: Whatever pickling or the filesystem raised.
         """
-        if cache_dir is None:
-            # Backward compatibility: use global cache
-            entity_cache_file = ENTITY_CACHE_FILE
-            relationship_cache_file = RELATIONSHIP_CACHE_FILE
-        else:
-            cache_dir = Path(cache_dir)
-            cache_dir.mkdir(exist_ok=True, parents=True)
-            entity_cache_file = cache_dir / "entities_cache.pkl"
-            relationship_cache_file = cache_dir / "relationships_cache.pkl"
+        entity_cache_file, relationship_cache_file = _resolve_cache_files(cache_dir)
 
         def _dump(p: Path, obj: dict[str, dict]) -> None:
             """Write one cache shard to disk."""

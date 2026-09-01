@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -15,9 +16,16 @@ concurrency:
 
 jobs:
   quality-and-tests:
-    name: Ruff, mypy, and pytest
+    # The package claims 3.10-3.13. Testing only the middle of that range means
+    # a syntax or stdlib change at either end lands unnoticed, so both ends run.
+    name: Ruff, mypy, and pytest (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.13"]
 
     steps:
       - name: Check out repository
@@ -29,7 +37,7 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install locked dependencies
         run: uv sync --locked --dev
@@ -41,7 +49,11 @@ jobs:
         continue-on-error: true
         env:
           BEFORE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          if [[ -n "$BASE_SHA" ]]; then
+            BEFORE_SHA="$BASE_SHA"
+          fi
           if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
             BEFORE_SHA="$(git rev-parse "${GITHUB_SHA}^")"
           fi
