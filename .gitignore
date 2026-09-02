@@ -75,3 +75,10 @@ experiment/locomo/autoresearch/experiment/
 
 # Local secrets — never commit
 .env
+
+# Internal refactor working documents: kept locally, not published. They describe
+# how the package layout and the retriever were taken apart, which is history for
+# the people who did it rather than anything a user of the repository needs.
+docs/package-structure.md
+docs/retriever-refactor.md
+docs/refactor_todo.md

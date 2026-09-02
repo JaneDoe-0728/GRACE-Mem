@@ -6,12 +6,11 @@ these words and no others.
 
 > Traditional Chinese edition: [ubiquitous-language.zh-TW.md](ubiquitous-language.zh-TW.md).
 > Both files must be updated together.
-> Where code lives: [package-structure.md](package-structure.md).
 
 **Scope boundary.** This file holds *domain* terms only. Architectural vocabulary —
-`domain`, `adapters`, `runtime`, `bootstrap`, `pipeline` as a filename — is defined
-in [package-structure.md](package-structure.md) and deliberately kept out of here;
-those words say nothing about what GRACE-Mem is. A word earns a place below only
+`domain`, `adapters`, `runtime`, `bootstrap`, `pipeline` as a filename — names
+where code lives and is deliberately kept out of here; those words say nothing
+about what GRACE-Mem is. A word earns a place below only
 if it carries GRACE-Mem-specific meaning: **Step** qualifies because it exists to
 contrast with **Stage**; **Adapter** does not.
 
@@ -297,9 +296,7 @@ Reported by the scanner, checked, and deliberately not glossary entries:
 ## Rename backlog
 
 All of these land as commits on one branch, `refactor/terminology`, ordered by
-risk. See the migration plan in
-[package-structure.md](package-structure.md) for how that branch sits relative to
-the package moves — it goes **before** them, so nothing is renamed into a
+risk. That branch goes **before** the package moves, so nothing is renamed into a
 directory it is about to leave.
 
 | Order | Commit | Resolves | Risk |

@@ -1,6 +1,6 @@
 """Import-direction rules the feature-first restructure must preserve.
 
-These are the invariants `docs/package-structure.md` depends on. They are
+These are the invariants the package layout depends on. They are
 asserted here rather than only in `tests/test_architecture.py` because that file
 is part of the gitignored local suite, and these rules have to survive into the
 repository -- a move that inverts a dependency is exactly the kind of mistake a

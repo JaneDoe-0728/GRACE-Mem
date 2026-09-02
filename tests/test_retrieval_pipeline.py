@@ -1,7 +1,7 @@
 """Characterization tests for the retrieval pipeline.
 
 `assemble_context_from_query` is 780 lines at 0% coverage, and it is about to
-be taken apart (docs/retriever-refactor.md). These tests exist to make that
+be taken apart. These tests exist to make that
 safe: they drive the real method through `retrieval_fakes`, snapshot what it
 produces, and fail if a refactor changes it.
 

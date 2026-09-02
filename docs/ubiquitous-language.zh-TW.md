@@ -6,12 +6,10 @@ aliases to avoid。規格書、PRD、commit message、CLI flag 與程式識別�
 
 > 專有名詞、型別名、檔案路徑一律保留英文原文，不翻譯。
 > 英文版為主文件：[ubiquitous-language.md](ubiquitous-language.md)。兩份內容需同步更新。
-> 程式碼放在哪裡：[package-structure.md](package-structure.md)。
 
 **收錄邊界。** 本文件只收 *domain* 詞彙。架構性用語 —— `domain`、`adapters`、
-`runtime`、`bootstrap`、作為檔名的 `pipeline` —— 定義在
-[package-structure.md](package-structure.md)，刻意不放進來；那些字說明不了
-GRACE-Mem 是什麼。一個字要進入下方表格，必須帶有 GRACE-Mem 專屬的語意：
+`runtime`、`bootstrap`、作為檔名的 `pipeline` —— 講的是程式碼放在哪裡，
+刻意不放進來；那些字說明不了 GRACE-Mem 是什麼。一個字要進入下方表格，必須帶有 GRACE-Mem 專屬的語意：
 **Step** 合格，因為它的存在就是為了與 **Stage** 對比；**Adapter** 不合格。
 
 涵蓋範圍：`grace_mem/`（記憶系統）、`experiment/`（benchmark harness）、
@@ -281,9 +279,8 @@ Scanner 有回報、經查證後刻意不列入詞彙表的項目：
 ## 更名待辦
 
 以下全部以 commit 的形式落在同一個 branch `refactor/terminology` 上，依風險排序。
-這個 branch 相對於 package 搬移的位置見
-[package-structure.md](package-structure.md) 的 migration plan —— 它排在搬移
-**之前**，這樣就不會有東西被更名到一個它即將離開的目錄裡。
+這個 branch 排在 package 搬移**之前**，這樣就不會有東西被更名到一個它即將離開的
+目錄裡。
 
 | 順序 | Commit | 解決 | 風險 |
 | --- | --- | --- | --- |
