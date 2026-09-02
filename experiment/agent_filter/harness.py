@@ -73,9 +73,14 @@ def refine_context(
     back to the original context.
     The corpus may be prebuilt externally (e.g. a LoCoMo chunk-level corpus); when
     it is not supplied it is loaded from csv_path."""
-    config = AgentFilterConfig.from_params(params)
-    trace: dict = {"enabled": True, "mode": config.mode, "commands": [], "fallback": None}
+    trace: dict = {"enabled": True, "mode": None, "commands": [], "fallback": None}
     try:
+        # Inside the try, not before it: from_params does every coercion (int/float
+        # on the vector knobs, flag()) and raises the INERT_PARAMS FutureWarning, so
+        # one malformed param -- or a legacy key under -W error -- used to escape
+        # this function and abort the QA run instead of falling back.
+        config = AgentFilterConfig.from_params(params)
+        trace["mode"] = config.mode
         prep = _prepare(
             question=question, context=context, csv_path=csv_path, category=category,
             corpus=corpus, artifact_dir=artifact_dir, config=config, trace=trace,

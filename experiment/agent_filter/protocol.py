@@ -228,11 +228,21 @@ def parse_command(reply: str) -> Command | None:
 
 
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?;])\s+|\n+")
-_QUOTED_RE = re.compile(r"[\"'`]([^\"'`]{2,})[\"'`]")
+# A quoted span. The delimiters must not sit inside a word: `'` doubles as an
+# apostrophe, and an unguarded pair rule turns "Let's ... the hamster's name" into
+# one "quoted" pattern spanning two contractions.
+_QUOTED_RE = re.compile(r"""(?<!\w)(["'`])((?:(?!\1).){2,})\1(?!\w)""")
 _CMD_WORD_RE = re.compile(r"\b(GREP|READ|VECTOR|FINAL)\b", re.IGNORECASE)
 # A sid as it appears in prose -- session:message[:u|a] -- rather than the
 # bracketed [sid=...] form SID_RE matches in rendered candidate blocks.
-_BARE_SID_RE = re.compile(r"\b[\w\-]+:\d+(?::[ua])?\b")
+# Deliberately narrower than `\w+:\d+`, which also matches clock times, scores and
+# version numbers -- "READ the turn at 10:30" became a real READ of sid "10:30".
+# A sid qualifies on either half of the convention: a session part that is not
+# purely numeric (`answer_abc:6`, `0__2:0` -- the underscore counts), or an
+# explicit :u/:a role suffix.
+_BARE_SID_RE = re.compile(
+    r"\b(?:[\w\-]*[^\W\d][\w\-]*:\d+(?::[ua])?|[\w\-]+:\d+:[ua])\b"
+)
 
 
 def parse_narrated_command(reasoning: str) -> Command | None:
@@ -266,12 +276,13 @@ def parse_narrated_command(reasoning: str) -> Command | None:
     after = reasoning[match.end():]
 
     if kind in ("READ", "FINAL"):
-        sids = (
-            SID_RE.findall(after)
-            or _BARE_SID_RE.findall(after)
-            or SID_RE.findall(reasoning)
-            or _BARE_SID_RE.findall(reasoning)
-        )
+        # Only what follows the command word. Scanning the whole reasoning for sids
+        # meant "I will GREP marathon first, then FINAL" closed the search on turn
+        # one, off the candidate sids quoted earlier in the same paragraph: zero
+        # tool calls, zero verified sids, recorded as a clean success. A model that
+        # means to finish lists the sids after saying FINAL; one that is still
+        # planning does not, and that is a parse failure, which is what it is.
+        sids = SID_RE.findall(after) or _BARE_SID_RE.findall(after)
         if not sids:
             return None
         return Command("READ", f"{sids[0]} 2") if kind == "READ" else Command("FINAL", " ".join(sids))
@@ -281,7 +292,8 @@ def parse_narrated_command(reasoning: str) -> Command | None:
     # "Need to grep for X. Use regex \"X\"" names the pattern only on the second
     # sentence.
     quoted = _QUOTED_RE.search(after) or _QUOTED_RE.search(reasoning)
-    return Command(kind, quoted.group(1)) if quoted else None
+    # group(1) is the delimiter, group(2) the span it encloses.
+    return Command(kind, quoted.group(2)) if quoted else None
 
 
 def parse_response(resp) -> ParsedResponse:

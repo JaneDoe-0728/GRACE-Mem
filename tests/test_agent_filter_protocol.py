@@ -155,3 +155,59 @@ def test_a_well_formed_reply_never_reaches_the_narration_fallback() -> None:
 
     assert parsed.command == Command("GREP", "marathon")
     assert parsed.source == "content"
+
+
+def test_an_apostrophe_is_not_a_quote_delimiter() -> None:
+    """Contractions used to be read as a quoted pattern.
+
+    `"Let's ... the hamster's name"` opens on one apostrophe and closes on the
+    other, which produced a real GREP for the text between two unrelated words --
+    a wasted call from the budget and a nonsense line in the conversation history.
+    """
+    resp = response(content="", reasoning="Let's use GREP to find the hamster's name.")
+
+    assert parse_response(resp).command is None
+
+
+def test_a_clock_time_is_not_a_sid() -> None:
+    """`word:digits` also describes times, scores and versions.
+
+    "READ the turn at 10:30" reached corpus.read_window("10:30"), which cannot
+    resolve and spends a call to say so.
+    """
+    resp = response(content="", reasoning="We should READ the turn at 10:30 to see.")
+
+    assert parse_response(resp).command is None
+
+
+def test_sids_without_a_role_suffix_are_still_recognized() -> None:
+    """The guard above must not cost the suffix-less pair sid that corpus.resolve
+    supports -- a LoCoMo-shaped `0__2:0` is a sid, `10:30` is not."""
+    resp = response(content="", reasoning="Use READ on 0__2:0 next.")
+
+    assert parse_response(resp).command == Command("READ", "0__2:0 2")
+
+
+def test_planning_to_finish_is_not_finishing() -> None:
+    """A narrated FINAL is read only from what follows the word FINAL.
+
+    Scanning the whole reasoning meant the sids quoted while listing candidates
+    were harvested by a FINAL the model had only announced, closing the search on
+    turn one with zero tool calls and zero verified sids -- and reporting it as a
+    clean success.
+    """
+    resp = response(
+        content="",
+        reasoning=(
+            "Candidates are [sid=s1:1:u] and [sid=s1:2:u]. "
+            "I will GREP marathon first, then FINAL."
+        ),
+    )
+
+    assert parse_response(resp).command is None
+
+
+def test_a_narrated_final_that_names_its_sids_still_closes() -> None:
+    resp = response(content="", reasoning="Both turns confirm it. FINAL s1:1:u s1:2:u")
+
+    assert parse_response(resp).command == Command("FINAL", "s1:1:u s1:2:u")

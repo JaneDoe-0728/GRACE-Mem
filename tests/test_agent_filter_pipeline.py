@@ -257,3 +257,40 @@ def test_a_prebuilt_corpus_needs_neither_a_csv_nor_a_category() -> None:
     assert trace["is_abstention"] is False
     assert trace["final_sids"] == ["s1:1:u"]
     assert "Congratulations on the marathon" in refined
+
+
+# ── The fallback contract covers reading the params, too ─────────────────────
+
+def test_a_malformed_param_falls_back_instead_of_aborting_the_run() -> None:
+    """"Any failure falls back to the original context" has to include parsing
+    the params.
+
+    from_params does every coercion -- int() on the vector top-N, float() on the
+    minimum score, flag() on the switches. It used to run before the try, so one
+    bad value propagated out of refine_context; neither the LongMem runner nor
+    rerun guards the call, so a QA run aborted where it should have degraded.
+    """
+    refined, trace = refine(["FINAL s1:1:u"], params={"grep_agent_vector_topn": "not-a-number"})
+
+    assert trace["fallback"] == "exception"
+    assert refined == CONTEXT
+
+
+def test_a_retired_param_under_error_warnings_falls_back_too() -> None:
+    """The same guarantee for the FutureWarning that a legacy key raises: under
+    -W error it is an exception like any other, and it is raised while reading the
+    params."""
+    import warnings
+
+    from experiment.agent_filter import config as config_module
+
+    config_module._warned.discard("grep_agent_require_verified_additions")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        refined, trace = refine(
+            ["FINAL s1:1:u"],
+            params={"grep_agent_require_verified_additions": 1},
+        )
+
+    assert trace["fallback"] == "exception"
+    assert refined == CONTEXT
