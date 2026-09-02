@@ -266,12 +266,20 @@ class LongMemRerun:
             correctness = ""
             if run_judge and gold:
                 token_tracker.set_context(dataset=dataset_name, stage="judge", log_dir=log_dir)
+                # Same two arguments the runner's own judge call passes
+                # (runner.py `_judge_one` call site): the `_abs` filename tag picks
+                # the abstention rubric, the category folder picks the
+                # LongMemEval-specific prompt. Without them a re-judge grades on a
+                # different rubric than the run it is re-judging, and the numbers
+                # stop being comparable.
                 correctness = str(
                     self.judge_stage.judge_single(
                         self.llm,
                         question=question,
                         gold=gold,
                         generated=answer,
+                        category=data_folder.name if data_folder else None,
+                        is_abstention=dataset_name.endswith("_abs"),
                     )
                 )
 

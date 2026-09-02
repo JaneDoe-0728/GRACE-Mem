@@ -1158,7 +1158,7 @@ class DatasetRunner:
         gen: str,
         *,
         category: str | None = None,
-        is_abstention: bool = False,
+        is_abstention: bool | None = None,
     ) -> int:
         """Judge one answer and return its binary verdict."""
         return self.judge_stage.judge_single(

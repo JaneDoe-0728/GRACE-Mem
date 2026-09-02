@@ -146,7 +146,7 @@ def _missing_entry() -> dict[str, object]:
 def _run_locomo(args: argparse.Namespace) -> None:
     """Aggregate a standard LoCoMo run into its summary JSON and merged CSV."""
     if not args.root:
-        raise SystemExit("--root is required when --dataset=locomo")
+        raise SystemExit("--root is required")
 
     root = Path(args.root)
     if not root.exists():
@@ -276,7 +276,6 @@ def _aggregate_locomo_run(run_root: Path, *, include_adversarial: bool) -> Aggre
     cmd = [
         sys.executable,
         str(_AGGREGATE_SCRIPT),
-        "--dataset", "locomo",
         "--root", str(run_root),
         "--output-json", str(output_json),
         "--merged-csv", str(merged_csv),

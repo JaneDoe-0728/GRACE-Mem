@@ -37,7 +37,7 @@ class JudgeStage:
         gold: str,
         generated: str,
         category: str | None = None,
-        is_abstention: bool = False,
+        is_abstention: bool | None = None,
     ) -> int:
         return JudgeEngine(llm, "longmem").judge(
             question=question,
@@ -114,7 +114,7 @@ def judge_single(
     gold: str,
     generated: str,
     category: str | None = None,
-    is_abstention: bool = False,
+    is_abstention: bool | None = None,
 ) -> int:
     return JudgeStage().judge_single(
         llm,

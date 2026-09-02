@@ -518,8 +518,12 @@ def process_csv(
 
         correctness = ""
         if not no_judge and judge and llm and gold:
+            # Category and the `_abs` tag select the judge rubric; a replay that
+            # omits them is not comparable with the run it replays.
             correctness = str(judge.judge_single(
-                llm, question=question, gold=gold, generated=answer
+                llm, question=question, gold=gold, generated=answer,
+                category=csv_path.parent.name,
+                is_abstention=name.endswith("_abs"),
             ))
 
         rows.append({

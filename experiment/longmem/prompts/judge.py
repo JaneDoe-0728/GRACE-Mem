@@ -39,7 +39,7 @@ _ABS_GOLD_MARKERS = (
 )
 
 
-def _is_abstention_gold(gold: str | None) -> bool:
+def is_abstention_gold(gold: str | None) -> bool:
     """Whether the gold is an abstention (the information asked for was never
     mentioned)."""
     if not gold:
@@ -92,7 +92,7 @@ def build_messages(
     on abstention questions alone -- the prompt for every other question is
     untouched.
     """
-    abstention = is_abstention if is_abstention is not None else _is_abstention_gold(gold)
+    abstention = is_abstention if is_abstention is not None else is_abstention_gold(gold)
     if abstention:
         return [{"role": "user", "content": ABS_JUDGE_PROMPT.format(
             question=question, gold=gold, generated=generated)}]

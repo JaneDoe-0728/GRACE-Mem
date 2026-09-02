@@ -34,7 +34,7 @@ import pandas as pd
 from requests.exceptions import HTTPError, RequestException
 
 from experiment.locomo.helpers.llm import build_judge_standard_messages
-from experiment.longmem.prompts import build_judge_messages
+from experiment.longmem.prompts import build_judge_messages, is_abstention_gold
 from grace_mem.adapters.llm import LLMClient
 
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -274,6 +274,19 @@ class JudgeEngine:
             )
         raise ValueError(f"Unsupported benchmark: {self.benchmark}")
 
+    def _resolve_abstention(self, gold: str, is_abstention: bool | None) -> bool:
+        """Settle the abstention flag the way ``build_messages`` documents it.
+
+        The caller's explicit flag wins (it comes from the dataset's ``_abs``
+        filename tag, which is authoritative); ``None`` means "you decide", and the
+        gold text is the only signal left. Resolving here rather than only inside
+        the prompt builder keeps the one-vote rule below in step with the rubric
+        actually used -- an abstention must not be re-judged at three temperatures.
+        """
+        if is_abstention is not None:
+            return is_abstention
+        return self.benchmark == "longmem" and is_abstention_gold(gold)
+
     def _parse(self, text: str) -> int:
         if self.benchmark == "longmem":
             return parse_longmem_verdict(text)
@@ -311,7 +324,7 @@ class JudgeEngine:
         gold: str,
         generated: str,
         category: str | None = None,
-        is_abstention: bool = False,
+        is_abstention: bool | None = None,
         votes: int = 1,
     ) -> int:
         """Judge one answer, taking a majority vote when several votes are requested.
@@ -323,6 +336,7 @@ class JudgeEngine:
         """
         if votes < 1:
             raise ValueError("votes must be at least 1")
+        is_abstention = self._resolve_abstention(gold, is_abstention)
         messages = self._messages(
             question=question,
             gold=gold,
@@ -345,11 +359,12 @@ class JudgeEngine:
         gold: str,
         generated: str,
         category: str | None = None,
-        is_abstention: bool = False,
+        is_abstention: bool | None = None,
         votes: int = 3,
         first_verdict: int | None = None,
     ) -> tuple[int, int]:
         """Return ``(first_vote, final_vote)`` using the published carry rule."""
+        is_abstention = self._resolve_abstention(gold, is_abstention)
         first = first_verdict
         if first not in (0, 1):
             first = self.judge(
