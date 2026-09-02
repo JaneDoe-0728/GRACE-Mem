@@ -319,3 +319,87 @@ def test_graph_verification_uses_stable_entity_ids_not_manager_lookup_keys() -> 
     graph.check_entity_ids.assert_called_once_with(["person_user"])
     assert result["graph_sync_ok"] is True
     assert result["graph_sync_missing_entity_count"] == 0
+
+
+def test_the_token_log_is_written_at_the_repository_root() -> None:
+    """The one path anchor the resolve_project_root sweep missed.
+
+    `parents[2]` was the repo root while this lived at KG/llm/client.py and became
+    the grace_mem package directory in the move, so every run's aggregate token
+    accounting silently relocated to grace_mem/logs/token_usage.jsonl -- and
+    importing the adapter created a stray logs/ dir inside the package.
+    """
+    from grace_mem.adapters.llm.token_tracking import _TOKEN_LOG_PATH
+
+    root = resolve_project_root()
+
+    assert _TOKEN_LOG_PATH == root / "logs" / "token_usage.jsonl"
+    assert _TOKEN_LOG_PATH.parent.parent == root
+    assert "grace_mem" not in _TOKEN_LOG_PATH.parts
+
+
+def test_a_transient_relationship_failure_is_retried_rather_than_failing_the_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Since 04cba26 a relationship failure costs the caller its whole turn.
+
+    _require_successful_ingest turns it into an IngestionFailedError, which ends a
+    LongMem dataset or a LoCoMo sample, so three back-to-back attempts inside the
+    same few milliseconds -- all landing on the same rate limit or the same dropped
+    connection -- were not buying what they looked like they were buying.
+    """
+    from grace_mem.ingestion.extractors import relationship_extractor as module
+
+    monkeypatch.setattr(module, "_RETRY_BACKOFF_SEC", 0.0)
+    calls = {"n": 0}
+
+    class FlakyLLM:
+        def generate_llm_extract(self, prompt: str):
+            calls["n"] += 1
+            if calls["n"] <= 3:
+                raise ConnectionError("connection reset by peer")
+            return ("", 0.1)
+
+    extractor = module.RelationshipExtractor(
+        llm=FlakyLLM(),
+        lock=threading.Lock(),
+        cfg=SimpleNamespace(
+            llm_tuple_delim="<|>", llm_record_delim="##", llm_completion_delim="<|COMPLETE|>"
+        ),
+    )
+
+    success, result = extractor.extract({"tuple_delimiter": "<|>"}, "{entities_text}", [], "RID")
+
+    assert success, f"gave up after {calls['n']} attempts: {result}"
+    assert calls["n"] == 4
+
+
+def test_an_over_long_prompt_fails_without_spending_the_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The retry budget is for the transport. A context-length error is
+    deterministic -- the same prompt is resent unchanged -- so waiting on it only
+    spends the backoff to reach the same answer."""
+    from grace_mem.ingestion.extractors import relationship_extractor as module
+
+    monkeypatch.setattr(module, "_RETRY_BACKOFF_SEC", 30.0)
+    calls = {"n": 0}
+
+    class OverContextLLM:
+        def generate_llm_extract(self, prompt: str):
+            calls["n"] += 1
+            raise ValueError("This model's maximum context length is 8192 tokens")
+
+    extractor = module.RelationshipExtractor(
+        llm=OverContextLLM(),
+        lock=threading.Lock(),
+        cfg=SimpleNamespace(
+            llm_tuple_delim="<|>", llm_record_delim="##", llm_completion_delim="<|COMPLETE|>"
+        ),
+    )
+
+    success, result = extractor.extract({"tuple_delimiter": "<|>"}, "{entities_text}", [], "RID")
+
+    assert not success
+    assert calls["n"] == 1
+    assert "maximum context length" in str(result)

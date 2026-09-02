@@ -7,7 +7,12 @@ import threading
 import time
 from pathlib import Path
 
-_TOKEN_LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "token_usage.jsonl"
+from grace_mem.runtime.paths import resolve_project_root
+
+# Anchored on the checkout root, not on this file's depth: `parents[2]` was the
+# repo root while this lived at KG/llm/client.py and became the package dir in
+# the move, which silently relocated every run's token log into grace_mem/logs/.
+_TOKEN_LOG_PATH = resolve_project_root() / "logs" / "token_usage.jsonl"
 
 _METHOD_LABELS = {
     "chat": "qa_answer",

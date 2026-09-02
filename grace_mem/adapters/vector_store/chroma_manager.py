@@ -323,8 +323,17 @@ class VDBManager:
 
     def reset_all(self, delete_files: bool = True) -> None:
         """Reset every VDB and the cache, optionally deleting the files as well."""
-        # Close clients before deleting files on disk.
-        self.close()
+        # Close clients before deleting files on disk. A close failure is logged and
+        # swallowed rather than raised: close() re-raises the first vdb error (and any
+        # stale _persist_error), and letting that escape here would skip the rmtree and
+        # the CacheStore.clear below -- leaving refresh_system with every stale artifact
+        # on disk, and the LoCoMo sample hook running the next sample against the
+        # previous one's entity cache. Resetting is the point; a dead client is not a
+        # reason to abandon it.
+        try:
+            self.close()
+        except Exception as exc:
+            logger.warning("reset_all: continuing past close() failure: %s", exc)
 
         # Delete files on disk (now safe - no open SQLite connections).
         if delete_files:
