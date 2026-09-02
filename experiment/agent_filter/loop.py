@@ -22,10 +22,21 @@ from experiment.agent_filter.corpus import Corpus
 from experiment.agent_filter.models import SID_RE, Command
 from experiment.agent_filter.protocol import extract_final_sids, parse_response
 
+# Written at the failure this model actually makes. gpt-oss-20b ends its turn
+# after the analysis channel, describing the command it wants to run instead of
+# emitting it, so the hint has to forbid the description rather than just restate
+# the grammar -- and carry a worked example, because a model that just narrated a
+# plan reproduces a shape more reliably than it follows a rule.
 _PARSE_FAIL_HINT = (
-    "Could not parse a command. Reply with exactly one command as the "
-    "last line: GREP <regex> | READ <sid> [k] | FINAL <sid> ..."
+    "Your reply did not contain a runnable command. Do NOT explain or "
+    "describe what you want to do — output ONLY one command line, "
+    "nothing else. It must be exactly one of:\n"
+    "GREP <regex>\nREAD <sid> [k]\nVECTOR <query>\nFINAL <sid> [sid ...]\n"
+    "For example, to search for a hamster's name, reply exactly:\nGREP hamster"
 )
+#: Consecutive unparseable replies before the loop gives up on the agent.
+_MAX_PARSE_FAILURES = 3
+
 _REPEAT_HINT = (
     "You already ran that exact command. Try DIFFERENT keywords, "
     "or reply FINAL <sid> ... with your current best selection."
@@ -174,7 +185,11 @@ class AgentSession:
             if cmd is None:
                 parse_failures += 1
                 self._record("PARSE_FAIL", parsed, started, arg=parsed.raw_reply[:200])
-                if parse_failures >= 2:
+                # Three, not two. A reasoning model narrating its intent instead
+                # of emitting the command accounted for 103 of 132 fallbacks on
+                # 20b; two attempts gives it one corrective hint, which is not
+                # enough to recover from a habit.
+                if parse_failures >= _MAX_PARSE_FAILURES:
                     return None
                 self.tell(_PARSE_FAIL_HINT)
                 continue
