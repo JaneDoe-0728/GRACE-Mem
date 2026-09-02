@@ -17,6 +17,8 @@ from typing import Any
 
 from rank_bm25 import BM25Okapi
 
+from grace_mem.runtime.atomic_write import atomic_write
+
 
 class EntitiesBM25:
     """Parallel BM25 indexes over entity names and descriptions.
@@ -102,8 +104,12 @@ class EntitiesBM25:
         The fitted BM25Okapi objects are deliberately not persisted -- they are
         derived state, and `load` reconstructs them via `build`. Storing only
         the inputs keeps the file readable by a different rank_bm25 version.
+
+        Written through a temp file: a run killed mid-pickle would otherwise
+        leave an index that `load` cannot unpickle at all, losing the whole
+        sparse half of hybrid search for that artifact directory.
         """
-        with self._lock, open(path, "wb") as f:
+        with self._lock, atomic_write(path, "wb") as f:
             pickle.dump({
                 "docs_name": self._docs_name,
                 "docs_desc": self._docs_desc,

@@ -23,6 +23,8 @@ from typing import Any
 
 import pandas as pd
 
+from experiment.common.run_metadata import to_jsonable
+
 
 def ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
@@ -41,10 +43,20 @@ def read_json_file(path: Path, *, default: Any = None) -> Any:
 
 
 def write_json_file(path: Path, data: Any, *, ensure_parent: bool = True, indent: int = 2) -> None:
+    """Write `data` as JSON, coercing anything json cannot encode.
+
+    Total by construction, for the same reason run metadata is: these files are
+    written *after* the work they describe. A LongMem run once ingested 50
+    sessions, answered its question and was judged correct, then died on the
+    final summary write because a payload in it held a domain object -- and the
+    watchdog, which reads completion markers rather than exit codes, reported
+    success. A summary that renders an object as its repr is worth more than a
+    run that ends in a TypeError.
+    """
     if ensure_parent:
         ensure_dir(path.parent)
     path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=indent),
+        json.dumps(data, ensure_ascii=False, indent=indent, default=to_jsonable),
         encoding="utf-8",
     )
 

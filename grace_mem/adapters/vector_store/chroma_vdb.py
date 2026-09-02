@@ -21,7 +21,6 @@ returns quietly wrong rankings.
 
 import datetime
 import json
-import os
 import threading
 import uuid
 from collections.abc import Mapping
@@ -31,6 +30,7 @@ import chromadb
 import numpy as np
 
 from grace_mem.adapters.embedding.embeddings import embedder
+from grace_mem.runtime.atomic_write import atomic_write
 from grace_mem.runtime.logger_config import make_module_jlog
 
 _debug_jlog = make_module_jlog(
@@ -489,8 +489,8 @@ class SimpleChromaVDB:
         dataframe.
 
         Written to a temp file and moved into place, so a reader never observes
-        a half-written export. `os.replace` is atomic within a filesystem,
-        which is why the temp file sits beside the target rather than in /tmp.
+        a half-written export, and flushed to disk before the move so a crash
+        cannot promote a file the kernel had not finished writing.
 
         Records whose metadata lacks an `id` get the collection's id, so the
         export is self-contained and joinable.
@@ -498,25 +498,19 @@ class SimpleChromaVDB:
         Returns:
             Rows written.
         """
-        out_dir = os.path.dirname(output_path)
-        if out_dir:
-            os.makedirs(out_dir, exist_ok=True)
-        tmp_path = output_path + ".tmp"
-
         with self._lock:
             results = self._collection.get(include=["metadatas"])
 
         ids = results.get("ids") or []
         metas = results.get("metadatas") or []
 
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        with atomic_write(output_path, "w", encoding="utf-8") as f:
             for mid, meta in zip(ids, metas):
                 meta = _deserialize_metadata(meta) if meta is not None else {}
                 if "id" not in meta:
                     meta["id"] = mid
                 f.write(json.dumps(meta, ensure_ascii=False) + "\n")
 
-        os.replace(tmp_path, output_path)
         return len(ids)
 
 

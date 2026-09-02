@@ -969,7 +969,13 @@ class DatasetRunner:
 
             return {
                 "dataset": config.name,
-                "ingest_results": ingest_results,
+                # Counts, not the raw per-turn payloads: those carry Entity and
+                # Relationship objects, and this dict is written to the run
+                # summary as JSON. Nothing downstream reads the payloads.
+                "ingest_results": {
+                    session_id: len(turns) if isinstance(turns, list) else turns
+                    for session_id, turns in ingest_results.items()
+                },
                 "output_path": str(output_path),
                 "num_questions": len(result_df),
                 "artifacts_dir": str(self.current_mgr.ART),

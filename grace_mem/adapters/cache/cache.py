@@ -21,6 +21,8 @@ import pickle
 from pathlib import Path
 from typing import Any
 
+from grace_mem.runtime.atomic_write import atomic_write
+
 logger = logging.getLogger(__name__)
 
 # Deprecated process-wide fallback for the legacy no-argument path; pass an
@@ -110,9 +112,14 @@ class CacheStore:
         entity_cache_file, relationship_cache_file = _resolve_cache_files(cache_dir)
 
         def _dump(p: Path, obj: dict[str, dict]) -> None:
-            """Write one cache shard to disk."""
+            """Write one cache shard to disk, atomically.
+
+            `load` treats an unreadable shard as a cold start, so a truncated
+            pickle costs a full re-extraction rather than raising -- expensive
+            and silent, which is the worst combination.
+            """
             try:
-                with open(p, "wb") as f:
+                with atomic_write(p, "wb") as f:
                     pickle.dump(obj, f)
             except Exception as e:
                 logger.error("Cache dump failed: %s -> %s", p, e)
