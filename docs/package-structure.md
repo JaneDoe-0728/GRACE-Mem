@@ -56,13 +56,14 @@ grace_mem/
 ├── ingestion/                  Turns -> Graph + VDB + Cache
 │   ├── pipeline.py             the ingestion pipeline, end to end
 │   ├── parsing.py              LLM reply -> ExtractionResult
+│   ├── temporal_repair.py
 │   ├── prompts/
 │   │   ├── config.py           EXTRA_KWARGS: delimiters + entity_types
 │   │   ├── extraction/         two_step.py
 │   │   └── entity_ops/         rules.py, examples.py
+│   ├── extractors/             entity_extractor.py, relationship_extractor.py
 │   ├── steps/
 │   │   ├── compress.py
-│   │   ├── extract.py          EntityExtractor + RelationshipExtractor
 │   │   └── sync.py
 │   └── managers/
 │       ├── entity_manager.py
@@ -70,23 +71,26 @@ grace_mem/
 │
 ├── retrieval/                  Query -> Evidence
 │   ├── pipeline.py             the retrieval pipeline, end to end
+│   ├── config.py               RetrieverConfig, in four groups
 │   ├── evidence.py             assembling the Evidence block
+│   ├── candidates.py           CandidateSet
+│   ├── keywords.py             + keyword_cache.py
+│   ├── query_rewrite.py        relative-time rewriting
+│   ├── rendering.py            context text and evidence combine
+│   ├── trace.py                + ablation.py: the KG_ABLATION_* registry
 │   ├── reranker.py
-│   ├── evidence_speaker_enricher.py
-│   ├── raw_context_lookup.py
+│   ├── speaker_enricher.py
+│   ├── raw_turn_lookup.py
 │   ├── prompts/
 │   │   ├── adaptive/           multihop.py, rewrite.py
-│   │   ├── keyword/            extraction.py
-│   │   └── hyde_prompting.py
+│   │   └── keyword/            extraction.py
 │   └── steps/
 │       ├── search.py
 │       ├── filtering.py
 │       ├── spreading_activation.py
 │       ├── narrowing.py
-│       ├── pagerank.py
-│       ├── summary_scoring.py
 │       ├── adaptive.py
-│       └── temporal.py
+│       └── temporal_relevance.py
 │
 ├── temporal/                   time expressions -> ResolvedTimeRange
 │   ├── types.py                TimeContext, ResolvedTimeRange, TimeCategory, …
