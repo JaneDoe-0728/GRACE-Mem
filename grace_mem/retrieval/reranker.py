@@ -224,10 +224,12 @@ class APIPointwiseReranker:
         threshold: float | None = None,
         doc_type: DocType = "entity",
     ) -> list[tuple[int, float]]:
-        """Score explicit (query, document) pairs, returning scores in input order.
+        """Score explicit (query, document) pairs, best first, with a threshold.
 
-        Unlike `rerank`, input order is preserved rather than sorted, so callers can
-        zip the scores back onto their own structures.
+        Returns (index, score) pairs ordered by score, not by input position -- it
+        delegates to `rerank`. Both callers in the repo depend on that: they read
+        the result as a ranking and take `passing[:top_k]`. Zip the indices, never
+        the positions.
         """
         if not texts:
             return []
@@ -401,7 +403,9 @@ class LLMPointwiseReranker:
         threshold: float | None = None,
         doc_type: DocType = "entity",
     ) -> list[tuple[int, float]]:
-        """Score explicit (query, document) pairs, returning scores in input order."""
+        """Score explicit (query, document) pairs, best first, with a threshold.
+
+        Ordered by score like the API reranker's, not by input position."""
         if not texts:
             return []
         results = self.rerank(query, texts, doc_type=doc_type)

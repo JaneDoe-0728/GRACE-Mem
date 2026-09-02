@@ -425,21 +425,7 @@ class Retriever:
             request_id=request_id,
         )
 
-        # Extract entity IDs and per-source score dicts for RRF
         ent_ids = list({meta["id"] for hits in ent_hits.values() for meta, _ in hits})
-        entity_emb_scores: dict[str, float] = {
-            meta["id"]: float(score)
-            for meta, score in ent_hits.get("__vector__", [])
-            if meta.get("id")
-        }
-        entity_bm25_scores: dict[str, float] = {}
-        for source, hits in ent_hits.items():
-            if source == "__vector__":
-                continue
-            for meta, score in hits:
-                eid = meta.get("id")
-                if eid and (eid not in entity_bm25_scores or float(score) > entity_bm25_scores[eid]):
-                    entity_bm25_scores[eid] = float(score)
         _jlog(
             "entity_hit_ids_collected",
             request_id,
@@ -655,19 +641,7 @@ class Retriever:
             request_id=request_id,
         )
 
-        # Extract relationship IDs and per-source score dicts for RRF
         rel_ids = list({meta["id"] for hits in rel_hits.values() for meta, _ in hits})
-        rel_emb_scores: dict[str, float] = {}
-        rel_endpoint_scores: dict[str, float] = {}
-        for hits in rel_hits.values():
-            for meta, score in hits:
-                rid = meta.get("id")
-                if rid and (rid not in rel_emb_scores or float(score) > rel_emb_scores[rid]):
-                    rel_emb_scores[rid] = float(score)
-                for ep_key in ("source_id", "target_id"):
-                    ep_id = meta.get(ep_key)
-                    if ep_id and (ep_id not in rel_endpoint_scores or float(score) > rel_endpoint_scores[ep_id]):
-                        rel_endpoint_scores[ep_id] = float(score)
         _jlog(
             "relationship_hit_ids_collected",
             request_id,
@@ -720,26 +694,15 @@ class Retriever:
         )
 
 
-        return CandidateSet(
-            node_subgraph=node_subgraph,
-            edge_subgraph=edge_subgraph,
-            entity_emb_scores=entity_emb_scores,
-            entity_bm25_scores=entity_bm25_scores,
-            rel_emb_scores=rel_emb_scores,
-            rel_endpoint_scores=rel_endpoint_scores,
-        )
+        return CandidateSet(node_subgraph=node_subgraph, edge_subgraph=edge_subgraph)
 
     def _filter_candidates(
         self,
         *,
-        candidates: CandidateSet,
         intersect_entity_ids,
         intersect_rel_ids,
-        query_vec,
         filter_ent_topk,
         filter_rel_topk,
-        filter_ent_threshold,
-        filter_rel_threshold,
         request_id: str | None,
         merged_branch: list,
         append_trace,
@@ -748,15 +711,14 @@ class Retriever:
 
         It does no cutting of its own: everything that survives the intersection
         goes forward, sorted so the order the reranker sees does not depend on
-        set iteration. This is the retrieval policy; the stages either side of
-        it are mechanism.
+        set iteration -- which is the whole of its policy. The two topk values are
+        taken only to be logged as requested-and-ignored.
 
-        Takes the CandidateSet rather than its six fields, which is the reason
-        that type exists.
+        The metadata maps are built here rather than in stage 4 because they are
+        also what the trace renders.
 
         Returns:
-            (filtered_entity_ids, filtered_rel_ids, filtered_entities,
-             filtered_rels, ent_id2meta, rel_id2meta)
+            (filtered_entity_ids, filtered_rel_ids, ent_id2meta, rel_id2meta)
         """
         # 3) Filter candidates (step 2.6)
         timer_filter = _StepTimer()
@@ -796,45 +758,13 @@ class Retriever:
             relationship_names=self._relationship_names_from_ids(filtered_rel_ids),
         )
 
-        # Convert IDs to full metadata dicts
+        # Convert IDs to full metadata dicts. Stage 4 renders the entity and
+        # relationship records from these, over the ids the reranker returns --
+        # building them here as well only produced a list that was overwritten
+        # before anything read it.
         ent_id2meta, rel_id2meta = build_id_to_meta_maps(self.cache)
 
-        filtered_entities = []
-        for eid in filtered_entity_ids:
-            meta = ent_id2meta.get(eid, {})
-            if meta:
-                filtered_entities.append({
-                    "id": eid,
-                    "name": meta.get("name"),
-                    "type": meta.get("type"),
-                    "desc": meta.get("description"),
-                })
-
-        filtered_rels = []
-        for rid in filtered_rel_ids:
-            meta = rel_id2meta.get(rid, {})
-            if meta:
-                # Get source and target entity info
-                src_id = meta.get("source_id")
-                tgt_id = meta.get("target_id")
-                src_meta = ent_id2meta.get(src_id, {}) if isinstance(src_id, str) else {}
-                tgt_meta = ent_id2meta.get(tgt_id, {}) if isinstance(tgt_id, str) else {}
-
-                filtered_rels.append({
-                    "rel_id": rid,
-                    "rel_desc": meta.get("description"),
-                    "rel_keywords": meta.get("keywords"),
-                    "source_id": src_id,
-                    "source_name": src_meta.get("name"),
-                    "source_type": src_meta.get("type"),
-                    "target_id": tgt_id,
-                    "target_name": tgt_meta.get("name"),
-                    "target_type": tgt_meta.get("type"),
-                })
-
-
-        return (filtered_entity_ids, filtered_rel_ids, filtered_entities,
-                filtered_rels, ent_id2meta, rel_id2meta)
+        return filtered_entity_ids, filtered_rel_ids, ent_id2meta, rel_id2meta
 
     def assemble_context_from_query(
         self,
@@ -994,19 +924,13 @@ class Retriever:
         (
             filtered_entity_ids,
             filtered_rel_ids,
-            filtered_entities,
-            filtered_rels,
             ent_id2meta,
             rel_id2meta,
         ) = self._filter_candidates(
-            candidates=_candidates,
             intersect_entity_ids=intersect_entity_ids,
             intersect_rel_ids=intersect_rel_ids,
-            query_vec=query_vec,
             filter_ent_topk=filter_ent_topk,
             filter_rel_topk=filter_rel_topk,
-            filter_ent_threshold=filter_ent_threshold,
-            filter_rel_threshold=filter_rel_threshold,
             request_id=request_id,
             merged_branch=merged_branch,
             append_trace=append_trace,
@@ -1020,9 +944,7 @@ class Retriever:
         # -- which they do wholesale on the API reranker's no-logprobs fallback,
         # where every doc is +/-1.0 -- the survivors are decided by input order. A
         # set there makes Retrieved_Context depend on PYTHONHASHSEED.
-        filtered_entity_ids_set: list[str] | None
-        filtered_rel_ids_set: list[str] | None
-        filtered_entity_ids_set, filtered_rel_ids_set = self.evidence_filter.rerank_filter(
+        selected_entity_ids, selected_rel_ids = self.evidence_filter.rerank_filter(
             question=question,
             entity_ids=filtered_entity_ids,
             relationship_ids=filtered_rel_ids,
@@ -1032,57 +954,47 @@ class Retriever:
             request_id=request_id,
         )
 
-        if filtered_entity_ids_set is not None and filtered_rel_ids_set is not None:
-            # Re-convert IDs to metadata dicts after reranker or reranker_only
-            filtered_entities = []
-            for eid in filtered_entity_ids_set:
-                meta = ent_id2meta.get(eid, {})
-                if meta:
-                    filtered_entities.append({
-                        "id": eid,
-                        "name": meta.get("name"),
-                        "type": meta.get("type"),
-                        "desc": meta.get("description"),
-                    })
+        # Render the selection. There is no skip path: rerank_filter always returns
+        # two lists, so the "reranker disabled" branch that used to stand here --
+        # and the reranker_skipped trace state it emitted -- could never be reached.
+        filtered_entities = []
+        for eid in selected_entity_ids:
+            meta = ent_id2meta.get(eid, {})
+            if meta:
+                filtered_entities.append({
+                    "id": eid,
+                    "name": meta.get("name"),
+                    "type": meta.get("type"),
+                    "desc": meta.get("description"),
+                })
 
-            filtered_rels = []
-            for rid in filtered_rel_ids_set:
-                meta = rel_id2meta.get(rid, {})
-                if meta:
-                    src_id = meta.get("source_id")
-                    tgt_id = meta.get("target_id")
-                    src_meta = ent_id2meta.get(src_id, {}) if isinstance(src_id, str) else {}
-                    tgt_meta = ent_id2meta.get(tgt_id, {}) if isinstance(tgt_id, str) else {}
+        filtered_rels = []
+        for rid in selected_rel_ids:
+            meta = rel_id2meta.get(rid, {})
+            if meta:
+                src_id = meta.get("source_id")
+                tgt_id = meta.get("target_id")
+                src_meta = ent_id2meta.get(src_id, {}) if isinstance(src_id, str) else {}
+                tgt_meta = ent_id2meta.get(tgt_id, {}) if isinstance(tgt_id, str) else {}
 
-                    filtered_rels.append({
-                        "rel_id": rid,
-                        "rel_desc": meta.get("description"),
-                        "rel_keywords": meta.get("keywords"),
-                        "source_id": src_id,
-                        "source_name": src_meta.get("name"),
-                        "source_type": src_meta.get("type"),
-                        "target_id": tgt_id,
-                        "target_name": tgt_meta.get("name"),
-                        "target_type": tgt_meta.get("type"),
-                    })
-            append_trace(
-                merged_branch,
-                step="2.7",
-                stage="reranker_final",
-                entity_names=self._entity_names_from_ids(sorted(filtered_entity_ids_set)),
-                relationship_names=self._relationship_names_from_ids(sorted(filtered_rel_ids_set)),
-            )
-        else:
-            append_trace(
-                merged_branch,
-                step="2.7",
-                stage="reranker_final",
-                entity_names=self._entity_names_from_ids(filtered_entity_ids),
-                relationship_names=self._relationship_names_from_ids(filtered_rel_ids),
-                skipped=True,
-                reason="disabled",
-            )
-            _jlog("reranker_skipped", request_id, step="2.7", reason="disabled")
+                filtered_rels.append({
+                    "rel_id": rid,
+                    "rel_desc": meta.get("description"),
+                    "rel_keywords": meta.get("keywords"),
+                    "source_id": src_id,
+                    "source_name": src_meta.get("name"),
+                    "source_type": src_meta.get("type"),
+                    "target_id": tgt_id,
+                    "target_name": tgt_meta.get("name"),
+                    "target_type": tgt_meta.get("type"),
+                })
+        append_trace(
+            merged_branch,
+            step="2.7",
+            stage="reranker_final",
+            entity_names=self._entity_names_from_ids(sorted(selected_entity_ids)),
+            relationship_names=self._relationship_names_from_ids(sorted(selected_rel_ids)),
+        )
 
         # 4b) Temporal containment boost: surface coarse-grained entities whose
         # stored range contains the parsed query date (MONTH/WEEK/SEASON/YEAR).

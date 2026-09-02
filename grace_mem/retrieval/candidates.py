@@ -2,13 +2,13 @@
 
 Hybrid entity search, spreading activation and graph expansion between them
 decide what can be retrieved at all. Their result used to leave the stage as
-six loose local variables threaded into the stages that follow; naming it makes
-the boundary between "finding candidates" and "narrowing them" something the
-type system holds rather than something the reader has to reconstruct.
+loose local variables threaded into the stages that follow; naming it makes the
+boundary between "finding candidates" and "narrowing them" something the type
+system holds rather than something the reader has to reconstruct.
 
-Two subgraphs and four score maps, because the stages downstream need both what
-was found and how well each thing scored -- RRF fuses the four maps, and the
-filter dispatch reads the subgraphs.
+Two subgraphs and nothing else. It also carried four per-source score maps for
+RRF to fuse; RRF was deleted in 20ce40f and the reranker scores the pool itself,
+so the maps were accumulated on every query and read by nobody.
 """
 
 from dataclasses import dataclass, field
@@ -21,20 +21,9 @@ class CandidateSet:
 
     Attributes:
         node_subgraph: entity id -> metadata, for every entity reachable from
-            the search hits. The pool the filters narrow.
+            the search hits. The pool the reranker narrows.
         edge_subgraph: the relationship records joining those entities.
-        entity_emb_scores: entity id -> dense similarity to the query.
-        entity_bm25_scores: entity id -> lexical score. Separate from the dense
-            scores because RRF fuses the two rankings rather than the values,
-            so they must not be averaged before it sees them.
-        rel_emb_scores: relationship id -> dense similarity.
-        rel_endpoint_scores: relationship id -> score inherited from its
-            endpoints, for edges no vector search returned directly.
     """
 
     node_subgraph: dict[str, Any] = field(default_factory=dict)
     edge_subgraph: list[Any] = field(default_factory=list)
-    entity_emb_scores: dict[str, float] = field(default_factory=dict)
-    entity_bm25_scores: dict[str, float] = field(default_factory=dict)
-    rel_emb_scores: dict[str, float] = field(default_factory=dict)
-    rel_endpoint_scores: dict[str, float] = field(default_factory=dict)
