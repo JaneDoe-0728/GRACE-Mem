@@ -227,6 +227,63 @@ def parse_command(reply: str) -> Command | None:
     return _parse_harmony(reply) or _parse_harmony_loose(reply)
 
 
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?;])\s+|\n+")
+_QUOTED_RE = re.compile(r"[\"'`]([^\"'`]{2,})[\"'`]")
+_CMD_WORD_RE = re.compile(r"\b(GREP|READ|VECTOR|FINAL)\b", re.IGNORECASE)
+# A sid as it appears in prose -- session:message[:u|a] -- rather than the
+# bracketed [sid=...] form SID_RE matches in rendered candidate blocks.
+_BARE_SID_RE = re.compile(r"\b[\w\-]+:\d+(?::[ua])?\b")
+
+
+def parse_narrated_command(reasoning: str) -> Command | None:
+    """Recover a command the model described instead of issuing.
+
+    gpt-oss-20b via LM Studio routinely ends its turn after the analysis
+    channel: `content` and `tool_calls` come back empty and only `reasoning`
+    is populated, holding the plan in prose -- "Use READ on s1:6:u.",
+    'Use GREP for "Music and Medicine".'. finish_reason is `stop`, so nothing
+    was truncated; the model simply narrated and stopped. Measured across five
+    runs, every single parse failure had that shape.
+
+    This reads the intent back out, and deliberately only when the model named
+    a command itself. "Search for X" is not treated as a GREP: inferring a tool
+    call from an English verb is a guess about intent, and a wrong GREP costs a
+    call from the budget and misleads the next turn. Of the ten observed
+    failures it recovers the three that named a command and leaves the seven
+    that only narrated as parse failures, which is what they are.
+
+    Applied to the reasoning channel alone, and only after every ordinary
+    surface has failed, so a well-formed reply never reaches it.
+    """
+    if not reasoning:
+        return None
+    matches = list(_CMD_WORD_RE.finditer(reasoning))
+    if not matches:
+        return None
+    # The last mention: the model states its conclusion after reasoning toward it.
+    match = matches[-1]
+    kind = match.group(1).upper()
+    after = reasoning[match.end():]
+
+    if kind in ("READ", "FINAL"):
+        sids = (
+            SID_RE.findall(after)
+            or _BARE_SID_RE.findall(after)
+            or SID_RE.findall(reasoning)
+            or _BARE_SID_RE.findall(reasoning)
+        )
+        if not sids:
+            return None
+        return Command("READ", f"{sids[0]} 2") if kind == "READ" else Command("FINAL", " ".join(sids))
+
+    # GREP / VECTOR need a pattern, and the model quotes what it means to search
+    # for. Prefer a quote after the command word, then anywhere in the text --
+    # "Need to grep for X. Use regex \"X\"" names the pattern only on the second
+    # sentence.
+    quoted = _QUOTED_RE.search(after) or _QUOTED_RE.search(reasoning)
+    return Command(kind, quoted.group(1)) if quoted else None
+
+
 def parse_response(resp) -> ParsedResponse:
     """Read one chat completion for the single command it carries.
 
@@ -242,6 +299,17 @@ def parse_response(resp) -> ParsedResponse:
         if command is not None:
             diagnostics["command_source"] = source
             return ParsedResponse(raw_reply, candidate, command, source, diagnostics)
+
+    # Nothing issued a command. Before giving up, check whether the model
+    # described one in its reasoning -- see parse_narrated_command.
+    for source, candidate in candidates:
+        if source != "reasoning":
+            continue
+        command = parse_narrated_command(candidate)
+        if command is not None:
+            diagnostics["command_source"] = "reasoning_narrated"
+            return ParsedResponse(raw_reply, candidate, command, "reasoning_narrated", diagnostics)
+
     return ParsedResponse(raw_reply, raw_reply, None, None, diagnostics)
 
 

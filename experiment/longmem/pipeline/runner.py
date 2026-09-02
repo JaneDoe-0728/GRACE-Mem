@@ -20,6 +20,7 @@ Shared across datasets:
 
 import gc
 import logging
+import os
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -61,7 +62,7 @@ from experiment.longmem.helpers.progress import (
 from experiment.longmem.helpers.progress import (
     save_progress_row as shared_save_progress_row,
 )
-from experiment.longmem.helpers.rerun_support import cleanup_retrieval_loggers
+from experiment.longmem.helpers.rerun_support import cleanup_retrieval_loggers, resolve_artifact_dir
 from experiment.longmem.models import DatasetConfig
 from experiment.longmem.pipeline import decision
 from experiment.longmem.pipeline.aggregate import update_all_answers_csv
@@ -485,8 +486,35 @@ class DatasetRunner:
             llm=self.llm,
             question_date=question_date,
             log_dir=self.current_log_dir,
-            artifact_dir=getattr(config, "artifacts_dir", None),
+            artifact_dir=self._vector_artifact_dir(config),
         )
+
+    def _vector_artifact_dir(self, config: DatasetConfig) -> Path | None:
+        """Where the Agent Filter's VECTOR tool looks for this question's summaries VDB.
+
+        This used to pass `config.artifacts_dir`, which the watchdog path never
+        sets: the resolved directory is a local in `_setup_dataset_runtime`, so
+        the field stays None and VECTOR was silently off for every run driven by
+        the watchdog -- including ones whose own summaries_chroma sat right
+        beside their answers.
+
+        Three sources, in order of how specific they are to this run:
+          1. an explicitly configured artifacts_dir (retrieval-only reruns),
+          2. LONGMEM_ARTIFACT_ROOT, laid out <root>/<category>/artifacts_<name>,
+             which is where a shared prebuilt set of split summaries lives,
+          3. the artifacts this run just wrote.
+        """
+        if config.artifacts_dir:
+            return Path(config.artifacts_dir)
+
+        root = (os.getenv("LONGMEM_ARTIFACT_ROOT") or "").strip()
+        if root:
+            category = Path(config.csv_path).parent.name
+            resolved = resolve_artifact_dir(Path(root) / category, config.name)
+            if resolved is not None:
+                return resolved
+
+        return Path(self.current_mgr.ART) if self.current_mgr is not None else None
 
 
     def _answer_questions(
