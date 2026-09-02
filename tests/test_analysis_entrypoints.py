@@ -87,3 +87,38 @@ def test_reset_all_finishes_even_when_a_client_refuses_to_close(
     assert not stale.exists(), "the reset stopped at the failing close()"
     assert not manager.cache.get("entities"), "the in-memory cache survived the reset"
     assert any("close()" in record.message for record in caplog.records)
+
+
+def test_recorded_entrypoints_are_module_paths_that_still_import() -> None:
+    """run_metadata.json records how a run was launched, so someone can rerun it.
+
+    Two of the three named modules this PR deleted (`longmem.run_batch`,
+    `longmem.watchdog`); the third was rewritten to `locomo.pipeline.runner`,
+    which is not importable either -- the package root is `experiment`. A
+    provenance field nobody can act on is worse than no field, and nothing reads
+    it programmatically, so the value that earns its place is the one that runs.
+    """
+    import ast
+    import importlib.util
+
+    root = Path(__file__).resolve().parent.parent
+    recorded: dict[str, str] = {}
+    for path in sorted(root.glob("experiment/**/*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Dict):
+                continue
+            for key, value in zip(node.keys, node.values, strict=False):
+                if (
+                    isinstance(key, ast.Constant)
+                    and key.value == "entrypoint"
+                    and isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)
+                ):
+                    recorded[f"{path.relative_to(root)}:{value.lineno}"] = value.value
+
+    assert recorded, "no entrypoint strings found; the metadata field moved"
+    for where, module in sorted(recorded.items()):
+        assert importlib.util.find_spec(module) is not None, (
+            f"{where} records an entrypoint that cannot be imported: {module}"
+        )

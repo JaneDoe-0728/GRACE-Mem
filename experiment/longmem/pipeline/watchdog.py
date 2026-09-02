@@ -99,7 +99,7 @@ def _write_watchdog_metadata(
     write_run_metadata(
         metadata_path,
         {
-            "entrypoint": "longmem.watchdog",
+            "entrypoint": "experiment.longmem.pipeline.watchdog",
             "run_tag": run_tag,
             "run_root": str(output_root.resolve()),
             "mode": "rerun" if rerun_mode else "batch",

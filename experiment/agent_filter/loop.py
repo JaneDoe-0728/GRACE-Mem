@@ -193,6 +193,11 @@ class AgentSession:
                     return None
                 self.tell(_PARSE_FAIL_HINT)
                 continue
+            # Consecutive, as the constant above says. Left cumulative, an agent
+            # that failed to parse on turns 1, 4 and 7 but issued valid commands in
+            # between was abandoned at turn 7 with three calls of its budget unspent
+            # -- the hint had demonstrably worked, twice, and it was cut off anyway.
+            parse_failures = 0
 
             if cmd.kind == "FINAL":
                 if self.emit_hypothesis:

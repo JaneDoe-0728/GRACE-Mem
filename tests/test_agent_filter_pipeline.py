@@ -126,6 +126,26 @@ def test_a_second_unparseable_reply_gets_another_hint_rather_than_giving_up() ->
     assert trace["final_sids"] == ["s1:1:u"]
 
 
+def test_parse_failures_have_to_be_consecutive_to_end_the_loop() -> None:
+    """_MAX_PARSE_FAILURES counts consecutive failures, as its comment says.
+
+    The counter was never reset, so it was cumulative: an agent that failed to
+    parse on turns 1, 4 and 7 but issued valid commands in between was abandoned
+    at turn 7 with the rest of its budget unspent -- even though the corrective
+    hint had demonstrably worked, twice.
+    """
+    _, trace = refine(
+        ["nonsense", "GREP marathon", "more nonsense", "READ s1:1:u 1",
+         "still nonsense", "FINAL s1:1:u"],
+        params={"grep_agent_max_calls": 10},
+    )
+
+    assert [c["cmd"] for c in trace["commands"]] == [
+        "PARSE_FAIL", "GREP", "PARSE_FAIL", "READ", "PARSE_FAIL", "FINAL",
+    ]
+    assert trace["final_sids"] == ["s1:1:u"]
+
+
 def test_a_forced_final_that_still_fails_keeps_the_original_context() -> None:
     refined, trace = refine(["nonsense", "more nonsense", "still nonsense", "no sids here"])
 

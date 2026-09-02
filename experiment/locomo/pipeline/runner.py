@@ -66,7 +66,7 @@ def _write_run_metadata(
     without the configuration that produced them cannot be interpreted later.
     """
     metadata = {
-        "entrypoint": "locomo.pipeline.runner",
+        "entrypoint": "experiment.locomo.pipeline.runner",
         "run_tag": run_root.name,
         "run_root": str(run_root.resolve()),
         "output_root": str(output_root.resolve()),

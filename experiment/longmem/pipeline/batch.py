@@ -95,7 +95,7 @@ def _write_run_metadata(
     write_run_metadata(
         metadata_path,
         {
-            "entrypoint": "longmem.run_batch",
+            "entrypoint": "experiment.longmem.pipeline.batch",
             "run_tag": run_tag,
             "run_root": str(output_root.resolve()),
             "data_root": str(data_root.resolve()),

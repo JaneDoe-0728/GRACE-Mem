@@ -473,9 +473,9 @@ class DatasetRunner:
         """Hand the retrieved context to the grep agent, if it is enabled.
 
         The agent re-reads the corpus and revises the evidence set -- dropping what
-        does not support the question and grepping back what retrieval missed. Off
-        by default, since it costs an extra LLM call per question and is itself
-        under evaluation.
+        does not support the question and grepping back what retrieval missed. On
+        by default (`GREP_AGENT_PARAMS["use_grep_agent"]`), so it runs on every
+        question and its extra LLM call is part of every measured LongMem run.
         """
         from experiment.agent_filter.harness import maybe_refine_context
 
