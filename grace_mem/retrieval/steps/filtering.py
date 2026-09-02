@@ -4,6 +4,7 @@ Context filtering, intersection, and reranking logic.
 import csv
 import os
 import time
+from collections.abc import Collection
 from typing import Any
 
 from grace_mem.adapters.cache.cache import build_id_to_meta_maps
@@ -179,8 +180,8 @@ class EvidenceFilter:
     def rerank_filter(
         self,
         question: str,
-        entity_ids: set[str],
-        relationship_ids: set[str],
+        entity_ids: Collection[str],
+        relationship_ids: Collection[str],
         entity_top_k: int,
         relationship_top_k: int,
         threshold: float,
@@ -190,6 +191,10 @@ class EvidenceFilter:
 
         Returns ordered lists (reranker rank order, deduplicated) rather than
         sets so the final Retrieved_Context ordering is deterministic across runs.
+
+        Takes ordered collections, not sets: `rank_pairs` sorts stably, so ties --
+        every doc on the reranker's no-logprobs fallback -- keep the caller's order,
+        and the top-K cut below is only deterministic if that order is.
         """
         from grace_mem.retrieval.reranker import get_reranker
 

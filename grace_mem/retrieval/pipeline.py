@@ -1015,12 +1015,17 @@ class Retriever:
         # 4) Optional reranker recovery / reranker-only selection
         # The reranker IS the filter: it scores every candidate that survived the
         # intersection and selects the top-K. Stage 3 does no cutting of its own.
+        # It is handed stage 3's sorted lists, not the raw intersection sets: the
+        # top-K cut is `passing[:top_k]` over a stable sort, so whenever scores tie
+        # -- which they do wholesale on the API reranker's no-logprobs fallback,
+        # where every doc is +/-1.0 -- the survivors are decided by input order. A
+        # set there makes Retrieved_Context depend on PYTHONHASHSEED.
         filtered_entity_ids_set: list[str] | None
         filtered_rel_ids_set: list[str] | None
         filtered_entity_ids_set, filtered_rel_ids_set = self.evidence_filter.rerank_filter(
             question=question,
-            entity_ids=intersect_entity_ids,
-            relationship_ids=intersect_rel_ids,
+            entity_ids=filtered_entity_ids,
+            relationship_ids=filtered_rel_ids,
             entity_top_k=self.cfg.rrk_ent_topk,
             relationship_top_k=self.cfg.rrk_rel_topk,
             threshold=self.cfg.rrk_threshold,

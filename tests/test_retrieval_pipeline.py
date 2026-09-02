@@ -204,3 +204,40 @@ def test_agent_filter_closes_vdb_when_switching_question_artifacts(
     assert len(clients) == 2
     vector_search.close_vector_search_vdb()
     assert second.closed is True
+
+
+def test_the_reranker_is_handed_an_ordered_pool() -> None:
+    """The reranker's top-K cut is only deterministic if its input order is.
+
+    `rank_pairs` sorts stably, so equal scores keep the caller's order -- and on
+    the API reranker's no-logprobs fallback every document scores exactly +/-1.0,
+    which makes the whole pool a tie. Handing that stage a set therefore decided
+    the surviving top-K by set iteration order, and nothing pins PYTHONHASHSEED:
+    the same question over the same artifacts could emit a different
+    Retrieved_Context from one process to the next.
+
+    The snapshot cannot see this -- CallLog._stable sorts a set on its way into
+    the log -- so the raw argument is what this checks.
+    """
+    r = _retriever()
+    seen: dict[str, object] = {}
+    inner = r.evidence_filter.rerank_filter
+
+    def spy(*args, **kwargs):
+        seen["entity_ids"] = kwargs["entity_ids"]
+        seen["relationship_ids"] = kwargs["relationship_ids"]
+        return inner(*args, **kwargs)
+
+    r.evidence_filter.rerank_filter = spy
+    r.assemble_context_from_query(
+        question=QUESTION,
+        low_level_keywords=LOW_LEVEL,
+        high_level_keywords=HIGH_LEVEL,
+        request_id="ordered-pool",
+    )
+
+    for key in ("entity_ids", "relationship_ids"):
+        pool = seen[key]
+        assert isinstance(pool, list), f"{key} reached the reranker as {type(pool).__name__}"
+        assert pool == sorted(pool), f"{key} was not in a reproducible order: {pool}"
+        assert pool, f"{key} was empty, so this test proves nothing"
