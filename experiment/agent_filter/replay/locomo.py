@@ -39,6 +39,7 @@ from experiment.agent_filter.corpus import Corpus, Turn
 from experiment.agent_filter.extensions.ledger import append_ledger, compile_table
 from experiment.agent_filter.harness import refine_context
 from experiment.agent_filter.prompting.skills import SKILLS as _SKILLS
+from experiment.experiment_config import INGEST_PARAMS
 
 if TYPE_CHECKING:
     from grace_mem.adapters.llm import LLMClient
@@ -182,7 +183,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source-run", default="locomo-n8-full")
     ap.add_argument("--run-tag", default="locomo-n8-grep")
-    ap.add_argument("--chunk-turns", type=int, default=8)
+    ap.add_argument("--chunk-turns", type=int, default=INGEST_PARAMS["chunk_turns"])
     ap.add_argument("--samples", default="0-9")
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--limit", type=int, default=0, help="max questions per sample")

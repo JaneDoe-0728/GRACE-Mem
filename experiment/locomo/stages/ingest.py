@@ -27,11 +27,13 @@ from experiment.locomo.helpers.dataset import (
 )
 from experiment.locomo.utils.io import load_jsonl_records
 
-# ========= Config: edit here =========
-PREV_K = 2
-ENTITY_SIM_TOPK = 4
-ENTITY_SIM_THRESHOLD = 0.5
-
+# ========= Rendering options, local to this module =========
+# The ingestion parameters are NOT here: prev_k, entity_sim_topk and
+# entity_sim_threshold are read from INGEST_PARAMS at the argument defaults below,
+# the same way locomo/cli.py reads them. A second copy of those values living here
+# only ever went stale -- this module had entity_sim_topk=4 and
+# entity_sim_threshold=0.5 against the configured 3 and 0.6, so running it directly
+# ingested at a different granularity than every orchestrated path.
 DIALOGUE_JOINER = "\n"              # keep each utterance on its own line
 PUT_SPEAKER_PREFIX = True           # keep "Caroline: ..." in text if present
 
@@ -268,9 +270,10 @@ def main() -> None:
     parser.add_argument("--sessions-jsonl", default=None, help="Defaults to the standard LoCoMo session file")
     parser.add_argument("--dataset-json", default=None, help="Fallback source used to derive sessions when JSONL is absent")
     parser.add_argument("--sample-index", type=int, default=3)
-    parser.add_argument("--prev-k", type=int, default=PREV_K)
-    parser.add_argument("--entity-sim-topk", type=int, default=ENTITY_SIM_TOPK)
-    parser.add_argument("--entity-sim-threshold", type=float, default=ENTITY_SIM_THRESHOLD)
+    parser.add_argument("--prev-k", type=int, default=INGEST_PARAMS["prev_k"])
+    parser.add_argument("--entity-sim-topk", type=int, default=INGEST_PARAMS["entity_sim_topk"])
+    parser.add_argument("--entity-sim-threshold", type=float,
+                        default=INGEST_PARAMS["entity_sim_threshold"])
     parser.add_argument("--chunk-turns", type=int, default=CHUNK_TURNS,
                         help="Turns per ingest chunk (0 = whole session as one chunk)")
     parser.add_argument("--no-session-uid", action="store_true")

@@ -28,6 +28,8 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
+from experiment.experiment_config import INGEST_PARAMS
+
 DATA_JSON = _ROOT / "experiment" / "locomo" / "data" / "locomo10.json"
 OUT_ROOT = _ROOT / "experiment" / "locomo" / "output" / "standard"
 
@@ -130,7 +132,7 @@ def retrieved_chunk_sids(row: dict, sample_idx: int,
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", default="locomo-n8-full")
-    ap.add_argument("--chunk-turns", type=int, default=8)
+    ap.add_argument("--chunk-turns", type=int, default=INGEST_PARAMS["chunk_turns"])
     ap.add_argument("--topk", default="8,12,16,24,32")
     ap.add_argument("--neighbor", action="store_true", help="also keep the +/-1 neighbours of a matched turn")
     args = ap.parse_args()

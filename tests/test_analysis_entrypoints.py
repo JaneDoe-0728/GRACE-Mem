@@ -122,3 +122,69 @@ def test_recorded_entrypoints_are_module_paths_that_still_import() -> None:
         assert importlib.util.find_spec(module) is not None, (
             f"{where} records an entrypoint that cannot be imported: {module}"
         )
+
+
+def test_no_cli_hardcodes_an_ingestion_default() -> None:
+    """INGEST_PARAMS is the single source of truth for the ingest knobs.
+
+    A second copy in an entry point is invisible while the orchestrated path passes
+    its values explicitly, and wrong the moment someone runs the module directly:
+    locomo/stages/ingest.py carried entity_sim_topk=4 and entity_sim_threshold=0.5
+    against the configured 3 and 0.6, so `python -m ...stages.ingest` resolved
+    entities at a different similarity than every other path. 39462f0 deleted three
+    such copies and missed this one, so this checks the shape rather than the site.
+
+    A default may name a module constant (CHUNK_TURNS), as long as that constant is
+    itself derived from INGEST_PARAMS.
+    """
+    import ast
+
+    flags = {"--prev-k", "--entity-sim-topk", "--entity-sim-threshold", "--chunk-turns"}
+    root = Path(__file__).resolve().parent.parent
+    offenders: list[str] = []
+
+    def mentions_config(node: ast.AST) -> bool:
+        return any(
+            isinstance(sub, ast.Name) and sub.id.lstrip("_") == "INGEST_PARAMS"
+            for sub in ast.walk(node)
+        )
+
+    for path in sorted(root.glob("experiment/**/*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        # Module-level constants that are themselves read from the config.
+        derived = {
+            target.id
+            for node in tree.body
+            if isinstance(node, ast.Assign) and mentions_config(node.value)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "add_argument"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and node.args[0].value in flags
+            ):
+                continue
+            default = next((kw.value for kw in node.keywords if kw.arg == "default"), None)
+            if default is None:
+                continue
+            # A string default is a mode sentinel, not a value: gold_recall's
+            # "auto" infers the chunk size from the run's own artifacts, which is
+            # stronger than reading the config, since it describes the run being
+            # analysed rather than the one that would be produced today.
+            if isinstance(default, ast.Constant) and isinstance(default.value, str):
+                continue
+            ok = mentions_config(default) or (
+                isinstance(default, ast.Name) and default.id in derived
+            )
+            if not ok:
+                offenders.append(
+                    f"{path.relative_to(root)}:{node.lineno} {node.args[0].value}"
+                    f" = {ast.unparse(default)}"
+                )
+
+    assert not offenders, "ingest defaults not read from INGEST_PARAMS: " + "; ".join(offenders)
