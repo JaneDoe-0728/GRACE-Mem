@@ -54,8 +54,6 @@ from grace_mem.ingestion.temporal_repair import (
     _expected_temporal_marker_entities,
     _repair_temporal_entities,
 )
-from grace_mem.runtime.analysis_log import append_analysis_record
-from grace_mem.runtime.logger_config import _StepTimer, make_module_jlog, setup_logger
 from grace_mem.temporal import (
     TimeContext,
     augment_temporal_text,
@@ -63,6 +61,8 @@ from grace_mem.temporal import (
     format_temporal_hints_for_prompt,
 )
 from grace_mem.temporal.query_time_parser import parse_query_time
+from grace_mem.utils.analysis_log import append_analysis_record
+from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
 
 _jlog = make_module_jlog(name="grace_mem.Ingestor", filename="kg_ingestor.jsonl")
 _TRACE_PRETTY_LOG_DIR = os.environ.get("KG_TRACE_PRETTY_LOG_DIR", "logs")

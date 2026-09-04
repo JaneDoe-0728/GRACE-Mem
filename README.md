@@ -316,7 +316,7 @@ FalkorDB.
 
 `scripts/download_models.py` installs pinned snapshots of
 `Qwen/Qwen3-Embedding-0.6B` and `Qwen/Qwen3-Reranker-0.6B` under `models/`.
-`grace_mem/adapters/embedding/embeddings.py` uses the local embedding path when available and
+`grace_mem/services/embedding/embeddings.py` uses the local embedding path when available and
 otherwise falls back to the Hugging Face model ID.
 
 ### Advanced and experiment-only variables
@@ -359,8 +359,8 @@ GRACE-Mem/
 │   ├── ingestion/              # Turns -> graph, vector store, cache
 │   ├── retrieval/              # Query -> Evidence block
 │   ├── temporal/               # time expressions -> resolved ranges
-│   ├── adapters/               # FalkorDB, Chroma, BM25, OpenAI, the cache
-│   ├── runtime/                # logging, determinism, artifact paths
+│   ├── services/               # FalkorDB, Chroma, BM25, OpenAI, the cache
+│   ├── utils/                # logging, determinism, artifact paths
 │   ├── lexical.py              # BM25 tokenization, shared by both capabilities
 │   └── bootstrap.py            # constructs and wires the components
 ├── experiment/

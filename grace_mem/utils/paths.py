@@ -20,7 +20,7 @@ from pathlib import Path
 
 # Repository-level configuration and downloaded model weights live beside the
 # ``grace_mem`` package in a source checkout.  Keep this calculation here so
-# adapters do not each guess a different number of ``parents``.
+# services do not each guess a different number of ``parents``.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # Default working dir: grace_mem/storage/artifacts. Anchored on the package root

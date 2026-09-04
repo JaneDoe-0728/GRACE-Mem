@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from grace_mem.runtime.logger_config import make_module_jlog
+from grace_mem.utils.logger_config import make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Graph", filename="kg_ingestor.jsonl")
 logger = logging.getLogger(__name__)

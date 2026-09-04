@@ -68,7 +68,7 @@ def test_reset_all_finishes_even_when_a_client_refuses_to_close(
     to it. Letting that escape skipped the rmtree and the cache clear below --
     refresh_system left every stale artifact on disk, and the LoCoMo sample hook
     ran the next sample against the previous sample's entity cache."""
-    from grace_mem.adapters.vector_store.chroma_manager import VDBManager
+    from grace_mem.services.vector_store.chroma_manager import VDBManager
 
     manager = VDBManager(tmp_path)
     stale = manager.ENT_CHROMA_DIR

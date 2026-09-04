@@ -8,7 +8,7 @@ stack.
 
 from typing import Any
 
-from grace_mem.adapters.llm.token_tracking import token_tracker
+from grace_mem.services.llm.token_tracking import token_tracker
 
 __all__ = ["LLMClient", "token_tracker"]
 
@@ -16,7 +16,7 @@ __all__ = ["LLMClient", "token_tracker"]
 def __getattr__(name: str) -> Any:
     """Lazily import the LLM client on first attribute access."""
     if name == "LLMClient":
-        from grace_mem.adapters.llm.client import LLMClient
+        from grace_mem.services.llm.client import LLMClient
 
         return LLMClient
-    raise AttributeError(f"module 'grace_mem.adapters.llm' has no attribute {name!r}")
+    raise AttributeError(f"module 'grace_mem.services.llm' has no attribute {name!r}")

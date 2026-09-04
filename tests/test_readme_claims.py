@@ -179,7 +179,7 @@ def test_env_example_documents_every_section_the_readme_names():
 
 def test_env_vars_the_graph_layer_reads_are_the_ones_the_readme_names():
     """readme: 'graph_from_env(...) requires NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD'."""
-    source = (REPO_ROOT / "grace_mem" / "adapters" / "graph" / "falkordb.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "grace_mem" / "services" / "graph" / "falkordb.py").read_text(encoding="utf-8")
     for key in ("NEO4J_URI", "NEO4J_USERNAME", "NEO4J_PASSWORD", "GRAPH_NAME"):
         assert key in source
 
@@ -259,16 +259,16 @@ DOCUMENTED_PATHS = [
     "grace_mem/retrieval/steps/filtering.py",
     "grace_mem/retrieval/steps/temporal_relevance.py",
     "grace_mem/retrieval/evidence.py",
-    "grace_mem/adapters/graph/falkordb.py",
-    "grace_mem/adapters/llm/client.py",
+    "grace_mem/services/graph/falkordb.py",
+    "grace_mem/services/llm/client.py",
     "grace_mem/ingestion/prompts",
     "grace_mem/ingestion/managers/entity_manager.py",
     "grace_mem/ingestion/managers/relationship_manager.py",
     "grace_mem/domain/provenance.py",
-    "grace_mem/adapters/vector_store/chroma_manager.py",
-    "grace_mem/adapters/vector_store/chroma_vdb.py",
-    "grace_mem/adapters/sparse_index/bm25.py",
-    "grace_mem/adapters/cache/cache.py",
+    "grace_mem/services/vector_store/chroma_manager.py",
+    "grace_mem/services/vector_store/chroma_vdb.py",
+    "grace_mem/services/sparse_index/bm25.py",
+    "grace_mem/services/cache/cache.py",
     "grace_mem/domain/entities.py",
     "grace_mem/domain/relationships.py",
     "grace_mem/domain/extraction.py",
@@ -277,7 +277,7 @@ DOCUMENTED_PATHS = [
     "grace_mem/retrieval/reranker.py",
     "grace_mem/temporal/query_time_parser.py",
     "grace_mem/temporal",
-    "grace_mem/runtime/logger_config.py",
+    "grace_mem/utils/logger_config.py",
     "grace_mem/retrieval/prompts/keyword/extraction.py",
     "grace_mem/ingestion/prompts/extraction/two_step.py",
     "grace_mem/ingestion/prompts/entity_ops/rules.py",
@@ -315,21 +315,21 @@ IMPORTABLE_MODULES = [
     "grace_mem.retrieval.steps.filtering",
     "grace_mem.retrieval.steps.temporal_relevance",
     "grace_mem.retrieval.evidence",
-    "grace_mem.adapters.graph.falkordb",
-    "grace_mem.adapters.llm.client",
+    "grace_mem.services.graph.falkordb",
+    "grace_mem.services.llm.client",
     "grace_mem.ingestion.managers.entity_manager",
     "grace_mem.ingestion.managers.relationship_manager",
     "grace_mem.domain.provenance",
-    "grace_mem.adapters.vector_store.chroma_manager",
-    "grace_mem.adapters.vector_store.chroma_vdb",
-    "grace_mem.adapters.sparse_index.bm25",
-    "grace_mem.adapters.cache.cache",
+    "grace_mem.services.vector_store.chroma_manager",
+    "grace_mem.services.vector_store.chroma_vdb",
+    "grace_mem.services.sparse_index.bm25",
+    "grace_mem.services.cache.cache",
     "grace_mem.domain",
     "grace_mem.ingestion.parsing",
     "grace_mem.lexical",
     "grace_mem.retrieval.reranker",
     "grace_mem.temporal.query_time_parser",
-    "grace_mem.runtime.logger_config",
+    "grace_mem.utils.logger_config",
 ]
 
 
@@ -355,14 +355,14 @@ DOCUMENTED_METHODS = [
      ["normalize_entities", "find_similar_for_hybrid", "apply_ops"]),
     ("grace_mem/ingestion/managers/relationship_manager.py", "RelationshipManager",
      ["upsert_from_extraction"]),
-    ("grace_mem/adapters/vector_store/chroma_manager.py", "VDBManager",
+    ("grace_mem/services/vector_store/chroma_manager.py", "VDBManager",
      ["get_entities_vdb", "get_relationships_vdb", "get_summaries_vdb",
       "get_entities_bm25", "persist_async", "reset_all"]),
-    ("grace_mem/adapters/vector_store/chroma_vdb.py", "SimpleChromaVDB",
+    ("grace_mem/services/vector_store/chroma_vdb.py", "SimpleChromaVDB",
      ["add", "upsert", "search", "delete", "update", "save", "load"]),
-    ("grace_mem/adapters/sparse_index/bm25.py", "EntitiesBM25", ["add", "get_scores"]),
-    ("grace_mem/adapters/cache/cache.py", "CacheStore", ["load", "save", "clear"]),
-    ("grace_mem/adapters/llm/client.py", "LLMClient",
+    ("grace_mem/services/sparse_index/bm25.py", "EntitiesBM25", ["add", "get_scores"]),
+    ("grace_mem/services/cache/cache.py", "CacheStore", ["load", "save", "clear"]),
+    ("grace_mem/services/llm/client.py", "LLMClient",
      ["chat", "generate_llm_extract", "generate_llm_keyword"]),
     ("grace_mem/domain/provenance.py", "Provenance", ["prov_to_events", "merge_prov"]),
     ("grace_mem/retrieval/reranker.py", "LLMPointwiseReranker", ["rank_pairs"]),
@@ -378,11 +378,11 @@ def test_documented_class_methods_exist(rel, cls, methods):
 
 
 DOCUMENTED_FUNCTIONS = [
-    ("grace_mem/adapters/graph/falkordb.py", ["graph_from_env"]),
-    ("grace_mem/adapters/cache/cache.py", ["build_id_to_meta_maps"]),
+    ("grace_mem/services/graph/falkordb.py", ["graph_from_env"]),
+    ("grace_mem/services/cache/cache.py", ["build_id_to_meta_maps"]),
     ("grace_mem/retrieval/reranker.py", ["get_reranker"]),
     ("grace_mem/temporal/query_time_parser.py", ["parse_query_time", "detect_and_parse_time_expressions"]),
-    ("grace_mem/runtime/logger_config.py", ["setup_logger", "make_module_jlog", "_StepTimer"]),
+    ("grace_mem/utils/logger_config.py", ["setup_logger", "make_module_jlog", "_StepTimer"]),
     ("grace_mem/domain/entities.py", ["EntityType", "Entity", "canonical_entity_id"]),
     ("grace_mem/domain/relationships.py", ["Relationship", "canonical_rel_id"]),
     ("grace_mem/domain/extraction.py", ["ExtractionResult", "KeywordExtractionResult"]),
@@ -481,7 +481,7 @@ def test_summary_text_lookup_is_never_called_with_a_full_kwarg():
     """SummariesVDB.get_summary_text_by_id takes only summary_id."""
     import inspect
 
-    from grace_mem.adapters.vector_store.chroma_vdb import SummariesVDB
+    from grace_mem.services.vector_store.chroma_vdb import SummariesVDB
 
     params = inspect.signature(SummariesVDB.get_summary_text_by_id).parameters
     assert list(params) == ["self", "summary_id"]

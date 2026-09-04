@@ -15,7 +15,7 @@ from grace_mem.ingestion.parsing import (
     is_context_length_exceeded_error,
     parse_entities_only,
 )
-from grace_mem.runtime.logger_config import make_module_jlog
+from grace_mem.utils.logger_config import make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Ingestor", filename="kg_ingestor.jsonl")
 

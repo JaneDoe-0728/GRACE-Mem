@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 
 from grace_mem.domain.relationships import canonical_rel_id
-from grace_mem.runtime.logger_config import make_module_jlog
+from grace_mem.utils.logger_config import make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.RelationshipManager", filename="kg_ingestor.jsonl")
 

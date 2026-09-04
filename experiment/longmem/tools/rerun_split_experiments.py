@@ -33,7 +33,7 @@ from experiment.common.evaluation.judge import (
     find_column,
 )
 from experiment.common.paths import REPO_ROOT
-from grace_mem.adapters.llm import LLMClient
+from grace_mem.services.llm import LLMClient
 
 CONFIG_PATH = REPO_ROOT / "experiment" / "experiment_config.py"
 OUTPUT_DIR = REPO_ROOT / "experiment" / "longmem" / "output"

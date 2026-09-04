@@ -14,7 +14,7 @@ that scored well and still lost, which is where a threshold set slightly wrong
 shows up.
 
 Both benchmarks use this identically, which is what makes it common/. The
-append-only writers it hands results to live in `grace_mem.runtime.analysis_log`,
+append-only writers it hands results to live in `grace_mem.utils.analysis_log`,
 because the ingestion pipeline writes those artifacts too.
 """
 
@@ -26,7 +26,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from grace_mem.runtime.analysis_log import (
+from grace_mem.utils.analysis_log import (
     append_analysis_record,
     append_pretty_block,
     timestamp_now,

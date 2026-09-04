@@ -32,9 +32,9 @@ DOMAIN_MODULES = (
 # existed for as long as the rule did.
 INGESTION_PREFIX = "grace_mem.ingestion"
 RETRIEVAL_PREFIX = "grace_mem.retrieval"
-# Adapters wrap an external technology and must not own a decision about
+# Services wrap an external technology and must not own a decision about
 # entities, evidence or turns -- an import into a capability means one moved in.
-ADAPTERS_PREFIX = "grace_mem.adapters"
+SERVICES_PREFIX = "grace_mem.services"
 CAPABILITY_PREFIXES = (INGESTION_PREFIX, RETRIEVAL_PREFIX)
 
 
@@ -88,7 +88,7 @@ def test_domain_models_import_nothing_from_grace_mem():
 
 
 def test_ingestion_and_retrieval_do_not_import_each_other():
-    """The two capabilities share through domain models and adapters, never directly.
+    """The two capabilities share through domain models and services, never directly.
 
     A direct edge would make either impossible to move, test, or reason about
     without dragging in the other.
@@ -108,8 +108,8 @@ def test_ingestion_and_retrieval_do_not_import_each_other():
     assert crossing == set()
 
 
-def test_adapters_do_not_import_a_capability():
-    """An adapter wraps a technology; it does not decide anything about the domain.
+def test_services_do_not_import_a_capability():
+    """A service wraps a technology; it does not decide anything about the domain.
 
     LLMClient used to build an EntityOpsProcessor, which put "is this extracted
     entity the same node as that existing one?" -- the central ingestion
@@ -119,7 +119,7 @@ def test_adapters_do_not_import_a_capability():
 
     reached = {
         edge
-        for edge in _edges_from(graph, ADAPTERS_PREFIX)
+        for edge in _edges_from(graph, SERVICES_PREFIX)
         for prefix in CAPABILITY_PREFIXES
         if edge[1] == prefix or edge[1].startswith(f"{prefix}.")
     }

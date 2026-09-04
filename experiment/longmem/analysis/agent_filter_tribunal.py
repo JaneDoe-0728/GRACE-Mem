@@ -39,7 +39,7 @@ import pandas as pd
 from rank_bm25 import BM25Okapi
 
 from experiment.agent_filter.corpus import load_corpus
-from grace_mem.adapters.llm import LLMClient
+from grace_mem.services.llm import LLMClient
 
 DATA = _ROOT / "experiment" / "longmem" / "script_data"
 OUTPUT = _ROOT / "experiment" / "longmem" / "output"

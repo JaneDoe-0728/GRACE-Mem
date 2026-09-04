@@ -3,7 +3,7 @@ from typing import Any
 
 from grace_mem.domain.extraction import ExtractionResult
 from grace_mem.ingestion.managers.entity_manager import EntityOpsProcessor
-from grace_mem.runtime.logger_config import _StepTimer, make_module_jlog
+from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Ingestor", filename="kg_ingestor.jsonl")
 

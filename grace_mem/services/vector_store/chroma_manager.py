@@ -22,10 +22,10 @@ import os
 import threading
 from pathlib import Path
 
-from grace_mem.adapters.cache.cache import CacheStore
-from grace_mem.adapters.sparse_index.bm25 import EntitiesBM25
-from grace_mem.adapters.vector_store.chroma_vdb import EntitiesVDB, RelationshipsVDB, SummariesVDB
-from grace_mem.runtime.paths import resolve_artifacts_dir
+from grace_mem.services.cache.cache import CacheStore
+from grace_mem.services.sparse_index.bm25 import EntitiesBM25
+from grace_mem.services.vector_store.chroma_vdb import EntitiesVDB, RelationshipsVDB, SummariesVDB
+from grace_mem.utils.paths import resolve_artifacts_dir
 
 logger = logging.getLogger(__name__)
 
@@ -364,7 +364,7 @@ def _resolve_artifacts_dir() -> Path:
     """Resolve and create the artifacts directory used by storage singletons.
 
     Honors KG_ARTIFACTS_DIR so parallel processes can be isolated onto separate
-    working dirs (see grace_mem.runtime.paths.resolve_artifacts_dir)."""
+    working dirs (see grace_mem.utils.paths.resolve_artifacts_dir)."""
     return resolve_artifacts_dir(create=True)
 
 # Singleton: every call site imports this one instance

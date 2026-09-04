@@ -314,7 +314,7 @@ def maybe_refine_context(
         )
     if log_dir is not None:
         try:
-            from grace_mem.runtime.analysis_log import append_analysis_record
+            from grace_mem.utils.analysis_log import append_analysis_record
             append_analysis_record(log_dir, "grep_agent", {"question": question, **trace})
         except Exception as exc:  # a logging failure must not affect answering
             print(f"[QA] Grep agent trace logging failed: {exc}")

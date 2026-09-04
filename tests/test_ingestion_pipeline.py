@@ -31,11 +31,11 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
-from grace_mem.adapters.vector_store.chroma_manager import VDBManager
 from grace_mem.domain.extraction import ExtractionResult
 from grace_mem.ingestion.pipeline import IngestionFailedError, Ingestor, IngestorConfig
 from grace_mem.ingestion.steps.sync import ExtractionSyncer
-from grace_mem.runtime.paths import resolve_project_root
+from grace_mem.services.vector_store.chroma_manager import VDBManager
+from grace_mem.utils.paths import resolve_project_root
 from tests.ingestion_fakes import (
     ASSISTANT_TEXT,
     DIALOGUE_DATETIME,
@@ -199,7 +199,7 @@ def test_persist_requests_never_write_the_same_store_concurrently(
             pass
 
     monkeypatch.setattr(
-        "grace_mem.adapters.vector_store.chroma_manager.CacheStore.save",
+        "grace_mem.services.vector_store.chroma_manager.CacheStore.save",
         lambda *_args, **_kwargs: None,
     )
     manager = VDBManager(tmp_path / "artifacts")
@@ -329,7 +329,7 @@ def test_the_token_log_is_written_at_the_repository_root() -> None:
     accounting silently relocated to grace_mem/logs/token_usage.jsonl -- and
     importing the adapter created a stray logs/ dir inside the package.
     """
-    from grace_mem.adapters.llm.token_tracking import _TOKEN_LOG_PATH
+    from grace_mem.services.llm.token_tracking import _TOKEN_LOG_PATH
 
     root = resolve_project_root()
 

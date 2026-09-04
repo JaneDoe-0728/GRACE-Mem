@@ -79,8 +79,8 @@ class LongMemRerun:
     @classmethod
     def from_env(cls) -> LongMemRerun:
         """Create a rerun runtime and roll back partially opened resources."""
-        from grace_mem.adapters.graph.falkordb import graph_from_env
-        from grace_mem.adapters.llm import LLMClient
+        from grace_mem.services.graph.falkordb import graph_from_env
+        from grace_mem.services.llm import LLMClient
 
         llm = LLMClient()
         graph = None
@@ -156,11 +156,11 @@ class LongMemRerun:
         if artifacts_dir is None:
             raise FileNotFoundError(f"artifacts dir not found for dataset: {dataset_name}")
 
-        from grace_mem.adapters.embedding.embeddings import embedder
-        from grace_mem.adapters.llm import token_tracker
-        from grace_mem.adapters.vector_store import VDBManager
         from grace_mem.retrieval.config import RetrieverConfig
         from grace_mem.retrieval.pipeline import Retriever
+        from grace_mem.services.embedding.embeddings import embedder
+        from grace_mem.services.llm import token_tracker
+        from grace_mem.services.vector_store import VDBManager
 
         mgr = None
         retriever = None

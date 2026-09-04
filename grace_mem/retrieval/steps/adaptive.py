@@ -36,14 +36,14 @@ logger = logging.getLogger("grace_mem.Adaptive")
 # ──────────────────────────────────────────────────────────────────────────────
 
 from grace_mem.retrieval.rendering import render_context_text
-from grace_mem.runtime.logger_config import make_module_jlog
+from grace_mem.utils.logger_config import make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")
 
 
 def build_adaptive_llm_client() -> Any:
     """Build an LLMClient for adaptive re-search query rewriting."""
-    from grace_mem.adapters.llm import LLMClient
+    from grace_mem.services.llm import LLMClient
     logger.debug("Building adaptive LLM client")
     return LLMClient()
 
@@ -64,7 +64,7 @@ def build_adaptive_graph() -> Any:
             "NEO4J_URI is not set. Set it in .env before using adaptive re-search."
         )
 
-    from grace_mem.adapters.graph.falkordb import Graph, GraphConfig
+    from grace_mem.services.graph.falkordb import Graph, GraphConfig
     logger.debug("Building adaptive graph: uri=%s graph=%s", uri, gname)
     return Graph(GraphConfig(uri=uri, user=user, password=pwd, graph_name=gname)).open()
 

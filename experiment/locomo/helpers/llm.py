@@ -1,6 +1,6 @@
 """LLM access for the LoCoMo evaluation and judging stages.
 
-Separate from `grace_mem.adapters.llm.client` on purpose. That client serves the system
+Separate from `grace_mem.services.llm.client` on purpose. That client serves the system
 under test; this one serves the evaluator, and mixing them would put judge
 tokens into the pipeline's own cost accounting and make the two share retry and
 seeding behaviour that should be tunable independently.
@@ -61,7 +61,7 @@ def _chat_completion(
     with the same model that generated the answers lets a model's preference for
     its own phrasing show up as accuracy.
 
-    The seed dance mirrors `grace_mem.adapters.llm.client` -- send seeded, retry once
+    The seed dance mirrors `grace_mem.services.llm.client` -- send seeded, retry once
     unseeded on a 400/422 mentioning "seed", and log the transition once so a run
     that quietly lost determinism is visible in the log rather than only in
     diverging scores.

@@ -21,7 +21,7 @@ import pickle
 from pathlib import Path
 from typing import Any
 
-from grace_mem.runtime.atomic_write import atomic_write
+from grace_mem.utils.atomic_write import atomic_write
 
 logger = logging.getLogger(__name__)
 

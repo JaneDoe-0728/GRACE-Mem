@@ -20,9 +20,9 @@ import re
 
 from grace_mem.domain.entities import Entity, EntityType
 from grace_mem.domain.relationships import Relationship
-from grace_mem.runtime.logger_config import make_module_jlog
 from grace_mem.temporal import extract_temporal_hints, rewrite_temporal_text
 from grace_mem.temporal.types import TimeContext
+from grace_mem.utils.logger_config import make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Ingestor", filename="kg_ingestor.jsonl")
 

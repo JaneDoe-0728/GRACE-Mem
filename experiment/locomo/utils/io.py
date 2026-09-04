@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from experiment.common.reproducibility import attach_reproducibility_metadata
-from grace_mem.runtime.paths import resolve_artifacts_dir
+from grace_mem.utils.paths import resolve_artifacts_dir
 
 EVAL_COLUMNS = [
     "question",

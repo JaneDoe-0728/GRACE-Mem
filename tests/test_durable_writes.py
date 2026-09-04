@@ -16,7 +16,7 @@ import pytest
 
 from experiment.longmem.utils.io import write_json_file
 from grace_mem.domain.entities import Entity, EntityType
-from grace_mem.runtime.atomic_write import atomic_write
+from grace_mem.utils.atomic_write import atomic_write
 
 # ── atomic_write ─────────────────────────────────────────────────────────────
 

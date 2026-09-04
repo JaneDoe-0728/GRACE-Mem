@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from experiment.locomo.utils.log import log_event
-from grace_mem.runtime.paths import resolve_artifacts_dir
+from grace_mem.utils.paths import resolve_artifacts_dir
 
 # Working VDB dir, honoring KG_ARTIFACTS_DIR for per-process isolation. Resolved
 # at import time; each process must set the env var before it starts.

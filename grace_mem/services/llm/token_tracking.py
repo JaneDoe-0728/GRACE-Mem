@@ -7,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 
-from grace_mem.runtime.paths import resolve_project_root
+from grace_mem.utils.paths import resolve_project_root
 
 # Anchored on the checkout root, not on this file's depth: `parents[2]` was the
 # repo root while this lived at KG/llm/client.py and became the package dir in

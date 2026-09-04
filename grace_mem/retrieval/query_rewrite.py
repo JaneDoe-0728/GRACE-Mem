@@ -11,13 +11,13 @@ time is known, and the logging that records which questions were touched.
 """
 
 
-from grace_mem.runtime.logger_config import make_module_jlog, setup_logger
 from grace_mem.temporal import (
     build_time_context,
     rewrite_temporal_text,
     time_rewrite_ablation_enabled,
 )
 from grace_mem.temporal.query_time_parser import parse_query_time
+from grace_mem.utils.logger_config import make_module_jlog, setup_logger
 
 _jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")
 logger = setup_logger("grace_mem.Retriever")

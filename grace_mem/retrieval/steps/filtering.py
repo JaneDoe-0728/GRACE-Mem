@@ -7,8 +7,8 @@ import time
 from collections.abc import Collection
 from typing import Any
 
-from grace_mem.adapters.cache.cache import build_id_to_meta_maps
-from grace_mem.runtime.logger_config import _StepTimer, make_module_jlog
+from grace_mem.services.cache.cache import build_id_to_meta_maps
+from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
 
 _jlog = make_module_jlog(name="grace_mem.Retrieval.Filtering", filename="kg_retrieval_filtering.jsonl")
 

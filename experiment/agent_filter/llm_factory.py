@@ -24,6 +24,6 @@ def agent_llm(default_llm):
     if not (base or name):
         return default_llm
     if _agent_llm_cache is None:
-        from grace_mem.adapters.llm import LLMClient
+        from grace_mem.services.llm import LLMClient
         _agent_llm_cache = LLMClient(base_url=base or None, model_name=name or None)
     return _agent_llm_cache

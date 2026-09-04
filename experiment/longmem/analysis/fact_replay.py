@@ -31,7 +31,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 
 from experiment.longmem.stages.judge import JudgeStage
-from grace_mem.adapters.llm import LLMClient
+from grace_mem.services.llm import LLMClient
 
 OUTPUT_DIR = _ROOT / "experiment" / "longmem" / "multi_dataset_output"
 SCRIPT_DATA_DIR = _ROOT / "experiment" / "longmem" / "script_data"

@@ -47,8 +47,8 @@ if __package__ in (None, ""):
         sys.path.insert(0, str(repo_root))
 
 try:
-    from grace_mem.adapters.vector_store import MGR
     from grace_mem.retrieval.steps import TemporalRelevanceCalculator
+    from grace_mem.services.vector_store import MGR
     from grace_mem.temporal import time_rewrite_ablation_enabled
     from grace_mem.temporal.query_time_parser import detect_and_parse_time_expressions
 except Exception as e:

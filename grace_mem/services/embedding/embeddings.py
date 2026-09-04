@@ -19,7 +19,7 @@ import torch
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 
-from grace_mem.runtime.paths import resolve_project_root
+from grace_mem.utils.paths import resolve_project_root
 
 _REPO_ROOT = resolve_project_root()
 load_dotenv(_REPO_ROOT / ".env")

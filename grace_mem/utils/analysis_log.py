@@ -6,7 +6,7 @@ filename would let a typo create an orphan nothing ever reads. Records are
 appended and never rewritten: writes come from concurrent workers, and append is
 the only operation that stays coherent without coordination.
 
-Lives in `runtime/` rather than with the analysis that reads these files, because
+Lives in `utils/` rather than with the analysis that reads these files, because
 the ingestion pipeline writes here too. The analysis itself belongs to the
 benchmark harness -- see `experiment/common/error_analysis.py`.
 """

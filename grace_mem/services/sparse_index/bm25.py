@@ -17,7 +17,7 @@ from typing import Any
 
 from rank_bm25 import BM25Okapi
 
-from grace_mem.runtime.atomic_write import atomic_write
+from grace_mem.utils.atomic_write import atomic_write
 
 
 class EntitiesBM25:

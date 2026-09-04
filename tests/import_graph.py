@@ -93,8 +93,8 @@ def _resolve_from_import(
 def _known_module(name: str, modules: set[str]) -> str | None:
     """Find the longest known module that is a prefix of `name`.
 
-    `from grace_mem.adapters.cache.cache import CacheStore` parses as a target of
-    "grace_mem.adapters.cache.cache.CacheStore", which is a class, not a module.
+    `from grace_mem.services.cache.cache import CacheStore` parses as a target of
+    "grace_mem.services.cache.cache.CacheStore", which is a class, not a module.
     Trimming the tail until something known appears resolves it to the module.
     The same walk drops third-party imports, which never match at any depth.
     """

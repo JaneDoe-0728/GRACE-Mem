@@ -29,9 +29,9 @@ from typing import Any, cast
 import chromadb
 import numpy as np
 
-from grace_mem.adapters.embedding.embeddings import embedder
-from grace_mem.runtime.atomic_write import atomic_write
-from grace_mem.runtime.logger_config import make_module_jlog
+from grace_mem.services.embedding.embeddings import embedder
+from grace_mem.utils.atomic_write import atomic_write
+from grace_mem.utils.logger_config import make_module_jlog
 
 _debug_jlog = make_module_jlog(
     name="grace_mem.Storage.ChromaVDB",

@@ -32,8 +32,6 @@ from typing import Any
 
 import numpy as np
 
-from grace_mem.adapters.cache.cache import build_id_to_meta_maps
-from grace_mem.adapters.llm.token_tracking import token_tracker
 from grace_mem.domain.entities import _entity_key, canonical_entity_id
 from grace_mem.ingestion.parsing import (
     _parse_entity_ops_block,
@@ -41,7 +39,9 @@ from grace_mem.ingestion.parsing import (
 )
 from grace_mem.ingestion.prompts.entity_ops import ENTITY_OPS_FEW_SHOT, ENTITY_OPS_RULES_V2
 from grace_mem.lexical import tokenize_en
-from grace_mem.runtime.logger_config import make_module_jlog
+from grace_mem.services.cache.cache import build_id_to_meta_maps
+from grace_mem.services.llm.token_tracking import token_tracker
+from grace_mem.utils.logger_config import make_module_jlog
 
 
 @dataclass

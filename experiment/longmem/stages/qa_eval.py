@@ -258,8 +258,8 @@ if __name__ == "__main__":
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
     from experiment.experiment_config import RETRIEVAL_PARAMS
-    from grace_mem.adapters.llm import LLMClient
     from grace_mem.bootstrap import build_pipeline as _build_pipeline
+    from grace_mem.services.llm import LLMClient
 
     CSV_PATH = "./experiment/longmem/script_data/temporal_reasoning/2ebe6c92.csv"
     with _build_pipeline() as runtime:

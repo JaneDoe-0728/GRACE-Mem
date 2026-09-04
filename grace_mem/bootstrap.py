@@ -82,14 +82,14 @@ class PipelineRuntime(Mapping[str, Any]):
 
 def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRuntime:
     """Open connections and return the constructed pipeline runtime."""
-    from grace_mem.adapters.embedding.embeddings import embedder
-    from grace_mem.adapters.graph.falkordb import graph_from_env
-    from grace_mem.adapters.llm import LLMClient
-    from grace_mem.adapters.vector_store import MGR
     from grace_mem.domain.provenance import Provenance
     from grace_mem.ingestion.managers import EntityManager, RelationshipManager
     from grace_mem.ingestion.pipeline import Ingestor
     from grace_mem.retrieval.pipeline import Retriever
+    from grace_mem.services.embedding.embeddings import embedder
+    from grace_mem.services.graph.falkordb import graph_from_env
+    from grace_mem.services.llm import LLMClient
+    from grace_mem.services.vector_store import MGR
 
     global_cache = MGR.cache
     llm = LLMClient()

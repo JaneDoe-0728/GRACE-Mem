@@ -28,9 +28,9 @@ load_dotenv(dotenv_path=ENV_PATH)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from grace_mem.adapters.graph.falkordb import graph_from_env
-from grace_mem.adapters.vector_store import MGR
-from grace_mem.runtime.paths import resolve_artifacts_dir
+from grace_mem.services.graph.falkordb import graph_from_env
+from grace_mem.services.vector_store import MGR
+from grace_mem.utils.paths import resolve_artifacts_dir
 
 
 def refresh_system():

@@ -6,7 +6,7 @@ import importlib
 from pathlib import Path
 from typing import Any
 
-from grace_mem.runtime import reproducibility as _runtime
+from grace_mem.utils import reproducibility as _runtime
 
 ReproducibilityConfig = _runtime.ReproducibilityConfig
 DEFAULT_SEED = _runtime.DEFAULT_SEED
@@ -62,7 +62,7 @@ def activate_reproducibility(
 ) -> ReproducibilityConfig:
     """Apply reproducibility settings before any model is loaded.
 
-    Forwards to `grace_mem.runtime.reproducibility`, which must run before torch
+    Forwards to `grace_mem.utils.reproducibility`, which must run before torch
     initializes -- see its docstring for why the ordering is load-bearing.
     """
     return _runtime.activate_reproducibility(
