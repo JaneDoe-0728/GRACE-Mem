@@ -45,7 +45,7 @@ artifacts instead of ingesting again.
 From the repository root, prepare both default benchmark datasets:
 
 ```bash
-uv run python -m tools.download_datasets --dataset all
+uv run python -m scripts.download_datasets --dataset all
 ```
 
 The command downloads LoCoMo and cleaned LongMemEval-S from immutable source
@@ -62,9 +62,9 @@ per question. Dataset files are generated locally and remain gitignored.
 Prepare only one dataset or select another LongMem variant:
 
 ```bash
-uv run python -m tools.download_datasets --dataset locomo
-uv run python -m tools.download_datasets --dataset longmem --longmem-variant oracle
-uv run python -m tools.download_datasets --dataset longmem --longmem-variant m
+uv run python -m scripts.download_datasets --dataset locomo
+uv run python -m scripts.download_datasets --dataset longmem --longmem-variant oracle
+uv run python -m scripts.download_datasets --dataset longmem --longmem-variant m
 ```
 
 `S` is the default 277 MB source. `oracle` is approximately 15 MB and `M` is

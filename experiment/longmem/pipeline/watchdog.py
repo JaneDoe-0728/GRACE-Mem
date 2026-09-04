@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import NamedTuple
 
-# Allow importing experiment.* and tools.* when this file is run directly.
+# Allow importing experiment.* when this file is run directly.
 _PIPELINE_DIR = Path(__file__).resolve().parent
 _LONGMEM_ROOT = _PIPELINE_DIR.parent
 if __package__ in (None, ""):

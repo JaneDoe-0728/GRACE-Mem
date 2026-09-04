@@ -113,7 +113,7 @@ def _heading_anchors(markdown: str) -> set[str]:
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# Setup section: requirements, .env.example, tools/setup_env.sh, docker-compose
+# Setup section: requirements, .env.example, scripts/setup_env.sh, docker-compose
 # ══════════════════════════════════════════════════════════════════════════
 
 def test_pyproject_points_to_the_tracked_root_readme():
@@ -185,17 +185,17 @@ def test_env_vars_the_graph_layer_reads_are_the_ones_the_readme_names():
 
 
 def test_setup_env_runs_the_four_steps_in_the_documented_order():
-    """readme step 4: 'uv sync -> docker compose up -d -> tools/download_models.py -> verify'."""
-    text = (REPO_ROOT / "tools/setup_env.sh").read_text(encoding="utf-8")
-    order = [text.index(m) for m in ("uv sync", "docker compose up -d", "tools/download_models.py")]
-    assert order == sorted(order), "tools/setup_env.sh steps are out of documented order"
-    assert "config.json" in text, "tools/setup_env.sh does not verify the model files"
-    assert "ping" in text, "tools/setup_env.sh does not verify FalkorDB reachability"
+    """readme step 4: 'uv sync -> docker compose up -d -> scripts/download_models.py -> verify'."""
+    text = (REPO_ROOT / "scripts/setup_env.sh").read_text(encoding="utf-8")
+    order = [text.index(m) for m in ("uv sync", "docker compose up -d", "scripts/download_models.py")]
+    assert order == sorted(order), "scripts/setup_env.sh steps are out of documented order"
+    assert "config.json" in text, "scripts/setup_env.sh does not verify the model files"
+    assert "ping" in text, "scripts/setup_env.sh does not verify FalkorDB reachability"
 
 
 def test_download_model_targets_the_two_documented_models():
     """readme: embedding + reranker models; reranker is Qwen3-Reranker-0.6B."""
-    text = (REPO_ROOT / "tools/download_models.py").read_text(encoding="utf-8")
+    text = (REPO_ROOT / "scripts/download_models.py").read_text(encoding="utf-8")
     assert "Qwen/Qwen3-Embedding-0.6B" in text
     assert "Qwen/Qwen3-Reranker-0.6B" in text
     assert "embedding_models" in text and "reranker" in text
@@ -294,9 +294,9 @@ DOCUMENTED_PATHS = [
     "experiment/agent_filter/replay/locomo.py",
     "experiment/agent_filter/README.md",
     "docker-compose.yml",
-    "tools/setup_env.sh",
-    "tools/download_models.py",
-    "tools/download_datasets.py",
+    "scripts/setup_env.sh",
+    "scripts/download_models.py",
+    "scripts/download_datasets.py",
     "experiment/longmem/tools/convert_dataset.py",
     ".env.example",
 ]

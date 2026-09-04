@@ -15,7 +15,7 @@ if it carries GRACE-Mem-specific meaning: **Step** qualifies because it exists t
 contrast with **Stage**; **Adapter** does not.
 
 Scope: `grace_mem/` (the memory system), `experiment/` (the benchmark harness),
-`tools/` (dev utilities). Regenerate the candidate list with:
+`scripts/` (dev utilities). Regenerate the candidate list with:
 
 ```bash
 python3 .claude/skills/uncle-dev-ubiquitous-language/scripts/scan_terms.py --top 40
@@ -273,9 +273,9 @@ keeps its name.
 
 Reported by the scanner, checked, and deliberately not glossary entries:
 
-- **Graph** in `tools/gen_dep_graph.py` — a source-dependency graph for dev
-  tooling, unrelated to the knowledge graph. `tools/` is outside the domain.
-- **Dataset** in `tools/download_datasets.py` (`DatasetFile`) — a pinned download
+- **Graph** in `scripts/gen_dep_graph.py` — a source-dependency graph for dev
+  tooling, unrelated to the knowledge graph. `scripts/` is outside the domain.
+- **Dataset** in `scripts/download_datasets.py` (`DatasetFile`) — a pinned download
   with a checksum, not a LongMem run unit. Same reason.
 - **Entity** / **Relationship** declared across `pipeline`, `services`, `utils` —
   one concept with layered roles (`*Extractor`, `*Manager`, the model itself),
@@ -309,7 +309,7 @@ directory it is about to leave.
 
 **The wider `ent_`/`rel_` sweep is not in this branch, and the risk this file
 recorded for it — "None, internal identifiers only" — was wrong.** An AST pass
-over `grace_mem`, `experiment` and `tools` classified 97 abbreviated names and
+over `grace_mem`, `experiment` and `scripts` classified 97 abbreviated names and
 found 38 unrenameable:
 
 - `rel_id`, `rel_desc`, `rel_keywords`, `rel_strength` are **FalkorDB graph

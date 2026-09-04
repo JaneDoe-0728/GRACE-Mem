@@ -14,7 +14,7 @@ from pathlib import Path
 
 from huggingface_hub import snapshot_download
 
-# Models live at the repository root, even though this helper is under tools/.
+# Models live at the repository root, even though this helper is under scripts/.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET_DIR = REPO_ROOT / "models"
 

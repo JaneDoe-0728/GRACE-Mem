@@ -7,8 +7,8 @@ model weights, and a cycle check must not need a working environment to run.
 Only project-local imports are graphed. Third-party edges are dropped by
 `_known_module`, which keeps the output about this codebase's own layering.
 
-Lives in `tests/` rather than `tools/` because its only callers are
-`test_package_boundaries.py` and `test_architecture.py`; `tools/` is for
+Lives in `tests/` rather than `scripts/` because its only callers are
+`test_package_boundaries.py` and `test_architecture.py`; `scripts/` is for
 things a user of the repository runs.
 
 Usage:

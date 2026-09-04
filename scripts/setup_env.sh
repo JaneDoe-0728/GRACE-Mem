@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# tools/setup_env.sh — one-time environment setup before running experiments
+# scripts/setup_env.sh — one-time environment setup before running experiments
 #
 # Run this once per machine (or after pulling new deps/models):
-#   bash tools/setup_env.sh
+#   bash scripts/setup_env.sh
 #
 # Steps:
 #   1. uv sync          — install Python dependencies
@@ -54,7 +54,7 @@ echo "      OK"
 # ── 3. Download models ────────────────────────────────────────────────────────
 
 echo "[3/4] download models (no-op if already present)"
-uv run python tools/download_models.py
+uv run python scripts/download_models.py
 echo "      OK"
 
 # ── 4. Verify ─────────────────────────────────────────────────────────────────

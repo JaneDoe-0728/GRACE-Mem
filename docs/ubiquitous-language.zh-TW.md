@@ -13,7 +13,7 @@ aliases to avoid。規格書、PRD、commit message、CLI flag 與程式識別�
 **Step** 合格，因為它的存在就是為了與 **Stage** 對比；**Adapter** 不合格。
 
 涵蓋範圍：`grace_mem/`（記憶系統）、`experiment/`（benchmark harness）、
-`tools/`（開發工具）。重新產生候選詞清單：
+`scripts/`（開發工具）。重新產生候選詞清單：
 
 ```bash
 python3 .claude/skills/uncle-dev-ubiquitous-language/scripts/scan_terms.py --top 40
@@ -258,9 +258,9 @@ function 不重新編號就無法調整順序。
 
 Scanner 有回報、經查證後刻意不列入詞彙表的項目：
 
-- `tools/gen_dep_graph.py` 中的 **Graph** —— 那是開發工具用的原始碼相依圖，與知識
-  圖譜無關。`tools/` 不屬於領域範圍。
-- `tools/download_datasets.py` 中的 **Dataset**（`DatasetFile`）—— 那是帶 checksum 的
+- `scripts/gen_dep_graph.py` 中的 **Graph** —— 那是開發工具用的原始碼相依圖，與知識
+  圖譜無關。`scripts/` 不屬於領域範圍。
+- `scripts/download_datasets.py` 中的 **Dataset**（`DatasetFile`）—— 那是帶 checksum 的
   釘選下載檔，不是 LongMem 的執行單位。理由同上。
 - 跨 `pipeline`、`services`、`utils` 宣告的 **Entity** / **Relationship** —— 同一概念
   的分層角色（`*Extractor`、`*Manager`、模型本身），角色後綴詞彙已足以區分。不是歧義。
@@ -291,7 +291,7 @@ Scanner 有回報、經查證後刻意不列入詞彙表的項目：
 | 5 | `refactor(retrieval): rename ContextFilter to EvidenceFilter` —— 以及 `ctx_*` → `evidence_*` | #1 | 低 —— class 只有 6 個引用點，`ctx_*` 只在 2 個檔案 |
 
 **更大範圍的 `ent_`/`rel_` 掃除不在這個 branch，而且本文件先前為它記的風險
-「無 —— 僅內部識別字」是錯的。** 對 `grace_mem`、`experiment`、`tools` 做的 AST
+「無 —— 僅內部識別字」是錯的。** 對 `grace_mem`、`experiment`、`scripts` 做的 AST
 掃描把 97 個縮寫名稱分類，其中 38 個不可更名：
 
 - `rel_id`、`rel_desc`、`rel_keywords`、`rel_strength` 是 **FalkorDB 的圖屬性

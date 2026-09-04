@@ -109,7 +109,7 @@ git clone https://github.com/JaneDoe-0728/GRACE-Mem.git
 cd GRACE-Mem
 cp .env.example .env
 # Edit .env and configure the LLM and judge endpoints.
-bash tools/setup_env.sh
+bash scripts/setup_env.sh
 ```
 
 The setup script installs locked dependencies, starts FalkorDB, downloads the
@@ -163,7 +163,7 @@ Datasets are not bundled. Download pinned source revisions, verify SHA-256
 checksums, and convert LongMemEval into runner-ready CSVs with:
 
 ```bash
-uv run python -m tools.download_datasets --dataset all
+uv run python -m scripts.download_datasets --dataset all
 ```
 
 Source JSON files and generated CSVs remain gitignored. Re-running the command
@@ -276,7 +276,7 @@ cd GRACE-Mem
 cp .env.example .env
 # Set NEO4J_URI and the endpoint variables in .env.
 uv sync
-uv run python tools/download_models.py
+uv run python scripts/download_models.py
 ```
 
 The bundled database listens on port `6379`; its browser UI is available at
@@ -314,7 +314,7 @@ FalkorDB.
 
 ### Embedding and Reranker
 
-`tools/download_models.py` installs pinned snapshots of
+`scripts/download_models.py` installs pinned snapshots of
 `Qwen/Qwen3-Embedding-0.6B` and `Qwen/Qwen3-Reranker-0.6B` under `models/`.
 `grace_mem/adapters/embedding/embeddings.py` uses the local embedding path when available and
 otherwise falls back to the Hugging Face model ID.
@@ -369,7 +369,7 @@ GRACE-Mem/
 │   ├── longmem/                # LongMemEval pipeline and analysis
 │   └── agent_filter/           # optional evidence refinement
 ├── docs/architecture/          # architecture figures
-├── tools/                      # setup, dataset, and model download scripts
+├── scripts/                    # setup, dataset, and model download scripts
 ├── LICENSE
 ├── EVALUATION.md
 ├── pyproject.toml
