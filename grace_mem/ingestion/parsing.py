@@ -6,7 +6,7 @@ design: a malformed record is dropped, not raised, because one bad line in a
 turn must not cost the whole turn.
 
 The data models these functions produce live in `grace_mem.domain`. The BM25
-tokenizer that used to live here moved to `grace_mem.text`, which is below both
+tokenizer that used to live here moved to `grace_mem.lexical`, which is below both
 capabilities rather than inside one of them.
 """
 

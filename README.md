@@ -361,7 +361,7 @@ GRACE-Mem/
 │   ├── temporal/               # time expressions -> resolved ranges
 │   ├── adapters/               # FalkorDB, Chroma, BM25, OpenAI, the cache
 │   ├── runtime/                # logging, determinism, artifact paths
-│   ├── text.py                 # BM25 tokenization, shared by both capabilities
+│   ├── lexical.py              # BM25 tokenization, shared by both capabilities
 │   └── bootstrap.py            # constructs and wires the components
 ├── experiment/
 │   ├── common/                 # shared evaluation and run helpers
