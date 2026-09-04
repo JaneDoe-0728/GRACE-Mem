@@ -1,11 +1,11 @@
-"""Parsing the LLM's extraction reply into domain models.
+"""Parsing the LLM's extraction reply into data models.
 
 The extraction prompt asks for delimited text rather than JSON, so this is where
 a model's reply becomes an `ExtractionResult`. Everything here is tolerant by
 design: a malformed record is dropped, not raised, because one bad line in a
 turn must not cost the whole turn.
 
-The data models these functions produce live in `grace_mem.domain`. The BM25
+The data models these functions produce live in `grace_mem.data_model`. The BM25
 tokenizer that used to live here moved to `grace_mem.lexical`, which is below both
 capabilities rather than inside one of them.
 """
@@ -14,9 +14,9 @@ import logging
 import re
 from typing import Any
 
-from grace_mem.domain.entities import Entity, EntityType
-from grace_mem.domain.extraction import ExtractionResult
-from grace_mem.domain.relationships import Relationship
+from grace_mem.data_model.entities import Entity, EntityType
+from grace_mem.data_model.extraction import ExtractionResult
+from grace_mem.data_model.relationships import Relationship
 
 logger = logging.getLogger(__name__)
 

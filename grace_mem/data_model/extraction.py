@@ -7,8 +7,8 @@ reply can never disagree.
 
 from pydantic import BaseModel
 
-from grace_mem.domain.entities import Entity
-from grace_mem.domain.relationships import Relationship
+from grace_mem.data_model.entities import Entity
+from grace_mem.data_model.relationships import Relationship
 
 
 class ExtractionResult(BaseModel):

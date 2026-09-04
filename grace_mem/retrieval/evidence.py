@@ -3,7 +3,7 @@ Evidence building from provenance and summaries.
 """
 from typing import Any
 
-from grace_mem.domain.provenance import Provenance
+from grace_mem.data_model.provenance import Provenance
 from grace_mem.services.cache.cache import build_id_to_meta_maps
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
 

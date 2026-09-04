@@ -31,7 +31,7 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
-from grace_mem.domain.extraction import ExtractionResult
+from grace_mem.data_model.extraction import ExtractionResult
 from grace_mem.ingestion.pipeline import IngestionFailedError, Ingestor, IngestorConfig
 from grace_mem.ingestion.steps.sync import ExtractionSyncer
 from grace_mem.services.vector_store.chroma_manager import VDBManager

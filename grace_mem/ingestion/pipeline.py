@@ -37,7 +37,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from grace_mem.domain.extraction import ExtractionResult
+from grace_mem.data_model.extraction import ExtractionResult
 from grace_mem.ingestion.extractors import (
     EntityExtractor,
     RelationshipExtractor,

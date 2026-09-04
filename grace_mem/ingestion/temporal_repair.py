@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import re
 
-from grace_mem.domain.entities import Entity, EntityType
-from grace_mem.domain.relationships import Relationship
+from grace_mem.data_model.entities import Entity, EntityType
+from grace_mem.data_model.relationships import Relationship
 from grace_mem.temporal import extract_temporal_hints, rewrite_temporal_text
 from grace_mem.temporal.types import TimeContext
 from grace_mem.utils.logger_config import make_module_jlog

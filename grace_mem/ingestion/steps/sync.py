@@ -1,7 +1,7 @@
 """ExtractionSyncer: VDB writes + FalkorDB sync."""
 from typing import Any
 
-from grace_mem.domain.extraction import ExtractionResult
+from grace_mem.data_model.extraction import ExtractionResult
 from grace_mem.ingestion.managers.entity_manager import EntityOpsProcessor
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog
 

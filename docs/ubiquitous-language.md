@@ -8,7 +8,7 @@ these words and no others.
 > Both files must be updated together.
 
 **Scope boundary.** This file holds *domain* terms only. Architectural vocabulary —
-`domain`, `adapters`, `runtime`, `bootstrap`, `pipeline` as a filename — names
+`data_model`, `services`, `utils`, `bootstrap`, `pipeline` as a filename — names
 where code lives and is deliberately kept out of here; those words say nothing
 about what GRACE-Mem is. A word earns a place below only
 if it carries GRACE-Mem-specific meaning: **Step** qualifies because it exists to
@@ -25,7 +25,7 @@ python3 .claude/skills/uncle-dev-ubiquitous-language/scripts/scan_terms.py --top
 
 ## Knowledge graph core
 
-The objects GRACE-Mem stores. All live in `grace_mem/domain/`.
+The objects GRACE-Mem stores. All live in `grace_mem/data_model/`.
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |

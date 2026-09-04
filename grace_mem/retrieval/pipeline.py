@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from grace_mem.domain.extraction import KeywordExtractionResult
+from grace_mem.data_model.extraction import KeywordExtractionResult
 from grace_mem.retrieval.ablation import flag_enabled
 from grace_mem.retrieval.candidates import CandidateSet
 from grace_mem.retrieval.config import RetrieverConfig

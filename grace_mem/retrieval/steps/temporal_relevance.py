@@ -3,7 +3,7 @@ Temporal relevance calculation using LiCoMemory-style Weibull decay.
 """
 from datetime import date, datetime, timedelta
 
-from grace_mem.domain.provenance import Provenance
+from grace_mem.data_model.provenance import Provenance
 from grace_mem.temporal.query_time_parser import parse_query_time
 from grace_mem.utils.logger_config import make_module_jlog
 

@@ -18,9 +18,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from grace_mem.domain.entities import Entity, EntityType
-from grace_mem.domain.extraction import ExtractionResult
-from grace_mem.domain.relationships import Relationship
+from grace_mem.data_model.entities import Entity, EntityType
+from grace_mem.data_model.extraction import ExtractionResult
+from grace_mem.data_model.relationships import Relationship
 from tests.retrieval_fakes import CallLog
 
 # --------------------------------------------------------------------------- #

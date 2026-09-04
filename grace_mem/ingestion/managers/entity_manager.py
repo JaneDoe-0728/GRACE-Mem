@@ -32,7 +32,7 @@ from typing import Any
 
 import numpy as np
 
-from grace_mem.domain.entities import _entity_key, canonical_entity_id
+from grace_mem.data_model.entities import _entity_key, canonical_entity_id
 from grace_mem.ingestion.parsing import (
     _parse_entity_ops_block,
     canonicalize_entity_type_label,

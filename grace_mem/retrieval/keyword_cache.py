@@ -29,7 +29,7 @@ import json
 import os
 import threading
 
-from grace_mem.domain.extraction import KeywordExtractionResult
+from grace_mem.data_model.extraction import KeywordExtractionResult
 
 # Repo root, three levels up from grace_mem/pipeline/. Kept as the original
 # expression so the resolved path is unchanged; note that it depends on this

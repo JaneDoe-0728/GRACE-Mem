@@ -20,12 +20,12 @@ from tests.import_graph import build_graph, discover_modules
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# The domain layer. Intra-domain imports are allowed; anything else is not.
-DOMAIN_MODULES = (
-    "grace_mem.domain",
-    "grace_mem.domain.entities",
-    "grace_mem.domain.extraction",
-    "grace_mem.domain.relationships",
+# The data-model layer. Intra-layer imports are allowed; anything else is not.
+DATA_MODEL_MODULES = (
+    "grace_mem.data_model",
+    "grace_mem.data_model.entities",
+    "grace_mem.data_model.extraction",
+    "grace_mem.data_model.relationships",
 )
 # The two capabilities. These are whole-package prefixes on purpose: scoped to
 # `.steps` the rule missed `retrieval.steps.search -> ingestion.parsing`, which
@@ -69,8 +69,8 @@ def test_core_does_not_import_the_benchmark_harness():
     assert inverted == set()
 
 
-def test_domain_models_import_nothing_from_grace_mem():
-    """The domain layer must stay constructible without any infrastructure.
+def test_data_model_imports_nothing_from_grace_mem():
+    """The data_model layer must stay constructible without any infrastructure.
 
     A model that reaches for a vector store, an LLM client, or a cache is a model
     that cannot be tested or reasoned about on its own.
@@ -79,16 +79,16 @@ def test_domain_models_import_nothing_from_grace_mem():
 
     reached = {
         (module, target)
-        for module in DOMAIN_MODULES
+        for module in DATA_MODEL_MODULES
         for target in graph.get(module, set())
-        if target.startswith("grace_mem.") and not target.startswith("grace_mem.domain")
+        if target.startswith("grace_mem.") and not target.startswith("grace_mem.data_model")
     }
 
     assert reached == set()
 
 
 def test_ingestion_and_retrieval_do_not_import_each_other():
-    """The two capabilities share through domain models and services, never directly.
+    """The two capabilities share through data models and services, never directly.
 
     A direct edge would make either impossible to move, test, or reason about
     without dragging in the other.

@@ -82,7 +82,7 @@ class PipelineRuntime(Mapping[str, Any]):
 
 def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRuntime:
     """Open connections and return the constructed pipeline runtime."""
-    from grace_mem.domain.provenance import Provenance
+    from grace_mem.data_model.provenance import Provenance
     from grace_mem.ingestion.managers import EntityManager, RelationshipManager
     from grace_mem.ingestion.pipeline import Ingestor
     from grace_mem.retrieval.pipeline import Retriever

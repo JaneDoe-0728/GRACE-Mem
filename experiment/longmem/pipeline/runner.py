@@ -79,7 +79,7 @@ from experiment.longmem.utils.io import (
     read_csv_frame,
     write_csv_frame,
 )
-from grace_mem.domain.provenance import Provenance
+from grace_mem.data_model.provenance import Provenance
 from grace_mem.ingestion.managers import EntityManager, RelationshipManager
 from grace_mem.ingestion.pipeline import Ingestor
 from grace_mem.retrieval.config import RetrieverConfig

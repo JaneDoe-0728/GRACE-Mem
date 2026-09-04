@@ -7,8 +7,8 @@ aliases to avoid。規格書、PRD、commit message、CLI flag 與程式識別�
 > 專有名詞、型別名、檔案路徑一律保留英文原文，不翻譯。
 > 英文版為主文件：[ubiquitous-language.md](ubiquitous-language.md)。兩份內容需同步更新。
 
-**收錄邊界。** 本文件只收 *domain* 詞彙。架構性用語 —— `domain`、`adapters`、
-`runtime`、`bootstrap`、作為檔名的 `pipeline` —— 講的是程式碼放在哪裡，
+**收錄邊界。** 本文件只收 *domain* 詞彙。架構性用語 —— `data_model`、`services`、
+`utils`、`bootstrap`、作為檔名的 `pipeline` —— 講的是程式碼放在哪裡，
 刻意不放進來；那些字說明不了 GRACE-Mem 是什麼。一個字要進入下方表格，必須帶有 GRACE-Mem 專屬的語意：
 **Step** 合格，因為它的存在就是為了與 **Stage** 對比；**Adapter** 不合格。
 

@@ -355,12 +355,12 @@ selection, stage selection, artifact reuse, and output paths. See the
 ```text
 GRACE-Mem/
 ├── grace_mem/                  # the memory system, grouped by capability
-│   ├── domain/                 # Entity, Relationship, Provenance -- data only
+│   ├── data_model/             # Entity, Relationship, Provenance -- data only
 │   ├── ingestion/              # Turns -> graph, vector store, cache
 │   ├── retrieval/              # Query -> Evidence block
 │   ├── temporal/               # time expressions -> resolved ranges
 │   ├── services/               # FalkorDB, Chroma, BM25, OpenAI, the cache
-│   ├── utils/                # logging, determinism, artifact paths
+│   ├── utils/                  # logging, determinism, artifact paths
 │   ├── lexical.py              # BM25 tokenization, shared by both capabilities
 │   └── bootstrap.py            # constructs and wires the components
 ├── experiment/

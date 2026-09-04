@@ -16,7 +16,7 @@ model returning something unparseable anyway.
 """
 
 
-from grace_mem.domain.extraction import KeywordExtractionResult
+from grace_mem.data_model.extraction import KeywordExtractionResult
 from grace_mem.retrieval.keyword_cache import keyword_cache
 from grace_mem.retrieval.prompts.keyword.extraction import KEYWORD_EXTRACTION_PROMPT
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger

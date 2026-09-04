@@ -6,7 +6,7 @@ before ids are assigned.
 
 from pydantic import BaseModel
 
-from grace_mem.domain.entities import _slugify
+from grace_mem.data_model.entities import _slugify
 
 
 def canonical_rel_id(src_id: str, tgt_id: str) -> str:
