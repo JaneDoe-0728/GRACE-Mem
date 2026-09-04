@@ -16,7 +16,7 @@ here and nothing else:
 
 from pathlib import Path
 
-from tools.import_graph import build_graph, discover_modules
+from tests.import_graph import build_graph, discover_modules
 
 ROOT = Path(__file__).resolve().parents[1]
 

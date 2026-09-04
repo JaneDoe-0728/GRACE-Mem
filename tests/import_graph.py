@@ -7,7 +7,13 @@ model weights, and a cycle check must not need a working environment to run.
 Only project-local imports are graphed. Third-party edges are dropped by
 `_known_module`, which keeps the output about this codebase's own layering.
 
-Run with --check in CI to fail on a newly introduced cycle.
+Lives in `tests/` rather than `tools/` because its only callers are
+`test_package_boundaries.py` and `test_architecture.py`; `tools/` is for
+things a user of the repository runs.
+
+Usage:
+    python -m tests.import_graph
+    python -m tests.import_graph --check   # exit 1 on a newly introduced cycle
 """
 
 from __future__ import annotations
