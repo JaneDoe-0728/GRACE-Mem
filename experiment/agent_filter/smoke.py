@@ -5,7 +5,7 @@ few distractors with some of the gold, to see whether the agent can (a) hold on
 to the gold, (b) grep back the gold that is missing, and (c) drop the distractors.
 
 Usage:
-    python -m tools.manual.agent_filter_smoke \
+    python -m experiment.agent_filter.smoke \
         --category single_session_assistant --name <stem> [--drop-gold 1] [--n-distractors 12]
 """
 from __future__ import annotations

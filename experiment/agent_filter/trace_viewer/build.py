@@ -20,7 +20,7 @@ template.html:
                      so the two are equal).
 
 Usage:
-    python -m tools.agent_filter_trace_viewer.build --run-tag rr2-grep
+    python -m experiment.agent_filter.trace_viewer.build --run-tag rr2-grep
     # produces output/rr2-grep/trace_viewer.html (just double-click it)
     #   + output/rr2-grep/agent_traces.enriched.jsonl (the raw data with the
     #     derived fields filled in)
@@ -34,7 +34,7 @@ from pathlib import Path
 
 import pandas as pd
 
-_ROOT = Path(__file__).resolve().parents[2]
+_ROOT = Path(__file__).resolve().parents[3]
 OUTPUT_ROOT = _ROOT / "experiment" / "longmem" / "output"
 DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
 TEMPLATE = Path(__file__).with_name("template.html")

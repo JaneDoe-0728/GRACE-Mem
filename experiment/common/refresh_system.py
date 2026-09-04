@@ -9,7 +9,7 @@ Performs a complete reset of the KG system:
 4. Reinitializes the graph schema
 
 Usage:
-    python tools/refresh_system.py
+    python -m experiment.common.refresh_system
 """
 
 import shutil
@@ -18,13 +18,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Load environment variables from repo root .env file
 ENV_PATH = REPO_ROOT / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
 
-# Allow `python tools/refresh_system.py` from any working directory.
+# Allow `python experiment/common/refresh_system.py` from any working directory.
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

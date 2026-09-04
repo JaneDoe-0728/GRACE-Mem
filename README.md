@@ -369,7 +369,7 @@ GRACE-Mem/
 │   ├── longmem/                # LongMemEval pipeline and analysis
 │   └── agent_filter/           # optional evidence refinement
 ├── docs/architecture/          # architecture figures
-├── tools/                      # setup, dataset, model, trace, and maintenance tools
+├── tools/                      # setup, dataset, and model download scripts
 ├── LICENSE
 ├── EVALUATION.md
 ├── pyproject.toml

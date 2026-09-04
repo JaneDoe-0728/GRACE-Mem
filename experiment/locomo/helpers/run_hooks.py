@@ -36,7 +36,7 @@ def _refresh_system(*, sleep_seconds: float) -> None:
     refresh_cmd = [
         sys.executable, "-c",
         ("import sys; sys.path.append('.');"
-        "from tools.refresh_system import refresh_system; refresh_system()")
+        "from experiment.common.refresh_system import refresh_system; refresh_system()")
     ]
     subprocess.run(refresh_cmd, check=False)
     if sleep_seconds > 0:

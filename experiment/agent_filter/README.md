@@ -137,7 +137,7 @@ Trace files are written alongside each run:
 For LongMem traces, build a self-contained HTML viewer with:
 
 ```bash
-uv run python -m tools.agent_filter_trace_viewer.build \
+uv run python -m experiment.agent_filter.trace_viewer.build \
   --run-tag <agent-filter-run>
 ```
 

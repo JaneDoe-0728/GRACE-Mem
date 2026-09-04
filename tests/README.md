@@ -27,7 +27,7 @@ Filter smoke probe lives outside `tests/` and must be run explicitly after its
 services are configured:
 
 ```bash
-uv run python tools/manual/agent_filter_smoke.py
+uv run python -m experiment.agent_filter.smoke
 ```
 
 Automated contracts must collect and either pass, skip on an explicit runtime

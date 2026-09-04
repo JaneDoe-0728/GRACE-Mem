@@ -1071,7 +1071,7 @@ def main(argv: list[str] | None = None) -> int:
             status["state"] = "refreshing"
             write_status_file(status_path, status)
             try:
-                from tools.refresh_system import refresh_system
+                from experiment.common.refresh_system import refresh_system
                 refresh_system()
                 logger.info("refresh_system completed successfully.")
             except Exception as ref_exc:

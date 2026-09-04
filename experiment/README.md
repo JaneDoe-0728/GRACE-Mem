@@ -350,7 +350,7 @@ analysis entry points.
 Agent Filter reachability reads existing artifacts; resampling and tribunal call
 the configured LLM. These LongMem modules use the `agent_filter_` prefix. The
 trace viewer reads generated traces without an endpoint, while the smoke probe
-under `tools/manual/` requires configured services.
+`experiment.agent_filter.smoke` requires configured services.
 
 ## Recovery and Diagnostics
 
@@ -364,6 +364,6 @@ under `tools/manual/` requires configured services.
 - If a process was interrupted, use the normal command again first. Completion
   checks and checkpoints are designed to resume work without rebuilding complete
   datasets.
-- Use `tools/refresh_system.py` only when intentionally clearing active graph/model
+- Use `experiment/common/refresh_system.py` only when intentionally clearing active graph/model
   state between manual experiments; it is not a substitute for matching artifact
   configuration.
