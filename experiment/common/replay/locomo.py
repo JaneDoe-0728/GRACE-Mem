@@ -35,7 +35,8 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 
 from experiment.experiment_config import INGEST_PARAMS
-from grace_mem.agent_filter.corpus import Corpus, Turn
+from experiment.locomo.helpers.agent_filter_corpus import build_chunk_corpus
+from grace_mem.agent_filter.corpus import Corpus
 from grace_mem.agent_filter.harness import refine_context
 
 if TYPE_CHECKING:
@@ -54,58 +55,6 @@ def _llm() -> LLMClient:
 
         _tls.llm = LLMClient(timeout=300.0)
     return _tls.llm
-
-
-def build_chunk_corpus(sample: dict, sample_idx: int, n: int, unit: str = "chunk") -> Corpus:
-    """Chunk-level corpus: the splitting logic matches ingest exactly (filter empty
-    turns, then pos//N)."""
-    conv = sample.get("conversation", {}) or {}
-    turns: list[Turn] = []
-    for key, sess_turns in conv.items():
-        if not key.startswith("session_") or key.endswith("_date_time") or not isinstance(sess_turns, list):
-            continue
-        sess = int(key.split("_", 1)[1])
-        date = str(conv.get(f"session_{sess}_date_time", "") or "")
-        pos = 0
-        chunks: dict[int, list[str]] = {}
-        for t in sess_turns:
-            speaker = str(t.get("speaker", "")).strip()
-            text = str(t.get("text", "")).strip()
-            caption = str(t.get("blip_caption", "")).strip()
-            if not speaker and not text and not caption:
-                continue
-            line = f"{speaker}: {text}"
-            if caption:
-                line += f" (Image: {caption})"
-            chunks.setdefault(pos // n, []).append(line)
-            pos += 1
-        if unit == "turn":
-            # Turn granularity: every kept turn is its own unit (recall that
-            # session-level precision ceilings out around 0.06, so only a finer unit
-            # leaves room for localization). The sid carries the chunk for tracing.
-            for ci in sorted(chunks):
-                for off, line in enumerate(chunks[ci]):
-                    turns.append(Turn(
-                        sid=f"{sample_idx}__{sess}:{ci}t{off}",
-                        session_id=f"{sample_idx}__{sess}",
-                        turn_index=ci * 100 + off,
-                        pos=ci * 100 + off,
-                        role="dialogue",
-                        date=date,
-                        text=line,
-                    ))
-        else:
-            for ci in sorted(chunks):
-                turns.append(Turn(
-                    sid=f"{sample_idx}__{sess}:{ci}",
-                    session_id=f"{sample_idx}__{sess}",
-                    turn_index=ci,
-                    pos=ci,
-                    role="dialogue",
-                    date=date,
-                    text="\n".join(chunks[ci]),
-                ))
-    return Corpus(turns)
 
 
 def locomo_answer(llm, question: str, kg_context: str) -> str:

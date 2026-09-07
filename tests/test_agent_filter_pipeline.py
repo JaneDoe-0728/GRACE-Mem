@@ -296,3 +296,58 @@ def test_a_retired_param_under_error_warnings_falls_back_too() -> None:
 
     assert trace["fallback"] == "exception"
     assert refined == CONTEXT
+
+
+# ── The benchmark mount ──────────────────────────────────────────────────────
+
+def test_the_mount_accepts_a_prebuilt_corpus_with_no_csv(monkeypatch) -> None:
+    """LoCoMo's route into Agent Filter.
+
+    LongMem hands the mount a per-question script_data CSV. LoCoMo has no such
+    file -- its unit is a chunk cut out of locomo10.json -- so it builds the
+    corpus itself and passes it directly. Before, the mount checked the csv path
+    existed and bailed, which would have made the LoCoMo mount silently inert.
+    """
+    import experiment.experiment_config as experiment_config
+    from experiment.agent_filter.harness import maybe_refine_context
+
+    monkeypatch.setattr(
+        experiment_config, "GREP_AGENT_PARAMS", {"use_grep_agent": True}, raising=False
+    )
+    # The mount routes through agent_llm, which swaps in its own client when the
+    # endpoint override is set. A developer .env loaded earlier in the session
+    # would otherwise send this scripted run at a live endpoint.
+    monkeypatch.delenv("GREP_AGENT_LLM_API", raising=False)
+    monkeypatch.delenv("GREP_AGENT_MODEL_NAME", raising=False)
+
+    refined = maybe_refine_context(
+        question=QUESTION,
+        context=CONTEXT,
+        csv_path=None,
+        corpus=corpus(),
+        llm=ScriptedLLM(["GREP marathon", "FINAL s1:1:u"]),
+    )
+
+    assert "s1:1:u" in refined
+    assert refined != CONTEXT
+
+
+def test_the_mount_is_a_no_op_with_neither_a_corpus_nor_a_csv(monkeypatch) -> None:
+    import experiment.experiment_config as experiment_config
+    from experiment.agent_filter.harness import maybe_refine_context
+
+    monkeypatch.setattr(
+        experiment_config, "GREP_AGENT_PARAMS", {"use_grep_agent": True}, raising=False
+    )
+    # The mount routes through agent_llm, which swaps in its own client when the
+    # endpoint override is set. A developer .env loaded earlier in the session
+    # would otherwise send this scripted run at a live endpoint.
+    monkeypatch.delenv("GREP_AGENT_LLM_API", raising=False)
+    monkeypatch.delenv("GREP_AGENT_MODEL_NAME", raising=False)
+
+    refined = maybe_refine_context(
+        question=QUESTION, context=CONTEXT, csv_path=None,
+        llm=ScriptedLLM(["FINAL s1:1:u"]),
+    )
+
+    assert refined == CONTEXT

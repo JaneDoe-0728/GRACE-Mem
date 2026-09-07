@@ -80,6 +80,30 @@ _replay_question_context: dict[str, dict[str, Any]] = {}
 _replay_entity_meta_by_name: dict[str, dict[str, Any]] = {}
 _replay_relationship_meta_by_label: dict[str, dict[str, Any]] = {}
 
+# Agent Filter state: set by the worker before evaluate_items(), alongside
+# `retriever`. LoCoMo has no per-question script_data CSV, so the corpus is built
+# from the raw sample and handed over directly -- see
+# helpers/agent_filter_corpus.py. Left None, the mount is simply skipped, which
+# is what every ablation mode above does.
+agent_filter_corpus = None
+agent_filter_artifact_dir = None
+_agent_filter_llm = None
+
+
+def _agent_filter_client():
+    """An LLMClient for the agent loop.
+
+    `llm_post` in helpers/llm.py is a raw requests helper, not a client object,
+    and Agent Filter's loop needs `.chat(...)`. Built once and cached, the way
+    the replay entry point does it.
+    """
+    global _agent_filter_llm
+    if _agent_filter_llm is None:
+        from grace_mem.services.llm import LLMClient
+
+        _agent_filter_llm = LLMClient(timeout=300.0)
+    return _agent_filter_llm
+
 _TEMPORAL_TYPES = {"Date", "Event", "Activity"}
 
 # ---------------------------------------------------------------------------
@@ -1133,7 +1157,25 @@ def rag_answer(
     trace = getattr(retriever, "last_retrieval_trace", None) or {}
     log_dir = Path(os.environ.get("KG_TRACE_PRETTY_LOG_DIR", "logs"))
 
-    # 2) Call LLM
+    # 2) Hand the retrieved context to Agent Filter, if it is enabled and the
+    # worker supplied a corpus. It re-reads the conversation and revises the
+    # evidence set; on any failure the context comes back untouched. The date
+    # note below is derived afterwards, so it reflects the context that is
+    # actually sent.
+    if agent_filter_corpus is not None:
+        from experiment.agent_filter.harness import maybe_refine_context
+
+        kg_context = maybe_refine_context(
+            question=query,
+            context=kg_context,
+            csv_path=None,
+            corpus=agent_filter_corpus,
+            llm=_agent_filter_client(),
+            log_dir=log_dir,
+            artifact_dir=agent_filter_artifact_dir,
+        )
+
+    # 3) Call LLM
     conversation_date = _extract_latest_t_tag(kg_context)
     date_note = (
         f"\nNote: These conversations took place around {conversation_date}. "

@@ -915,6 +915,21 @@ def run_locomo_worker(args) -> None:
         graph = pipeline.graph
         qa_eval.retriever = retriever
 
+        # Agent Filter's corpus. LongMem passes a per-question script_data CSV;
+        # LoCoMo has none, so the chunk corpus is cut from the raw sample here --
+        # once per sample rather than once per question -- and handed to the mount
+        # in qa_eval.rag_answer. Whether it then runs is GREP_AGENT_PARAMS'
+        # use_grep_agent decision, not this one.
+        if run_qa:
+            from experiment.locomo.helpers.agent_filter_corpus import build_chunk_corpus
+
+            qa_eval.agent_filter_corpus = build_chunk_corpus(
+                load_raw_samples(dataset_json)[sample_index],
+                sample_index,
+                _INGEST_PARAMS["chunk_turns"],
+            )
+            qa_eval.agent_filter_artifact_dir = sample_dir / "artifacts"
+
         try:
             configure_retriever(retriever, adaptive=args.adaptive, tau=args.tau)
 
