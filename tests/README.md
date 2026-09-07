@@ -22,13 +22,7 @@ dependency rules, cycle detection, canonical imports, and import-time
 ## Manual Probes
 
 Historical scripts that directly call live APIs, local endpoints, or large
-models are excluded from the public regression suite. The maintained Agent
-Filter smoke probe lives outside `tests/` and must be run explicitly after its
-services are configured:
-
-```bash
-uv run python -m experiment.agent_filter.smoke
-```
+models are excluded from the public regression suite.
 
 Automated contracts must collect and either pass, skip on an explicit runtime
 prerequisite, or carry a narrow `xfail` with a reason. Do not hide a regression

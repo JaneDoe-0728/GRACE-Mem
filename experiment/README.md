@@ -348,9 +348,7 @@ analysis entry points.
 | LongMem fact replay | `python -m experiment.longmem.analysis.fact_replay --help` | LLM unless `--dry-run` is used |
 
 Agent Filter reachability reads existing artifacts; resampling and tribunal call
-the configured LLM. These LongMem modules use the `agent_filter_` prefix. The
-trace viewer reads generated traces without an endpoint, while the smoke probe
-`experiment.agent_filter.smoke` requires configured services.
+the configured LLM. These LongMem modules use the `agent_filter_` prefix.
 
 ## Recovery and Diagnostics
 

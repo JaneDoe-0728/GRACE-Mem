@@ -133,13 +133,6 @@ Trace files are written alongside each run:
 - LongMem: `_grep_agent_traces.jsonl`
 - LoCoMo: `_grep_traces.jsonl`
 
-For LongMem traces, build a self-contained HTML viewer with:
-
-```bash
-uv run python -m experiment.agent_filter.trace_viewer.build \
-  --run-tag <agent-filter-run>
-```
-
 Judge and score the new outputs with the shared evaluation CLIs:
 
 ```bash
