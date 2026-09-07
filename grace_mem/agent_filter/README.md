@@ -44,8 +44,8 @@ point and the replay entry points -- lives under `experiment/`.
 | Purpose | File |
 |---|---|
 | The mount point: supplies `GREP_AGENT_PARAMS` | [`common/agent_filter.py`](../../experiment/common/agent_filter.py) |
-| LongMemEval replay | [`replay/longmem.py`](../../experiment/common/replay/longmem.py) |
-| LoCoMo replay | [`replay/locomo.py`](../../experiment/common/replay/locomo.py) |
+| LongMemEval replay | [`post_retrieval/longmem.py`](../../experiment/common/post_retrieval/longmem.py) |
+| LoCoMo replay | [`post_retrieval/locomo.py`](../../experiment/common/post_retrieval/locomo.py) |
 | Shared defaults | [`experiment_config.py`](../../experiment/experiment_config.py) |
 
 `GREP_AGENT_PARAMS` is the source of truth for algorithm defaults such as mode,
@@ -74,7 +74,7 @@ Relevant environment variables:
 ## LongMemEval Replay
 
 ```bash
-uv run python -m experiment.common.replay.longmem \
+uv run python -m experiment.common.post_retrieval.longmem \
   --source-run <existing-retrieval-run> \
   --run-tag <agent-filter-run> \
   --workers 4
@@ -94,7 +94,7 @@ answers, and writes a separate run under
 ## LoCoMo Replay
 
 ```bash
-uv run python -m experiment.common.replay.locomo \
+uv run python -m experiment.common.post_retrieval.locomo \
   --source-run <existing-retrieval-run> \
   --run-tag <agent-filter-run> \
   --chunk-turns 8 \

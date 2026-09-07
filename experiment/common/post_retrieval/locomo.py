@@ -13,7 +13,7 @@ Porting design, kept to the minimum change:
 
 Usage:
     LLM_API=http://localhost:1234/v1 MODEL_NAME=openai/gpt-oss-20b \
-    python -m experiment.common.replay.locomo --source-run locomo-n8-full \
+    python -m experiment.common.post_retrieval.locomo --source-run locomo-n8-full \
         --run-tag locomo-n8-grep --chunk-turns 8 --workers 2
 """
 from __future__ import annotations
