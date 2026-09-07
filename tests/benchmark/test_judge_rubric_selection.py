@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from experiment.benchmarking.evaluation.judge import JudgeEngine
 from experiment.longmem.prompts import build_judge_messages, is_abstention_gold
+from tests.support.paths import REPO_ROOT
 
 ABS_GOLD = "The information provided is not enough to answer this question."
 PLAIN_GOLD = "Three months."
@@ -73,9 +74,8 @@ def test_the_rerun_and_replay_paths_pass_what_the_runner_passes() -> None:
     rubric -- so a re-judge disagreed with the run it was re-judging.
     """
     import ast
-    from pathlib import Path
 
-    root = Path(__file__).resolve().parent.parent
+    root = REPO_ROOT
     for module, callee in (
         ("experiment/longmem/pipeline/rerun.py", "judge_single"),
         ("experiment/longmem/analysis/fact_replay.py", "judge_single"),

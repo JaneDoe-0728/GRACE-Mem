@@ -36,7 +36,7 @@ from grace_mem.ingestion.pipeline import IngestionFailedError, Ingestor, Ingesto
 from grace_mem.ingestion.steps.sync import ExtractionSyncer
 from grace_mem.services.vector_store.chroma_manager import VDBManager
 from grace_mem.utils.paths import resolve_project_root
-from tests.ingestion_fakes import (
+from tests.support.ingestion_fakes import (
     ASSISTANT_TEXT,
     DIALOGUE_DATETIME,
     MESSAGE_ID,
@@ -49,8 +49,10 @@ from tests.ingestion_fakes import (
     FakeSyncer,
     FakeVectorDBManager,
 )
+from tests.support.paths import REPO_ROOT
+from tests.support.paths import SNAPSHOT_DIR as _SNAPSHOT_ROOT
 
-SNAPSHOT_DIR = Path(__file__).parent / "fixtures"
+SNAPSHOT_DIR = _SNAPSHOT_ROOT / "ingestion"
 
 #: The ingest paths that differ in how a turn becomes graph state.
 MODES = {
@@ -118,7 +120,7 @@ def _scrub(value):
 @pytest.mark.parametrize("mode", sorted(MODES))
 def test_ingest_turn_matches_snapshot(mode: str) -> None:
     """What one turn produces, and the conversation it has, are unchanged."""
-    path = SNAPSHOT_DIR / f"ingestion_{mode}.json"
+    path = SNAPSHOT_DIR / f"{mode}.json"
     actual = _capture(**MODES[mode])
 
     if os.getenv("KG_UPDATE_INGESTION_SNAPSHOTS") == "1":
@@ -156,7 +158,7 @@ def test_repository_paths_resolve_above_grace_mem_package() -> None:
     """Adapters must find the root .env and downloaded models from any cwd."""
     project_root = resolve_project_root()
 
-    assert project_root == Path(__file__).resolve().parent.parent
+    assert project_root == REPO_ROOT
     assert (project_root / "grace_mem").is_dir()
     assert (project_root / ".env.example").is_file()
 

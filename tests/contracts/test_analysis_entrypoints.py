@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 
 from experiment.locomo.analysis.aggregate import _aggregate_locomo_run, parse_args
+from tests.support.paths import REPO_ROOT
 
 
 def test_the_pipeline_sends_the_aggregate_cli_only_arguments_it_accepts(
@@ -101,7 +102,7 @@ def test_recorded_entrypoints_are_module_paths_that_still_import() -> None:
     import ast
     import importlib.util
 
-    root = Path(__file__).resolve().parent.parent
+    root = REPO_ROOT
     recorded: dict[str, str] = {}
     for path in sorted(root.glob("experiment/**/*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -140,7 +141,7 @@ def test_no_cli_hardcodes_an_ingestion_default() -> None:
     import ast
 
     flags = {"--prev-k", "--entity-sim-topk", "--entity-sim-threshold", "--chunk-turns"}
-    root = Path(__file__).resolve().parent.parent
+    root = REPO_ROOT
     offenders: list[str] = []
 
     def mentions_config(node: ast.AST) -> bool:

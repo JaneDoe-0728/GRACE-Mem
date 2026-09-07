@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 
-from tests.retrieval_fakes import CallLog, _stable  # noqa: F401  (re-exported)
+from tests.support.retrieval_fakes import CallLog, _stable  # noqa: F401  (re-exported)
 
 # --------------------------------------------------------------------------- #
 # The fixture corpus                                                           #

@@ -8,7 +8,8 @@ is never made worse, and the trace explains what happened.
 
 from __future__ import annotations
 
-from agent_filter_fakes import (
+from grace_mem.agent_filter.harness import refine_context
+from tests.support.agent_filter_fakes import (
     CONTEXT,
     CSV_PATH,
     SEED,
@@ -16,8 +17,6 @@ from agent_filter_fakes import (
     ScriptedLLM,
     corpus,
 )
-
-from grace_mem.agent_filter.harness import refine_context
 
 QUESTION = "What did I do in April?"
 

@@ -10,8 +10,8 @@ The literal below is the string as it stood before the value was derived. It is
 pinned deliberately: this test exists to fail when the enum is reordered.
 """
 
-from grace_mem.ingestion.prompts.config import EXTRA_KWARGS
 from grace_mem.data_model.entities import EntityType
+from grace_mem.ingestion.prompts.config import EXTRA_KWARGS
 
 # The exact string the prompt used before entity_types became a derived value.
 FROZEN_ENTITY_TYPES = (

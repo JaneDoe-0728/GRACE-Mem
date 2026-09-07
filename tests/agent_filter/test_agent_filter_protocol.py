@@ -9,8 +9,6 @@ parser has to keep answering identically.
 
 from __future__ import annotations
 
-from agent_filter_fakes import response, tool_call
-
 from grace_mem.agent_filter.models import Command
 from grace_mem.agent_filter.protocol import (
     parse_command,
@@ -18,6 +16,7 @@ from grace_mem.agent_filter.protocol import (
     response_command_candidates,
     response_diagnostics,
 )
+from tests.support.agent_filter_fakes import response, tool_call
 
 
 def test_plain_commands_parse_with_their_arguments() -> None:

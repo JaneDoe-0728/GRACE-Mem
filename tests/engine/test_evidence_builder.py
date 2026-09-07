@@ -21,12 +21,11 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 
 import pytest
 
 from grace_mem.retrieval.evidence import EvidenceBuilder
-from tests.evidence_fakes import (
+from tests.support.evidence_fakes import (
     CallLog,
     FakeRawTurnLookup,
     FakeSummariesVDB,
@@ -35,8 +34,9 @@ from tests.evidence_fakes import (
     context_entities,
     context_relationships,
 )
+from tests.support.paths import SNAPSHOT_DIR as _SNAPSHOT_ROOT
 
-SNAPSHOT_DIR = Path(__file__).parent / "fixtures"
+SNAPSHOT_DIR = _SNAPSHOT_ROOT / "evidence"
 QUERY = "What did they say about the marathon?"
 
 #: The evidence paths that differ in what text they return and how they select it.
@@ -86,7 +86,7 @@ def _capture(**overrides) -> dict:
 @pytest.mark.parametrize("mode", sorted(MODES))
 def test_evidence_block_matches_snapshot(mode: str) -> None:
     """The rendered evidence and the store conversation are unchanged for this mode."""
-    path = SNAPSHOT_DIR / f"evidence_{mode}.json"
+    path = SNAPSHOT_DIR / f"{mode}.json"
     actual = _capture(**MODES[mode])
 
     if os.getenv("KG_UPDATE_EVIDENCE_SNAPSHOTS") == "1":

@@ -29,7 +29,8 @@ import pytest
 
 from grace_mem.retrieval.config import RetrieverConfig
 from grace_mem.retrieval.pipeline import Retriever
-from tests.retrieval_fakes import (
+from tests.support.paths import SNAPSHOT_DIR as _SNAPSHOT_ROOT
+from tests.support.retrieval_fakes import (
     CallLog,
     FakeEvidenceFilter,
     FakeGraph,
@@ -38,7 +39,7 @@ from tests.retrieval_fakes import (
     cache,
 )
 
-SNAPSHOT_DIR = Path(__file__).parent / "fixtures"
+SNAPSHOT_DIR = _SNAPSHOT_ROOT / "retrieval"
 # Only one filter strategy remains: the reranker is the filter. The other four
 # were deleted with summary_scoring -- the paper never used them, and neither
 # did experiment_config.
@@ -91,7 +92,7 @@ def _capture() -> dict:
 
 def test_assemble_context_matches_snapshot() -> None:
     """The candidate set and rendered context are unchanged."""
-    path = SNAPSHOT_DIR / "retrieval_reranker_only.json"
+    path = SNAPSHOT_DIR / "reranker_only.json"
     actual = _capture()
 
     if os.getenv("KG_UPDATE_RETRIEVAL_SNAPSHOTS") == "1":

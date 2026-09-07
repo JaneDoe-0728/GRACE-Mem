@@ -14,11 +14,9 @@ here and nothing else:
     grace_mem.retrieval.steps ->  grace_mem/retrieval/
 """
 
-from pathlib import Path
 
-from tests.import_graph import build_graph, discover_modules
-
-ROOT = Path(__file__).resolve().parents[1]
+from tests.support.import_graph import build_graph, discover_modules
+from tests.support.paths import REPO_ROOT as ROOT
 
 # The data-model layer. Intra-layer imports are allowed; anything else is not.
 DATA_MODEL_MODULES = (
