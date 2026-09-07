@@ -1163,7 +1163,7 @@ def rag_answer(
     # note below is derived afterwards, so it reflects the context that is
     # actually sent.
     if agent_filter_corpus is not None:
-        from experiment.agent_filter.harness import maybe_refine_context
+        from experiment.common.agent_filter import maybe_refine_context
 
         kg_context = maybe_refine_context(
             question=query,

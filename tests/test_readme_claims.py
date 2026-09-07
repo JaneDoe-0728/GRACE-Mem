@@ -36,7 +36,7 @@ DOCUMENTS = (
     REPO_ROOT / "README.md",
     REPO_ROOT / "EVALUATION.md",
     REPO_ROOT / "experiment" / "README.md",
-    REPO_ROOT / "experiment" / "agent_filter" / "README.md",
+    REPO_ROOT / "grace_mem" / "agent_filter" / "README.md",
     REPO_ROOT / "tests" / "README.md",
 )
 
@@ -290,9 +290,9 @@ DOCUMENTED_PATHS = [
     "experiment/longmem/pipeline/watchdog.py",
     "experiment/locomo/pipeline/runner.py",
     "experiment/common/replay/longmem.py",
-    "experiment/agent_filter/harness.py",
+    "experiment/common/agent_filter.py",
     "experiment/common/replay/locomo.py",
-    "experiment/agent_filter/README.md",
+    "grace_mem/agent_filter/README.md",
     "docker-compose.yml",
     "scripts/setup_env.sh",
     "scripts/download_models.py",

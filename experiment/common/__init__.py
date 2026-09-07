@@ -1,6 +1,8 @@
 """Benchmark infrastructure shared by more than one dataset.
 
-Most of it carries no dataset-specific semantics. `replay/` is the exception:
-it holds one entry point per benchmark, kept together because both replay the
-same mechanism (`grace_mem.agent_filter`) over a finished run.
+`agent_filter.py` is where both pipelines mount `grace_mem.agent_filter`, and it
+is the only module that knows the settings come from
+`experiment_config.GREP_AGENT_PARAMS`. `replay/` holds one entry point per
+benchmark -- dataset-specific, unlike the rest of this package, but kept
+together because both replay the same mechanism over a finished run.
 """

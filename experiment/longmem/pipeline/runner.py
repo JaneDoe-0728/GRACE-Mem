@@ -477,7 +477,7 @@ class DatasetRunner:
         by default (`GREP_AGENT_PARAMS["use_grep_agent"]`), so it runs on every
         question and its extra LLM call is part of every measured LongMem run.
         """
-        from experiment.agent_filter.harness import maybe_refine_context
+        from experiment.common.agent_filter import maybe_refine_context
 
         return maybe_refine_context(
             question=question,

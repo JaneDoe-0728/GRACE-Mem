@@ -235,7 +235,7 @@ uv run python -m experiment.common.replay.locomo \
 
 LongMem VECTOR discovery uses `LONGMEM_ARTIFACT_ROOT` or `--artifact-root`.
 LoCoMo discovers its summary VDB under each source sample. See the
-[Agent Filter guide](experiment/agent_filter/README.md) for defaults,
+[Agent Filter guide](grace_mem/agent_filter/README.md) for defaults,
 adjudication scope, scoring, and trace inspection.
 
 ## Analysis and Diagnostics
@@ -357,16 +357,16 @@ GRACE-Mem/
 │   ├── data_model/             # Entity, Relationship, Provenance -- data only
 │   ├── ingestion/              # Turns -> graph, vector store, cache
 │   ├── retrieval/              # Query -> Evidence block
+│   ├── agent_filter/           # optional post-retrieval evidence refinement
 │   ├── temporal/               # time expressions -> resolved ranges
 │   ├── services/               # FalkorDB, Chroma, BM25, OpenAI, the cache
 │   ├── utils/                  # logging, determinism, artifact paths
 │   ├── lexical.py              # BM25 tokenization, shared by both capabilities
 │   └── bootstrap.py            # constructs and wires the components
 ├── experiment/
-│   ├── common/                 # shared evaluation and run helpers
+│   ├── common/                 # shared evaluation, run helpers, replay entry points
 │   ├── locomo/                 # LoCoMo pipeline and analysis
-│   ├── longmem/                # LongMemEval pipeline and analysis
-│   └── agent_filter/           # optional evidence refinement
+│   └── longmem/                # LongMemEval pipeline and analysis
 ├── docs/architecture/          # architecture figures
 ├── scripts/                    # setup, dataset, and model download scripts
 ├── LICENSE
@@ -407,7 +407,7 @@ of an unpublished reference score.
 |---|---|
 | [Experiment guide](experiment/README.md) | Data layout, commands, artifacts, and analysis requirements |
 | [Evaluation protocol](EVALUATION.md) | Judge, voting, scoring, abstention, and oracle behavior |
-| [Agent Filter guide](experiment/agent_filter/README.md) | Evidence refinement, VECTOR, adjudication, and traces |
+| [Agent Filter guide](grace_mem/agent_filter/README.md) | Evidence refinement, VECTOR, adjudication, and traces |
 | [.env example](.env.example) | Runtime endpoint and graph configuration |
 
 ## License

@@ -202,7 +202,7 @@ class LongMemRerun:
                     retrieval_params=RETRIEVAL_PARAMS,
                     query_time=question_date,
                 )
-                from experiment.agent_filter.harness import maybe_refine_context
+                from experiment.common.agent_filter import maybe_refine_context
                 context = maybe_refine_context(
                     question=rewritten_q,
                     context=context,
