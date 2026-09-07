@@ -7,13 +7,13 @@ Porting design, kept to the minimum change:
     {sample}__{session}:{chunk}); chunk splitting reproduces ingest exactly
     (empty-turn filtering + pos//N, as in locomo_gold_recall_metrics)
   - the agent harness is reused untouched
-    (experiment/agent_filter/harness.refine_context)
+    (grace_mem/agent_filter/harness.refine_context)
   - the answering prompt reproduces the original in stages/qa_eval.py, including
     the conversation_date note, to stay comparable
 
 Usage:
     LLM_API=http://localhost:1234/v1 MODEL_NAME=openai/gpt-oss-20b \
-    python -m experiment.agent_filter.replay.locomo --source-run locomo-n8-full \
+    python -m experiment.common.replay.locomo --source-run locomo-n8-full \
         --run-tag locomo-n8-grep --chunk-turns 8 --workers 2
 """
 from __future__ import annotations
@@ -34,9 +34,9 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from experiment.agent_filter.corpus import Corpus, Turn
-from experiment.agent_filter.harness import refine_context
 from experiment.experiment_config import INGEST_PARAMS
+from grace_mem.agent_filter.corpus import Corpus, Turn
+from grace_mem.agent_filter.harness import refine_context
 
 if TYPE_CHECKING:
     from grace_mem.services.llm import LLMClient

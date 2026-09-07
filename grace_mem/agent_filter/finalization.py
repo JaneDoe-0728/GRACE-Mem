@@ -18,10 +18,10 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-from experiment.agent_filter.adjudication import adjudicate_candidates
-from experiment.agent_filter.config import AgentFilterConfig
-from experiment.agent_filter.context import append_fetched_evidence, rebuild_context
-from experiment.agent_filter.corpus import Corpus
+from grace_mem.agent_filter.adjudication import adjudicate_candidates
+from grace_mem.agent_filter.config import AgentFilterConfig
+from grace_mem.agent_filter.context import append_fetched_evidence, rebuild_context
+from grace_mem.agent_filter.corpus import Corpus
 
 
 @dataclass

@@ -223,7 +223,7 @@ every historical result CSV. Fix the prose, keep the identifier.
 
 **6. "Turn" is declared twice at different granularity.** `SpeakerTurn`
 ([evidence_speaker_enricher.py:21](../grace_mem/utils/evidence_speaker_enricher.py#L21))
-is speaker + text; `Turn` ([corpus.py:23](../experiment/agent_filter/corpus.py#L23)) is
+is speaker + text; `Turn` ([corpus.py:23](../grace_mem/agent_filter/corpus.py#L23)) is
 sid-addressable with a position.
 *Recommendation:* one concept, two projections — not an ambiguity. Keep both, but
 `SpeakerTurn` should be understood as "a **Turn** with only its speaker and text

@@ -29,7 +29,6 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from experiment.agent_filter.corpus import Corpus, load_corpus
 from experiment.common.evaluation.judge import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
@@ -43,6 +42,7 @@ from experiment.locomo.helpers.dataset import (
     normalize_qa_item,
 )
 from experiment.longmem.stages.qa_eval import QAEvalStage
+from grace_mem.agent_filter.corpus import Corpus, load_corpus
 from grace_mem.services.llm import LLMClient
 
 LOCOMO_DATA = _ROOT / "experiment" / "locomo" / "data" / "locomo10.json"

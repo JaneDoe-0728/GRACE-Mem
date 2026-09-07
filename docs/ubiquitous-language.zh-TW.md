@@ -215,7 +215,7 @@ verdicts、還是 accuracy 數字。
 
 **6.「Turn」在兩個不同粒度上各被宣告一次。** `SpeakerTurn`
 （[evidence_speaker_enricher.py:21](../grace_mem/utils/evidence_speaker_enricher.py#L21)）
-是 speaker + text；`Turn`（[corpus.py:23](../experiment/agent_filter/corpus.py#L23)）
+是 speaker + text；`Turn`（[corpus.py:23](../grace_mem/agent_filter/corpus.py#L23)）
 則以 sid 定址且帶有位置。
 *建議：* 這是一個概念的兩種投影，不是歧義。兩者都保留，但 `SpeakerTurn` 應被理解為
 「僅填入 speaker 與 text 的 **Turn**」。不要再引入第三種寫法。

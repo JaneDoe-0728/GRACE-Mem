@@ -20,20 +20,32 @@ configuration defaults, not invariants for every run.
 
 ## Implementation
 
+The mechanism lives in `grace_mem/agent_filter/`; this package is the
+benchmark side that drives it.
+
+**The mechanism** — takes its settings as an argument, imports nothing from
+`experiment/`:
+
 | Purpose | File |
 |---|---|
-| Orchestration: prepare, search, finalize | [`harness.py`](harness.py) |
-| Configuration read from `GREP_AGENT_PARAMS` | [`config.py`](config.py) |
-| The per-question corpus, and the GREP/READ tools | [`corpus.py`](corpus.py) |
-| Command parsing across every reply format | [`protocol.py`](protocol.py) |
-| Reading and rebuilding the answer context | [`context.py`](context.py) |
-| The search loop and its tools | [`loop.py`](loop.py) |
-| Answer-blind adjudication | [`adjudication.py`](adjudication.py) |
-| Evidence selection policy | [`finalization.py`](finalization.py) |
-| Semantic search over the summaries VDB | [`vector_search.py`](vector_search.py) |
-| Prompts | [`prompting/`](prompting) |
-| LongMemEval replay | [`replay/longmem.py`](replay/longmem.py) |
-| LoCoMo replay | [`replay/locomo.py`](replay/locomo.py) |
+| Orchestration: prepare, search, finalize | [`grace_mem/agent_filter/harness.py`](../../grace_mem/agent_filter/harness.py) |
+| Configuration, as one typed dataclass | [`config.py`](../../grace_mem/agent_filter/config.py) |
+| The per-question corpus, and the GREP/READ tools | [`corpus.py`](../../grace_mem/agent_filter/corpus.py) |
+| Command parsing across every reply format | [`protocol.py`](../../grace_mem/agent_filter/protocol.py) |
+| Reading and rebuilding the answer context | [`context.py`](../../grace_mem/agent_filter/context.py) |
+| The search loop and its tools | [`loop.py`](../../grace_mem/agent_filter/loop.py) |
+| Answer-blind adjudication | [`adjudication.py`](../../grace_mem/agent_filter/adjudication.py) |
+| Evidence selection policy | [`finalization.py`](../../grace_mem/agent_filter/finalization.py) |
+| Semantic search over the summaries VDB | [`vector_search.py`](../../grace_mem/agent_filter/vector_search.py) |
+| Prompts | [`prompting/`](../../grace_mem/agent_filter/prompting) |
+
+**The benchmark side** — the only code that knows where the settings come from:
+
+| Purpose | File |
+|---|---|
+| The mount point: supplies `GREP_AGENT_PARAMS` | [`harness.py`](harness.py) |
+| LongMemEval replay | [`replay/longmem.py`](../common/replay/longmem.py) |
+| LoCoMo replay | [`replay/locomo.py`](../common/replay/locomo.py) |
 | Shared defaults | [`../experiment_config.py`](../experiment_config.py) |
 
 `GREP_AGENT_PARAMS` is the source of truth for algorithm defaults such as mode,
@@ -62,7 +74,7 @@ Relevant environment variables:
 ## LongMemEval Replay
 
 ```bash
-uv run python -m experiment.agent_filter.replay.longmem \
+uv run python -m experiment.common.replay.longmem \
   --source-run <existing-retrieval-run> \
   --run-tag <agent-filter-run> \
   --workers 4
@@ -82,7 +94,7 @@ answers, and writes a separate run under
 ## LoCoMo Replay
 
 ```bash
-uv run python -m experiment.agent_filter.replay.locomo \
+uv run python -m experiment.common.replay.locomo \
   --source-run <existing-retrieval-run> \
   --run-tag <agent-filter-run> \
   --chunk-turns 8 \

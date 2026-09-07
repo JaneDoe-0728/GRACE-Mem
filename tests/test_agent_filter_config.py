@@ -12,8 +12,8 @@ import warnings
 
 import pytest
 
-from experiment.agent_filter.config import AgentFilterConfig
 from experiment.experiment_config import GREP_AGENT_PARAMS
+from grace_mem.agent_filter.config import AgentFilterConfig
 
 # (params key, config field) for every knob the pipeline actually reads.
 KNOBS = [

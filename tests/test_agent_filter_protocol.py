@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from agent_filter_fakes import response, tool_call
 
-from experiment.agent_filter.models import Command
-from experiment.agent_filter.protocol import (
+from grace_mem.agent_filter.models import Command
+from grace_mem.agent_filter.protocol import (
     parse_command,
     parse_response,
     response_command_candidates,

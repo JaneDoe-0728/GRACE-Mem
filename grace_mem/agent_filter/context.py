@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import re
 
-from experiment.agent_filter.corpus import Corpus
-from experiment.agent_filter.models import EVIDENCE_HEADER, SID_RE
+from grace_mem.agent_filter.corpus import Corpus
+from grace_mem.agent_filter.models import EVIDENCE_HEADER, SID_RE
 
 
 def seed_sids_from_context(context: str) -> list[str]:

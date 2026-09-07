@@ -17,7 +17,7 @@ from agent_filter_fakes import (
     corpus,
 )
 
-from experiment.agent_filter.harness import refine_context
+from grace_mem.agent_filter.harness import refine_context
 
 QUESTION = "What did I do in April?"
 
@@ -215,7 +215,7 @@ def test_a_vector_hit_counts_as_verified_evidence(monkeypatch, tmp_path) -> None
     # The prompt calls VECTOR results "leads, not verified evidence", while the
     # runtime trusts them outright. The runtime behaviour is what ships, so it is
     # what is pinned; reconciling the two is a behaviour change, not a refactor.
-    from experiment.agent_filter import vector_search
+    from grace_mem.agent_filter import vector_search
 
     (tmp_path / "summaries_chroma").mkdir()
     monkeypatch.setattr(
@@ -284,7 +284,7 @@ def test_a_retired_param_under_error_warnings_falls_back_too() -> None:
     params."""
     import warnings
 
-    from experiment.agent_filter import config as config_module
+    from grace_mem.agent_filter import config as config_module
 
     config_module._warned.discard("grep_agent_require_verified_additions")
     with warnings.catch_warnings():

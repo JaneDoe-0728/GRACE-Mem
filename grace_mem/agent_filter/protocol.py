@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import re
 
-from experiment.agent_filter.models import SID_RE, Command, ParsedResponse
+from grace_mem.agent_filter.models import SID_RE, Command, ParsedResponse
 
 # gpt-oss (harmony template) sometimes replies in native tool-call syntax:
 #   <|channel|>commentary to=READ <|constrain|>json<|message|>{"id": "...", "k": 2}
