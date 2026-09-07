@@ -33,8 +33,8 @@ class ParsedResponse:
     Attributes:
         raw_reply: The first candidate text, kept for the trace even when
             nothing parsed out of it.
-        reply: The candidate the command came from -- what downstream reads for
-            a HYPOTHESIS line -- or ``raw_reply`` when no command parsed.
+        reply: The candidate the command came from, or ``raw_reply`` when no
+            command parsed.
         command: The parsed command, or None when the reply carried none.
         source: Which channel the command came from (content/tool_calls/reasoning).
         diagnostics: Per-response diagnostics for the trace.

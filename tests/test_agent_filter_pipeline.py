@@ -62,15 +62,6 @@ def test_the_selection_is_capped_at_the_evidence_limit() -> None:
     assert trace["final_sids"] == ["s1:1:u"]
 
 
-def test_the_agent_reports_its_own_answer_hypothesis_when_asked_to() -> None:
-    _, trace = refine(
-        ["HYPOTHESIS: a marathon\nFINAL s1:1:u"],
-        params={"grep_agent_emit_hypothesis": 1},
-    )
-
-    assert trace["hypothesis"] == "a marathon"
-
-
 # ── Modes ────────────────────────────────────────────────────────────────────
 
 def test_filter_mode_discards_sids_the_agent_added() -> None:
@@ -168,15 +159,6 @@ def test_an_exhausted_call_budget_forces_a_final() -> None:
 
     assert [c["cmd"] for c in trace["commands"]] == ["GREP", "FINAL(forced)"]
     assert trace["final_sids"] == ["s1:1:u"]
-
-
-def test_a_no_final_run_can_ask_the_answering_model_to_abstain() -> None:
-    refined, trace = refine(["no sids here", "still none", "nothing"],
-                            params={"grep_agent_abstention_hint": 1})
-
-    assert trace["abstention_hint"] is True
-    assert refined.startswith(CONTEXT)
-    assert "not available in the conversation history" in refined
 
 
 def test_a_run_that_keeps_no_seed_falls_back_to_the_original_context() -> None:

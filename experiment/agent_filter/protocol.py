@@ -227,7 +227,6 @@ def parse_command(reply: str) -> Command | None:
     return _parse_harmony(reply) or _parse_harmony_loose(reply)
 
 
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?;])\s+|\n+")
 # A quoted span. The delimiters must not sit inside a word: `'` doubles as an
 # apostrophe, and an unguarded pair rule turns "Let's ... the hamster's name" into
 # one "quoted" pattern spanning two contractions.

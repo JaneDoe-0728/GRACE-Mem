@@ -51,7 +51,6 @@ def test_an_incomplete_mapping_keeps_the_conservative_defaults() -> None:
     assert config.max_sids == 16
     assert config.adjudicate is False
     assert config.include_pair is True
-    assert config.abstention_hint is False
 
 
 def test_no_params_at_all_is_the_same_as_an_empty_mapping() -> None:
@@ -65,6 +64,8 @@ def test_retired_and_unrelated_keys_are_ignored() -> None:
         "grep_agent_verify_rounds": 3,
         "grep_agent_min_keep_aggregation": 4,
         "grep_agent_use_skills": True,
+        "grep_agent_emit_hypothesis": 1,
+        "grep_agent_abstention_hint": 1,
         "grep_agent_force_verified_final": 1,
         "grep_agent_adjudicate_keep_all_categories": ("multi_session",),
     })

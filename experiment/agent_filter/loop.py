@@ -13,7 +13,6 @@ change to AgentTools alone.
 """
 from __future__ import annotations
 
-import re
 import time
 from dataclasses import dataclass, field
 
@@ -157,13 +156,11 @@ class AgentSession:
         tools: AgentTools,
         messages: list[dict],
         trace: dict,
-        emit_hypothesis: bool = False,
     ):
         self.llm = llm
         self.tools = tools
         self.messages = messages
         self.trace = trace
-        self.emit_hypothesis = emit_hypothesis
         self.verified_sids: set[str] = set()
         self.vector_candidate_sids: set[str] = set()
 
@@ -200,8 +197,6 @@ class AgentSession:
             parse_failures = 0
 
             if cmd.kind == "FINAL":
-                if self.emit_hypothesis:
-                    self._record_hypothesis(parsed.reply)
                 self._record("FINAL", parsed, started, arg=cmd.arg[:500], reply=True)
                 return extract_final_sids(cmd.arg, parsed.reply)
 
@@ -263,23 +258,6 @@ class AgentSession:
             entry["reply"] = parsed.reply[:1200]
         entry["ms"] = _elapsed_ms(started)
         self.trace["commands"].append({**entry, **parsed.diagnostics})
-
-    def _record_hypothesis(self, reply: str) -> None:
-        """The agent's self-reported answer hypothesis (productionizing
-        "hypothesis recovery", replacing hyp-v1's after-the-fact 4o-mini
-        extraction).
-
-        Capture HYPOTHESIS only to end of line; if a FINAL or sid token follows
-        on the same or an adjacent line (the agent writes both together), cut
-        before FINAL so the FINAL line's sids are not swallowed into the
-        hypothesis (seen in hyp-v1 06db6396 and the 120b filter).
-        """
-        found = re.search(r"HYPOTHESIS\s*[::]\s*([^\n]+)", reply, re.IGNORECASE)
-        hypothesis = found.group(1).strip() if found else ""
-        hypothesis = re.split(r"\bFINAL\b", hypothesis, maxsplit=1, flags=re.IGNORECASE)[0].strip()
-        if hypothesis and hypothesis.upper() != "NONE":
-            self.trace["hypothesis"] = hypothesis[:200]
-
 
 def _elapsed_ms(started: float) -> int:
     return round((time.perf_counter() - started) * 1000)

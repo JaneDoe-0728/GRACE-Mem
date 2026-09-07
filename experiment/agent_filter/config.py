@@ -45,7 +45,6 @@ class AgentFilterConfig:
     max_calls: int = 8
     max_sids: int = 16
     grep_max_lines: int = 30
-    emit_hypothesis: bool = False
 
     # ── Graph facts: switchable on the filter prompt and the answer context
     # independently, for ablations ──────────────────────────────────────
@@ -61,9 +60,6 @@ class AgentFilterConfig:
     # ── Answer-blind adjudication of the discarded seeds ────────────────
     adjudicate: bool = False
     adjudicate_categories: Categories = None
-
-    # ── What to do when the agent will not close ────────────────────────
-    abstention_hint: bool = False
 
     # ── Rebuilding the context ──────────────────────────────────────────
     include_pair: bool = True
@@ -94,7 +90,6 @@ class AgentFilterConfig:
             max_calls=int(p.get("grep_agent_max_calls", cls.max_calls)),
             max_sids=int(p.get("grep_agent_max_sids", cls.max_sids)),
             grep_max_lines=int(p.get("grep_agent_grep_max_lines", cls.grep_max_lines)),
-            emit_hypothesis=flag("grep_agent_emit_hypothesis", cls.emit_hypothesis),
             filter_include_graph=flag(
                 "grep_agent_filter_include_graph_context", cls.filter_include_graph),
             answer_include_graph=flag(
@@ -107,7 +102,6 @@ class AgentFilterConfig:
             adjudicate=flag("grep_agent_adjudicate", cls.adjudicate),
             adjudicate_categories=p.get(
                 "grep_agent_adjudicate_categories", cls.adjudicate_categories),
-            abstention_hint=flag("grep_agent_abstention_hint", cls.abstention_hint),
             include_pair=flag("grep_agent_include_pair", cls.include_pair),
         )
 

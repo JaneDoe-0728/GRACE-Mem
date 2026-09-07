@@ -30,7 +30,7 @@ TOOLS — reply with EXACTLY ONE command as the last line of your message:
   READ <sid> [k]        show the raw turns around <sid> (default k=2) in its session.
 {vector_tool}  FINAL <sid> <sid> ... your final answer: the selected evidence sids, space-separated.
 
-{hypothesis_line}RULES:
+RULES:
 - One command per message. Brief reasoning before the command is fine.
 - Copy sids EXACTLY as shown, including any prefix (e.g. answer_xxx:2:u, not xxx:2:u).
 - Never repeat a search that returned 0 matches; change the keywords instead.
@@ -49,56 +49,6 @@ TOOLS — reply with EXACTLY ONE command as the last line of your message:
 - Typical flow: 2-3 GREPs to locate evidence → READ to verify if unsure → FINAL.
   Do not keep searching after your greps already hit the relevant turns.
 """
-
-# The HYPOTHESIS line productionizes "hypothesis recovery": the agent's reasoning
-# before FINAL has usually already reached the answer (it asks and answers itself,
-# stating the conclusion outright 25% of the time), which hyp-v1 used to extract
-# after the fact with 4o-mini. Instead the agent now emits one extra HYPOTHESIS
-# line in the same message as its FINAL -- no post-hoc extraction, and self-
-# consistent within one model.
-# The {hypothesis_line} slot is only filled when grep_agent_emit_hypothesis=1.
-HYPOTHESIS_LINE_BLOCK = (
-    "Before the FINAL line, add one line stating your best answer to the QUESTION "
-    "based on the evidence you found:\n"
-    "  HYPOTHESIS: <your answer as a short phrase, or NONE if you cannot determine it>\n"
-    "This is your own tentative conclusion; the FINAL sids remain the evidence.\n\n"
-)
-
-# ── v2 (prompt-engineering experiment, 2026-07-20) ─────────────────────────
-# Diagnosis: hints emitted by 20b scored 6.2pp below 4o-mini extraction, with
-# multi_session hit hardest (-12.3pp). Three failure classes: (1) the hint reasons
-# wrongly, (2) nothing is emitted when it should be, (3) a verbose sentence
-# anchors the answer.
-# Class 3 (9 of 54) is purely a formatting problem: 20b tends to emit a full
-# sentence ("2 doctor's appointments in March") where 4o-mini gives the distilled
-# literal value ("2"). On aggregation questions a verbose hint anchors the
-# answering model to a biased hypothesis. This version uses few-shot examples plus
-# an explicit ban on verbosity to push the output toward 4o-mini's literal shape.
-# Enabled only when KG_HYP_PROMPT=v2; the old behaviour stays the default so the
-# existing control is not contaminated.
-HYPOTHESIS_LINE_BLOCK_V2 = (
-    "Before the FINAL line, add one line with your best answer to the QUESTION.\n"
-    "Give ONLY the bare answer value — the exact word, name, number, date, or "
-    "duration that answers the question. Do NOT restate the question, do NOT "
-    "explain, do NOT write a full sentence. Match the form the question asks for.\n"
-    "Examples:\n"
-    "  Q: How many appointments in March?      HYPOTHESIS: 2\n"
-    "  Q: How much per mug?                     HYPOTHESIS: $12\n"
-    "  Q: How long using the Fitbit?            HYPOTHESIS: 9 months\n"
-    "  Q: Where do I keep my sneakers?          HYPOTHESIS: under my bed\n"
-    "  Q: What was the 7th job listed?          HYPOTHESIS: Transcriptionist\n"
-    "If you truly cannot determine it, write: HYPOTHESIS: NONE\n"
-    "This is your own tentative conclusion; the FINAL sids remain the evidence.\n\n"
-)
-
-
-def active_hypothesis_block() -> str:
-    """Return the active hypothesis prompt version (env-gated; the old version
-    remains the default)."""
-    import os
-    return (HYPOTHESIS_LINE_BLOCK_V2
-            if os.environ.get("KG_HYP_PROMPT", "").strip().lower() == "v2"
-            else HYPOTHESIS_LINE_BLOCK)
 
 # VECTOR tool description: injected into SYSTEM_PROMPT's {vector_tool} slot only
 # when this question's summaries VDB is available (artifact_dir contains
@@ -154,14 +104,4 @@ CANDIDATE evidence turns (from vector+rerank; may contain distractors, may be in
 Verify the candidates and search for missing evidence, then give FINAL sids.
 """
 
-# ── Searched-empty -> abstention hint, appended to the end of the answer context ─
-# _abs abstention questions fall back 70% of the time (the answer is not in the
-# corpus, so the agent never reaches FINAL). The signal "searched the whole corpus
-# and verified nothing" is itself the strongest evidence for abstention, and should
-# not be thrown away as a failure.
-ABSTENTION_HINT = (
-    "\n\nNOTE: An evidence-search agent has already scanned the FULL conversation "
-    "history for this question and could not verify any relevant evidence. If the "
-    "context above does not clearly contain the answer, state that the information "
-    "is not available in the conversation history — do not guess or invent details."
-)
+

@@ -33,12 +33,10 @@ from experiment.agent_filter.finalization import EvidenceFinalizer
 from experiment.agent_filter.llm_factory import agent_llm
 from experiment.agent_filter.loop import AgentSession, AgentTools
 from experiment.agent_filter.prompting.agent import (
-    ABSTENTION_HINT,
     CATEGORY_HINTS,
     SYSTEM_PROMPT,
     USER_TEMPLATE,
     VECTOR_TOOL_BLOCK,
-    active_hypothesis_block,
 )
 
 _FILTER_MODE_RULE = (
@@ -197,7 +195,6 @@ def _open_session(
     system = SYSTEM_PROMPT.format(
         max_calls=config.max_calls,
         vector_tool=VECTOR_TOOL_BLOCK if prep.vector_ok else "",
-        hypothesis_line=active_hypothesis_block() if config.emit_hypothesis else "",
     )
     if config.mode == "filter":
         system += _FILTER_MODE_RULE
@@ -228,7 +225,6 @@ def _open_session(
             {"role": "user", "content": user},
         ],
         trace=trace,
-        emit_hypothesis=config.emit_hypothesis,
     )
 
 
@@ -247,17 +243,9 @@ def _without_a_final(
     -- a bare 1-2 sid context strips the answering model of the full-context
     noise cover and it starts inventing.
 
-    Uncertainty signal: an agent refusing to FINAL means it found no confirmable
-    evidence for an answer (_abs abstention questions fall back 70% of the time),
-    which is itself the strongest evidence for abstention. The hint is attached
-    only to this full-context path -- "narrowed context + hint" tested negative
-    (ordinary questions 46.7 -> 33.3).
     """
     trace["fallback"] = "no_final"
     trace["verified_sids"] = prep.corpus.normalize_sids(list(session.verified_sids))
-    if config.abstention_hint:
-        trace["abstention_hint"] = True
-        return context + ABSTENTION_HINT, trace
     return context, trace
 
 

@@ -95,18 +95,6 @@ def process_one(src_csv: Path, out_path: Path, trace_path: Path, cat: str,
         )
         trace["agent_ms"] = round((time.time() - _t_agent) * 1000)
 
-    # Hypothesis recovery, productionized: the agent's self-reported HYPOTHESIS is
-    # attached to the answering model as a defensive hint.
-    # This replaces hyp-v1's post-hoc 4o-mini extraction -- self-consistent within
-    # one model, with no external dependency.
-    hyp = trace.get("hypothesis") if trace else None
-    if hyp:
-        context = context + (
-            "\n\nNOTE: A preliminary evidence-search analysis tentatively concluded "
-            f"the answer may be: \"{hyp}\". Treat this only as a hint — verify it against "
-            "the evidence above; if the evidence contradicts it, trust the evidence."
-        )
-
     answer = stage.ask_llm(llm, question=rewritten, context=context, question_date=question_date)
     stage.single_result_frame(
         question=question, question_date=question_date, context=context,
