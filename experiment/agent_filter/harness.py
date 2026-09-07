@@ -164,16 +164,7 @@ def _prepare(
     # the abstention and answer.
     trace["is_abstention"] = bool(csv_path) and Path(csv_path).stem.endswith("_abs")
 
-    # The skill library (driven by question shape) takes precedence; only on a
-    # miss does it fall back to the category hint
-    hint = ""
-    if config.use_skills:
-        from experiment.agent_filter.prompting.skills import select_skills
-        matched = select_skills(question)
-        trace["skills"] = [name for name, _ in matched]
-        hint = "\n\n".join(strategy for _, strategy in matched)
-    if not hint:
-        hint = CATEGORY_HINTS.get(category, "")
+    hint = CATEGORY_HINTS.get(category, "")
 
     # VECTOR tool: enabled only when this question's summaries VDB is present
     # (the agent decides for itself when to search semantically -- unlike the

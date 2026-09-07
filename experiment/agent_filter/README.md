@@ -32,7 +32,6 @@ configuration defaults, not invariants for every run.
 | Evidence selection policy | [`finalization.py`](finalization.py) |
 | Semantic search over the summaries VDB | [`vector_search.py`](vector_search.py) |
 | Prompts | [`prompting/`](prompting) |
-| Optional mechanisms (dated fact ledger) | [`extensions/`](extensions) |
 | LongMemEval replay | [`replay/longmem.py`](replay/longmem.py) |
 | LoCoMo replay | [`replay/locomo.py`](replay/locomo.py) |
 | Shared defaults | [`../experiment_config.py`](../experiment_config.py) |

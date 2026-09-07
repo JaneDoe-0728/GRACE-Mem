@@ -27,7 +27,6 @@ KNOBS = [
     ("grep_agent_include_pair", "include_pair"),
     ("grep_agent_adjudicate", "adjudicate"),
     ("grep_agent_adjudicate_categories", "adjudicate_categories"),
-    ("grep_agent_use_skills", "use_skills"),
     ("grep_agent_vector_search", "vector_search"),
     ("grep_agent_vector_topn", "vector_topn"),
     ("grep_agent_vector_min_score", "vector_min_score"),
@@ -65,6 +64,7 @@ def test_retired_and_unrelated_keys_are_ignored() -> None:
         "grep_agent_evidence_floor": 12,
         "grep_agent_verify_rounds": 3,
         "grep_agent_min_keep_aggregation": 4,
+        "grep_agent_use_skills": True,
         "grep_agent_force_verified_final": 1,
         "grep_agent_adjudicate_keep_all_categories": ("multi_session",),
     })

@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 import threading
@@ -36,15 +35,11 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 import pandas as pd
 
 from experiment.agent_filter.corpus import Corpus, Turn
-from experiment.agent_filter.extensions.ledger import append_ledger, compile_table
 from experiment.agent_filter.harness import refine_context
-from experiment.agent_filter.prompting.skills import SKILLS as _SKILLS
 from experiment.experiment_config import INGEST_PARAMS
 
 if TYPE_CHECKING:
     from grace_mem.services.llm import LLMClient
-
-_TEMPORAL_DET = {n: d for n, d, _ in _SKILLS}["temporal-computation"]
 
 DATA_JSON = _ROOT / "experiment" / "locomo" / "data" / "locomo10.json"
 OUT_ROOT = _ROOT / "experiment" / "locomo" / "output" / "standard"
@@ -134,26 +129,8 @@ def locomo_answer(llm, question: str, kg_context: str) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
-_compiler_tls = threading.local()
-
-
-def _compiler():
-    # Ledger fact-table compiler (used by --ledger). Defaults to the main LLM
-    # (LLM_API/MODEL_NAME); optionally point it at a stronger endpoint via
-    # LEDGER_COMPILER_API / LEDGER_COMPILER_MODEL.
-    if getattr(_compiler_tls, "c", None) is None:
-        from grace_mem.services.llm import LLMClient
-
-        _compiler_tls.c = LLMClient(
-            base_url=os.getenv("LEDGER_COMPILER_API") or None,
-            model_name=os.getenv("LEDGER_COMPILER_MODEL") or None,
-            timeout=300.0,
-        )
-    return _compiler_tls.c
-
-
 def process_row(row: dict, corpus: Corpus, params: dict, trace_fh, lock,
-                use_ledger: bool = False, artifact_dir=None) -> dict:
+                artifact_dir=None) -> dict:
     q = str(row.get("question", "")).strip()
     ctx = str(row.get("retrieved_context", ""))
     llm = _llm()
@@ -162,10 +139,6 @@ def process_row(row: dict, corpus: Corpus, params: dict, trace_fh, lock,
         category=None, params=params, corpus=corpus,
         artifact_dir=artifact_dir,
     )
-    if use_ledger and _TEMPORAL_DET.search(q):
-        idx = new_ctx.find("### Evidence Summary")
-        table = compile_table(_compiler(), new_ctx[idx:] if idx != -1 else new_ctx)
-        new_ctx = append_ledger(new_ctx, table)
     ans = locomo_answer(llm, q, new_ctx)
     out = dict(row)
     out["retrieved_context"] = new_ctx
@@ -191,8 +164,6 @@ def main():
                     help="CSV of (sample, question): run only the listed questions -- the error set or the retention gate")
     ap.add_argument("--granularity", choices=["chunk", "turn"], default="chunk",
                     help="corpus unit: chunk (8 turns) or turn (a single turn, for finer localization)")
-    ap.add_argument("--ledger", action="store_true",
-                    help="temporal-shape questions: compile the evidence into a dated fact table and attach it (compile=120B@.34)")
     args = ap.parse_args()
 
     from experiment.experiment_config import GREP_AGENT_PARAMS
@@ -240,7 +211,7 @@ def main():
             open(out_dir / "_grep_traces.jsonl", "w") as tf,
             ThreadPoolExecutor(max_workers=args.workers) as ex,
         ):
-                futs = {ex.submit(process_row, r, corpus, params, tf, lock, args.ledger,
+                futs = {ex.submit(process_row, r, corpus, params, tf, lock,
                                   artifact_dir): i
                         for i, r in enumerate(rows)}
                 for done, fut in enumerate(as_completed(futs), start=1):

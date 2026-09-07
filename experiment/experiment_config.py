@@ -146,11 +146,6 @@ GREP_AGENT_PARAMS = {
         "single_session_preference", "multi_session",
         "temporal_reasoning", "knowledge_update",
     ),
-    # The skill library: question-shape driven search tactics (skills.py) that
-    # replace the category hint when one fires.
-    # Off by default since 2026-07-22: hints are decoupled from filter_fetch, and
-    # base injects no skill hint.
-    "grep_agent_use_skills": False,
     # ── VECTOR tool: semantic search the agent drives itself ─────────────────
     # Gives the agent a VECTOR <query> command that searches this question's
     # summaries VDB directly (enabled only when artifact_dir holds a

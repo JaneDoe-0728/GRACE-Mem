@@ -335,7 +335,6 @@ of them set.
 | `KG_ABLATION_*` | One switch per removed retrieval channel; see `grace_mem/retrieval/ablation.py` |
 | `KG_TRACE_PRETTY_LOG_DIR` | Where the human-readable ingest trace is written |
 | `LONGMEM_ARTIFACT_ROOT` | LongMem root holding per-question summary VDBs, for Agent Filter `VECTOR` |
-| `GREP_AGENT_COUNTING_SKILL` | `1` injects the disabled counting skill into the Agent Filter prompt |
 
 Determinism is configured in `experiment_config.py`
 (`REPRODUCIBILITY_PARAMS`), not through the environment.
