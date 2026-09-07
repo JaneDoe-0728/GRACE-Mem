@@ -8,7 +8,7 @@ the only operation that stays coherent without coordination.
 
 Lives in `utils/` rather than with the analysis that reads these files, because
 the ingestion pipeline writes here too. The analysis itself belongs to the
-benchmark harness -- see `experiment/common/error_analysis.py`.
+benchmark harness -- see `experiment/benchmarking/error_analysis.py`.
 """
 
 from __future__ import annotations

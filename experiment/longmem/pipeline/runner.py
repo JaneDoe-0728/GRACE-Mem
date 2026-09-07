@@ -28,7 +28,7 @@ from typing import Any
 
 import pandas as pd
 
-from experiment.common.error_analysis import (
+from experiment.benchmarking.error_analysis import (
     append_analysis_record,
     append_pretty_block,
     build_bridge_label,
@@ -477,7 +477,7 @@ class DatasetRunner:
         by default (`GREP_AGENT_PARAMS["use_grep_agent"]`), so it runs on every
         question and its extra LLM call is part of every measured LongMem run.
         """
-        from experiment.common.agent_filter import maybe_refine_context
+        from experiment.benchmarking.agent_filter import maybe_refine_context
 
         return maybe_refine_context(
             question=question,

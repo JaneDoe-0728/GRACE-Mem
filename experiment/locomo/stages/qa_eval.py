@@ -56,7 +56,7 @@ except Exception as e:
         f"Failed to import GRACE-Mem modules. Ensure PYTHONPATH includes your project root. Original error: {e!r}"
     )
 
-from experiment.common.error_analysis import (
+from experiment.benchmarking.error_analysis import (
     append_analysis_record,
     compact_json,
     derive_drop_reasons,
@@ -1163,7 +1163,7 @@ def rag_answer(
     # note below is derived afterwards, so it reflects the context that is
     # actually sent.
     if agent_filter_corpus is not None:
-        from experiment.common.agent_filter import maybe_refine_context
+        from experiment.benchmarking.agent_filter import maybe_refine_context
 
         kg_context = maybe_refine_context(
             question=query,

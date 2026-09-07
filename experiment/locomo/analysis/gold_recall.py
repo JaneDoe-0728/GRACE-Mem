@@ -51,7 +51,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from experiment.common.recall import RecallStats, format_ratio
+from experiment.benchmarking.recall import RecallStats, format_ratio
 
 DATASET_JSON = _ROOT / "experiment" / "locomo" / "data" / "locomo10.json"
 DEFAULT_RUN_ROOT = _ROOT / "experiment" / "locomo" / "output" / "standard"

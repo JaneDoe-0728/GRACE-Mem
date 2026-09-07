@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from experiment.common.evaluation.judge import JudgeEngine
-from experiment.common.evaluation.judge import parse_binary_judge as _parse_binary_judge
+from experiment.benchmarking.evaluation.judge import JudgeEngine
+from experiment.benchmarking.evaluation.judge import parse_binary_judge as _parse_binary_judge
 from experiment.longmem.utils.io import read_csv_dict_rows, write_csv_frame
 
 

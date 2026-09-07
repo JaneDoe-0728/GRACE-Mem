@@ -19,7 +19,7 @@ import json
 import os
 from pathlib import Path
 
-from experiment.common.error_analysis import (
+from experiment.benchmarking.error_analysis import (
     append_analysis_record,
     append_pretty_block,
     build_bridge_label,

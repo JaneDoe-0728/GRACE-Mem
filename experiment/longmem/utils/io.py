@@ -23,7 +23,7 @@ from typing import Any
 
 import pandas as pd
 
-from experiment.common.run_metadata import to_jsonable
+from experiment.benchmarking.run_metadata import to_jsonable
 
 
 def ensure_dir(path: Path) -> Path:

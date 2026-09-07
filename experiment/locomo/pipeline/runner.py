@@ -25,13 +25,13 @@ if __package__ in (None, ""):
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-from experiment.common.reproducibility import (
+from experiment.benchmarking.reproducibility import (
     activate_reproducibility,
     attach_reproducibility_metadata,
     current_reproducibility_state,
     write_reproducibility_file,
 )
-from experiment.common.run_metadata import namespace_to_dict, write_run_metadata
+from experiment.benchmarking.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.locomo.analysis.aggregate import maybe_aggregate_run
 from experiment.locomo.helpers.run_hooks import (
     _refresh_system,

@@ -7,7 +7,7 @@ empty turns, then group by ``pos // chunk_turns`` -- because the sids the agent
 selects have to name the same units retrieval scored.
 
 Shared by the live pipeline (locomo/pipeline/worker.py) and the replay entry
-point (common/post_retrieval/locomo.py), which is the only reason it is not a private
+point (benchmarking/post_retrieval/locomo.py), which is the only reason it is not a private
 function of either.
 """
 from __future__ import annotations

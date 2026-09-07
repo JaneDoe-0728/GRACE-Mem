@@ -6,10 +6,10 @@ forward; an incorrect verdict is judged again with temperatures 0.0, 0.3, and
 dedicated abstention rubric.
 
 Examples:
-    uv run python experiment/common/evaluation/judge.py locomo my-run
-    uv run python experiment/common/evaluation/judge.py longmem my-run
-    uv run python experiment/common/evaluation/judge.py locomo my-run --votes 1
-    uv run python experiment/common/evaluation/judge.py longmem my-run --dry-run
+    uv run python experiment/benchmarking/evaluation/judge.py locomo my-run
+    uv run python experiment/benchmarking/evaluation/judge.py longmem my-run
+    uv run python experiment/benchmarking/evaluation/judge.py locomo my-run --votes 1
+    uv run python experiment/benchmarking/evaluation/judge.py longmem my-run --dry-run
 """
 from __future__ import annotations
 

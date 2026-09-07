@@ -26,13 +26,13 @@ import sys
 
 import pandas as pd
 
-from experiment.common.evaluation.judge import (
+from experiment.benchmarking.evaluation.judge import (
     LONGMEM_CATEGORIES,
     SKIP_LONGMEM_FILES,
     JudgeEngine,
     find_column,
 )
-from experiment.common.paths import REPO_ROOT
+from experiment.benchmarking.paths import REPO_ROOT
 from grace_mem.services.llm import LLMClient
 
 CONFIG_PATH = REPO_ROOT / "experiment" / "experiment_config.py"

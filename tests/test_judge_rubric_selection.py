@@ -13,7 +13,7 @@ caller passes nothing -- the gold text.
 
 from __future__ import annotations
 
-from experiment.common.evaluation.judge import JudgeEngine
+from experiment.benchmarking.evaluation.judge import JudgeEngine
 from experiment.longmem.prompts import build_judge_messages, is_abstention_gold
 
 ABS_GOLD = "The information provided is not enough to answer this question."

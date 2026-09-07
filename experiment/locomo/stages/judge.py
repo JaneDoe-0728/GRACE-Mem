@@ -34,10 +34,10 @@ if __package__ in (None, ""):
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-from experiment.common.evaluation.judge import (
+from experiment.benchmarking.evaluation.judge import (
     normalize_temporal_gold as _normalize_temporal_gold,
 )
-from experiment.common.evaluation.judge import (
+from experiment.benchmarking.evaluation.judge import (
     parse_locomo_verdict as _parse_label,
 )
 from experiment.locomo.helpers.dataset import (

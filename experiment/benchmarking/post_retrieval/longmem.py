@@ -11,7 +11,7 @@ Why:
      through this same path
 
 Usage:
-    python -m experiment.common.post_retrieval.longmem \
+    python -m experiment.benchmarking.post_retrieval.longmem \
         --source-run rr16-base-split --run-tag rr16-grep-v3 --workers 3
     # --limit N / --category X for a small sample
 """
@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from experiment.common.paths import REPO_ROOT
+from experiment.benchmarking.paths import REPO_ROOT
 from experiment.longmem.stages.qa_eval import QAEvalStage
 from grace_mem.agent_filter.harness import refine_context
 from grace_mem.services.llm import LLMClient

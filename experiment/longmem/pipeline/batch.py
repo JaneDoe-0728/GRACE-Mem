@@ -13,7 +13,7 @@ import os
 import sys
 from pathlib import Path
 
-from experiment.common.run_metadata import namespace_to_dict, write_run_metadata
+from experiment.benchmarking.run_metadata import namespace_to_dict, write_run_metadata
 from experiment.experiment_config import INGEST_PARAMS, RETRIEVAL_PARAMS
 from experiment.longmem.helpers.args import (
     add_child_args,

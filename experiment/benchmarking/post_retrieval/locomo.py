@@ -13,7 +13,7 @@ Porting design, kept to the minimum change:
 
 Usage:
     LLM_API=http://localhost:1234/v1 MODEL_NAME=openai/gpt-oss-20b \
-    python -m experiment.common.post_retrieval.locomo --source-run locomo-n8-full \
+    python -m experiment.benchmarking.post_retrieval.locomo --source-run locomo-n8-full \
         --run-tag locomo-n8-grep --chunk-turns 8 --workers 2
 """
 from __future__ import annotations
@@ -95,7 +95,7 @@ def process_row(row: dict, corpus: Corpus, params: dict, trace_fh, lock,
     with lock:
         # Write the full trace (timing, commands, dropped), matching
         # LongMem's.
-        # Keep the LongMem replay's timing and agent fields for experiment/common/evaluation/score.py.
+        # Keep the LongMem replay's timing and agent fields for experiment/benchmarking/evaluation/score.py.
         trace_fh.write(json.dumps({"question": q[:120], **trace}, ensure_ascii=False) + "\n")
         trace_fh.flush()
     return out

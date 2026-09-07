@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from experiment.common.reproducibility import attach_reproducibility_metadata
+from experiment.benchmarking.reproducibility import attach_reproducibility_metadata
 from grace_mem.utils.paths import resolve_artifacts_dir
 
 EVAL_COLUMNS = [

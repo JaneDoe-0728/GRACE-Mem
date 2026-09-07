@@ -117,7 +117,7 @@ Two benchmarks — **LoCoMo** (`experiment/locomo/`) and **LongMem**
 
 ## Evaluation
 
-`experiment/common/evaluation/`.
+`experiment/benchmarking/evaluation/`.
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
@@ -190,7 +190,7 @@ reference frame. Retire "context" everywhere else in favour of **Evidence**;
 rename `ContextFilter` → `EvidenceFilter`.
 
 **2. "Category" means two unrelated things.** `TimeCategory` classifies a temporal
-expression; `CategoryScore` ([score.py:68](../experiment/common/evaluation/score.py#L68))
+expression; `CategoryScore` ([score.py:68](../experiment/benchmarking/evaluation/score.py#L68))
 breaks accuracy down by question class.
 *Recommendation:* both keep their prefix and are never called bare "Category".
 The evaluation side should be **QuestionCategory** to make the prefix explicit;

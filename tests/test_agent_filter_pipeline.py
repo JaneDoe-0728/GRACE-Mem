@@ -309,7 +309,7 @@ def test_the_mount_accepts_a_prebuilt_corpus_with_no_csv(monkeypatch) -> None:
     existed and bailed, which would have made the LoCoMo mount silently inert.
     """
     import experiment.experiment_config as experiment_config
-    from experiment.common.agent_filter import maybe_refine_context
+    from experiment.benchmarking.agent_filter import maybe_refine_context
 
     monkeypatch.setattr(
         experiment_config, "GREP_AGENT_PARAMS", {"use_grep_agent": True}, raising=False
@@ -334,7 +334,7 @@ def test_the_mount_accepts_a_prebuilt_corpus_with_no_csv(monkeypatch) -> None:
 
 def test_the_mount_is_a_no_op_with_neither_a_corpus_nor_a_csv(monkeypatch) -> None:
     import experiment.experiment_config as experiment_config
-    from experiment.common.agent_filter import maybe_refine_context
+    from experiment.benchmarking.agent_filter import maybe_refine_context
 
     monkeypatch.setattr(
         experiment_config, "GREP_AGENT_PARAMS", {"use_grep_agent": True}, raising=False

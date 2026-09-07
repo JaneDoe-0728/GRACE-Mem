@@ -21,7 +21,7 @@ import re
 
 import pandas as pd
 
-from experiment.common.paths import REPO_ROOT
+from experiment.benchmarking.paths import REPO_ROOT
 
 OUT = REPO_ROOT / "experiment" / "locomo" / "output" / "standard"
 
@@ -88,7 +88,7 @@ def cluster(llm, question: str, answers: list[str]) -> list[list[int]]:
 
 
 def main():
-    from experiment.common.evaluation.judge import JudgeEngine, openai_api_key
+    from experiment.benchmarking.evaluation.judge import JudgeEngine, openai_api_key
     from grace_mem.services.llm import LLMClient
 
     ap = argparse.ArgumentParser()

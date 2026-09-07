@@ -287,9 +287,9 @@ adversarial questions unless `--include-adversarial` is supplied.
 For paper scoring, use the shared post-hoc judge after answer generation:
 
 ```bash
-uv run python -m experiment.common.evaluation.judge locomo <run-tag> --samples 0-9
-uv run python -m experiment.common.evaluation.judge longmem <run-tag>
-uv run python -m experiment.common.evaluation.score <run-tag>
+uv run python -m experiment.benchmarking.evaluation.judge locomo <run-tag> --samples 0-9
+uv run python -m experiment.benchmarking.evaluation.judge longmem <run-tag>
+uv run python -m experiment.benchmarking.evaluation.score <run-tag>
 ```
 
 The exact carry/rejudge rule, LongMemEval abstention handling, result columns,
@@ -362,6 +362,6 @@ the configured LLM. These LongMem modules use the `agent_filter_` prefix.
 - If a process was interrupted, use the normal command again first. Completion
   checks and checkpoints are designed to resume work without rebuilding complete
   datasets.
-- Use `experiment/common/refresh_system.py` only when intentionally clearing active graph/model
+- Use `experiment/benchmarking/refresh_system.py` only when intentionally clearing active graph/model
   state between manual experiments; it is not a substitute for matching artifact
   configuration.

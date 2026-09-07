@@ -24,7 +24,7 @@ from experiment.experiment_config import (
 
 # LongMem-only: must match the value used when these artifacts were ingested.
 USE_SPLIT_SUMMARY = bool(INGEST_PARAMS["use_split_summary"])
-from experiment.common.error_analysis import (
+from experiment.benchmarking.error_analysis import (
     append_analysis_record,
     append_pretty_block,
     build_bridge_label,
@@ -202,7 +202,7 @@ class LongMemRerun:
                     retrieval_params=RETRIEVAL_PARAMS,
                     query_time=question_date,
                 )
-                from experiment.common.agent_filter import maybe_refine_context
+                from experiment.benchmarking.agent_filter import maybe_refine_context
                 context = maybe_refine_context(
                     question=rewritten_q,
                     context=context,

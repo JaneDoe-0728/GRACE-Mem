@@ -2,12 +2,12 @@
 
 Oracle generation is intentionally separate from standardized judging. Pass
 ``--judge`` to run the shared judge after generation, or invoke
-``experiment/common/evaluation/judge.py`` later.
+``experiment/benchmarking/evaluation/judge.py`` later.
 
 Examples:
-    uv run python experiment/common/evaluation/oracle.py locomo oracle-locomo --samples 0-9
-    uv run python experiment/common/evaluation/oracle.py locomo oracle-window2 --window 2 --include-photo
-    uv run python experiment/common/evaluation/oracle.py longmem oracle-longmem --workers 8
+    uv run python experiment/benchmarking/evaluation/oracle.py locomo oracle-locomo --samples 0-9
+    uv run python experiment/benchmarking/evaluation/oracle.py locomo oracle-window2 --window 2 --include-photo
+    uv run python experiment/benchmarking/evaluation/oracle.py longmem oracle-longmem --workers 8
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from experiment.common.evaluation.judge import (
+from experiment.benchmarking.evaluation.judge import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
     LONGMEM_CATEGORIES,
@@ -474,7 +474,7 @@ def _write_metadata(run_dir: Path, config: OracleConfig, args: argparse.Namespac
     """Record the oracle run's configuration alongside its results."""
     run_dir.mkdir(parents=True, exist_ok=True)
     metadata = {
-        "entrypoint": "experiment.common.evaluation.oracle",
+        "entrypoint": "experiment.benchmarking.evaluation.oracle",
         "config": asdict(config),
         "arguments": {
             key: str(value) if isinstance(value, Path) else value
@@ -497,7 +497,7 @@ def _run_judge(args: argparse.Namespace) -> None:
     command = [
         sys.executable,
         "-m",
-        "experiment.common.evaluation.judge",
+        "experiment.benchmarking.evaluation.judge",
         args.benchmark,
         args.run_tag,
         "--output-root",

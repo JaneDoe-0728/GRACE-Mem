@@ -43,9 +43,9 @@ point and the replay entry points -- lives under `experiment/`.
 
 | Purpose | File |
 |---|---|
-| The mount point: supplies `GREP_AGENT_PARAMS` | [`common/agent_filter.py`](../../experiment/common/agent_filter.py) |
-| LongMemEval replay | [`post_retrieval/longmem.py`](../../experiment/common/post_retrieval/longmem.py) |
-| LoCoMo replay | [`post_retrieval/locomo.py`](../../experiment/common/post_retrieval/locomo.py) |
+| The mount point: supplies `GREP_AGENT_PARAMS` | [`benchmarking/agent_filter.py`](../../experiment/benchmarking/agent_filter.py) |
+| LongMemEval replay | [`post_retrieval/longmem.py`](../../experiment/benchmarking/post_retrieval/longmem.py) |
+| LoCoMo replay | [`post_retrieval/locomo.py`](../../experiment/benchmarking/post_retrieval/locomo.py) |
 | Shared defaults | [`experiment_config.py`](../../experiment/experiment_config.py) |
 
 `GREP_AGENT_PARAMS` is the source of truth for algorithm defaults such as mode,
@@ -74,7 +74,7 @@ Relevant environment variables:
 ## LongMemEval Replay
 
 ```bash
-uv run python -m experiment.common.post_retrieval.longmem \
+uv run python -m experiment.benchmarking.post_retrieval.longmem \
   --source-run <existing-retrieval-run> \
   --run-tag <agent-filter-run> \
   --workers 4
@@ -94,7 +94,7 @@ answers, and writes a separate run under
 ## LoCoMo Replay
 
 ```bash
-uv run python -m experiment.common.post_retrieval.locomo \
+uv run python -m experiment.benchmarking.post_retrieval.locomo \
   --source-run <existing-retrieval-run> \
   --run-tag <agent-filter-run> \
   --chunk-turns 8 \
@@ -148,9 +148,9 @@ Trace files are written alongside each run:
 Judge and score the new outputs with the shared evaluation CLIs:
 
 ```bash
-uv run python -m experiment.common.evaluation.judge longmem <agent-filter-run>
-uv run python -m experiment.common.evaluation.judge locomo <agent-filter-run> --samples 0-9
-uv run python -m experiment.common.evaluation.score <agent-filter-run> --agent
+uv run python -m experiment.benchmarking.evaluation.judge longmem <agent-filter-run>
+uv run python -m experiment.benchmarking.evaluation.judge locomo <agent-filter-run> --samples 0-9
+uv run python -m experiment.benchmarking.evaluation.score <agent-filter-run> --agent
 ```
 
 Use the same source run, question set, answer model, judge model, and evaluation

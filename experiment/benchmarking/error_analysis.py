@@ -13,7 +13,7 @@ without every stage having to report its own losses.
 that scored well and still lost, which is where a threshold set slightly wrong
 shows up.
 
-Both benchmarks use this identically, which is what makes it common/. The
+Both benchmarks use this identically, which is why it lives in benchmarking/. The
 append-only writers it hands results to live in `grace_mem.utils.analysis_log`,
 because the ingestion pipeline writes those artifacts too.
 """

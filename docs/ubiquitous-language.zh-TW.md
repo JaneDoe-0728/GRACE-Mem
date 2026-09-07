@@ -114,7 +114,7 @@ GRACE-Mem 實際儲存的物件，全部定義於 `grace_mem/utils/common.py`。
 
 ## Evaluation（評測）
 
-位於 `experiment/common/evaluation/`。
+位於 `experiment/benchmarking/evaluation/`。
 
 | Term | 定義 | Aliases to avoid |
 | --- | --- | --- |
@@ -185,7 +185,7 @@ GRACE-Mem 實際儲存的物件，全部定義於 `grace_mem/utils/common.py`。
 地方的 "context" 一律退役，改用 **Evidence**；`ContextFilter` 更名為 `EvidenceFilter`。
 
 **2. 「Category」同時指兩件無關的事。** `TimeCategory` 分類的是時間表達；
-`CategoryScore`（[score.py:68](../experiment/common/evaluation/score.py#L68)）拆解的是
+`CategoryScore`（[score.py:68](../experiment/benchmarking/evaluation/score.py#L68)）拆解的是
 依問題類別的 accuracy。
 *建議：* 兩者都保留前綴，永遠不以裸露的 "Category" 稱呼。評測那一側應改為
 **QuestionCategory** 讓前綴顯性化；`CATEGORIES` / `LONGMEM_CATEGORIES` 改為

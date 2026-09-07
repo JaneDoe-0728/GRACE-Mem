@@ -42,7 +42,7 @@ if __package__ in (None, "") and str(_ROOT) not in sys.path:
 
 import pandas as pd
 
-from experiment.common.recall import RecallStats, format_ratio
+from experiment.benchmarking.recall import RecallStats, format_ratio
 
 DATA_ROOT = _ROOT / "experiment" / "longmem" / "script_data"
 OUTPUT_ROOT = _ROOT / "experiment" / "longmem" / "output"

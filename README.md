@@ -201,9 +201,9 @@ schema, output layout, and artifact compatibility rules are in the
 Use the shared post-hoc evaluation modules on completed runs:
 
 ```bash
-uv run python -m experiment.common.evaluation.judge locomo <run-tag> --samples 0-9
-uv run python -m experiment.common.evaluation.judge longmem <run-tag>
-uv run python -m experiment.common.evaluation.score <run-tag>
+uv run python -m experiment.benchmarking.evaluation.judge locomo <run-tag> --samples 0-9
+uv run python -m experiment.benchmarking.evaluation.judge longmem <run-tag>
+uv run python -m experiment.benchmarking.evaluation.score <run-tag>
 ```
 
 See [EVALUATION.md](EVALUATION.md) for voting, abstention, output-column, and
@@ -224,11 +224,11 @@ but successful refinement is not a guarantee that answer quality improves.
 
 ```bash
 # LongMemEval
-uv run python -m experiment.common.post_retrieval.longmem \
+uv run python -m experiment.benchmarking.post_retrieval.longmem \
   --source-run <existing-run> --run-tag <agent-run> --workers 4
 
 # LoCoMo
-uv run python -m experiment.common.post_retrieval.locomo \
+uv run python -m experiment.benchmarking.post_retrieval.locomo \
   --source-run <existing-run> --run-tag <agent-run> \
   --chunk-turns 8 --samples 0-9 --workers 4 --granularity turn
 ```
@@ -364,7 +364,7 @@ GRACE-Mem/
 │   ├── lexical.py              # BM25 tokenization, shared by both capabilities
 │   └── bootstrap.py            # constructs and wires the components
 ├── experiment/
-│   ├── common/                 # shared evaluation, run helpers, replay entry points
+│   ├── benchmarking/           # evaluation, run helpers, post-retrieval entry points
 │   ├── locomo/                 # LoCoMo pipeline and analysis
 │   └── longmem/                # LongMemEval pipeline and analysis
 ├── docs/architecture/          # architecture figures
