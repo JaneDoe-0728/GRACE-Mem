@@ -26,18 +26,30 @@ point and the replay entry points -- lives under `experiment/`.
 **The mechanism** — takes its settings as an argument, imports nothing from
 `experiment/`:
 
+`harness.py` is the sequence; the three subpackages below it answer three
+different questions -- how the agent runs, what it may look at, and what
+survives.
+
 | Purpose | File |
 |---|---|
 | Orchestration: prepare, search, finalize | [`harness.py`](harness.py) |
 | Configuration, as one typed dataclass | [`config.py`](config.py) |
-| The per-question corpus, and the GREP/READ tools | [`corpus.py`](corpus.py) |
-| Command parsing across every reply format | [`protocol.py`](protocol.py) |
-| Reading and rebuilding the answer context | [`context.py`](context.py) |
-| The search loop and its tools | [`loop.py`](loop.py) |
-| Answer-blind adjudication | [`adjudication.py`](adjudication.py) |
-| Evidence selection policy | [`finalization.py`](finalization.py) |
-| Semantic search over the summaries VDB | [`vector_search.py`](vector_search.py) |
+| **[`runtime/`](runtime) — how the agent runs** | |
+| The search loop and its tools | [`runtime/session.py`](runtime/session.py) |
+| Command parsing across every reply format | [`runtime/protocol.py`](runtime/protocol.py) |
+| Which endpoint the agent talks to | [`runtime/llm.py`](runtime/llm.py) |
+| **[`retrieval/`](retrieval) — what it may look at** | |
+| The per-question corpus, and the GREP/READ tools | [`retrieval/corpus.py`](retrieval/corpus.py) |
+| Semantic search over the summaries VDB | [`retrieval/vector.py`](retrieval/vector.py) |
+| **[`evidence/`](evidence) — what survives** | |
+| Reading and rebuilding the answer context, and the wire format both directions use | [`evidence/context.py`](evidence/context.py) |
+| Evidence selection policy | [`evidence/finalization.py`](evidence/finalization.py) |
+| Answer-blind adjudication | [`evidence/adjudication.py`](evidence/adjudication.py) |
 | Prompts | [`prompting/`](prompting) |
+
+`retrieval/` and `evidence/` name this package's own sub-capabilities. They are
+not `grace_mem.retrieval` or `grace_mem.retrieval.evidence`, which produced the
+context this package is handed.
 
 **The benchmark side** — the only code that knows where the settings come from:
 
@@ -159,6 +171,6 @@ settings when comparing a baseline with Agent Filter.
 ## LoCoMo Trace Accounting
 
 LoCoMo seed IDs are chunk-level, while turn-granularity FINAL IDs can include a
-turn suffix such as `t2`. `replay/locomo.py` normalizes FINAL IDs to their chunk
+turn suffix such as `t2`. `post_retrieval/locomo.py` normalizes FINAL IDs to their chunk
 prefix before writing kept/added/dropped trace accounting. LongMem seed and
 FINAL IDs already use the same ID space.

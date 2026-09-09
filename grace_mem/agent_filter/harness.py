@@ -22,21 +22,21 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from grace_mem.agent_filter.config import AgentFilterConfig
-from grace_mem.agent_filter.context import (
+from grace_mem.agent_filter.evidence.context import (
     candidates_block,
     graph_context_from_context,
     seed_scores_from_context,
     seed_sids_from_context,
 )
-from grace_mem.agent_filter.corpus import Corpus, load_corpus
-from grace_mem.agent_filter.finalization import EvidenceFinalizer
-from grace_mem.agent_filter.loop import AgentSession, AgentTools
+from grace_mem.agent_filter.evidence.finalization import EvidenceFinalizer
 from grace_mem.agent_filter.prompting.agent import (
     CATEGORY_HINTS,
     SYSTEM_PROMPT,
     USER_TEMPLATE,
     VECTOR_TOOL_BLOCK,
 )
+from grace_mem.agent_filter.retrieval.corpus import Corpus, load_corpus
+from grace_mem.agent_filter.runtime.session import AgentSession, AgentTools
 
 _FILTER_MODE_RULE = (
     "\nIMPORTANT: you may only KEEP or DROP candidates; do not add new sids in FINAL."

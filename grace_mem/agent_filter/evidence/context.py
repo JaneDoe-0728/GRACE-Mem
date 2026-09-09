@@ -4,13 +4,23 @@ Agent Filter is handed a rendered answer context and has to return one, so this
 module owns both directions of that format: which sids the upstream pipeline
 put in the Evidence Summary, with what rerank scores and what graph prefix, and
 how the selected turns are rendered back into the same block.
+
+That ownership is why the two format constants live here rather than beside the
+parser that consumes them. `EVIDENCE_HEADER` and `SID_RE` are the wire format
+between retrieval, this package, and the answering stage; `runtime/protocol.py`
+imports `SID_RE` from here because it reads sids the agent quotes back out of
+this block, not because it defines what one looks like.
 """
 from __future__ import annotations
 
 import re
 
-from grace_mem.agent_filter.corpus import Corpus
-from grace_mem.agent_filter.models import EVIDENCE_HEADER, SID_RE
+from grace_mem.agent_filter.retrieval.corpus import Corpus
+
+# The header the answer context puts above the retrieved evidence, and the sid
+# tag each entry carries.
+EVIDENCE_HEADER = "### Evidence Summary"
+SID_RE = re.compile(r"\[sid=([^\]\s]+)\]")
 
 
 def seed_sids_from_context(context: str) -> list[str]:

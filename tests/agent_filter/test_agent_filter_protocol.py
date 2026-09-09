@@ -9,8 +9,8 @@ parser has to keep answering identically.
 
 from __future__ import annotations
 
-from grace_mem.agent_filter.models import Command
-from grace_mem.agent_filter.protocol import (
+from grace_mem.agent_filter.runtime.protocol import (
+    Command,
     parse_command,
     parse_response,
     response_command_candidates,

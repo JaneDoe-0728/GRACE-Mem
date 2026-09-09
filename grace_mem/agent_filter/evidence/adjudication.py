@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import re
 
-from grace_mem.agent_filter.corpus import Corpus
 from grace_mem.agent_filter.prompting.adjudication import (
     ADJUDICATE_SYSTEM,
     ADJUDICATE_USER,
 )
+from grace_mem.agent_filter.retrieval.corpus import Corpus
 
 
 def adjudicate_candidates(

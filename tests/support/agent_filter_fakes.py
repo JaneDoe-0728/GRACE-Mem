@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from grace_mem.agent_filter.corpus import Corpus, Turn
+from grace_mem.agent_filter.retrieval.corpus import Corpus, Turn
 
 
 def response(

@@ -11,10 +11,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from grace_mem.agent_filter.harness import refine_context
-from grace_mem.agent_filter.llm_factory import agent_llm
+from grace_mem.agent_filter.runtime.llm import agent_llm
 
 if TYPE_CHECKING:
-    from grace_mem.agent_filter.corpus import Corpus
+    from grace_mem.agent_filter.retrieval.corpus import Corpus
 
 
 def maybe_refine_context(

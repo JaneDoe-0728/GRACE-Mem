@@ -12,7 +12,7 @@ function of either.
 """
 from __future__ import annotations
 
-from grace_mem.agent_filter.corpus import Corpus, Turn
+from grace_mem.agent_filter.retrieval.corpus import Corpus, Turn
 
 
 def build_chunk_corpus(sample: dict, sample_idx: int, n: int, unit: str = "chunk") -> Corpus:

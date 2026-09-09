@@ -36,8 +36,8 @@ import pandas as pd
 
 from experiment.experiment_config import INGEST_PARAMS
 from experiment.locomo.helpers.agent_filter_corpus import build_chunk_corpus
-from grace_mem.agent_filter.corpus import Corpus
 from grace_mem.agent_filter.harness import refine_context
+from grace_mem.agent_filter.retrieval.corpus import Corpus
 
 if TYPE_CHECKING:
     from grace_mem.services.llm import LLMClient

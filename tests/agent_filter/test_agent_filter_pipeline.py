@@ -214,7 +214,7 @@ def test_a_vector_hit_counts_as_verified_evidence(monkeypatch, tmp_path) -> None
     # The prompt calls VECTOR results "leads, not verified evidence", while the
     # runtime trusts them outright. The runtime behaviour is what ships, so it is
     # what is pinned; reconciling the two is a behaviour change, not a refactor.
-    from grace_mem.agent_filter import vector_search
+    from grace_mem.agent_filter.retrieval import vector as vector_search
 
     (tmp_path / "summaries_chroma").mkdir()
     monkeypatch.setattr(

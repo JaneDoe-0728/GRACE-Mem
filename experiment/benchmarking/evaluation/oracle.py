@@ -42,7 +42,7 @@ from experiment.locomo.helpers.dataset import (
     normalize_qa_item,
 )
 from experiment.longmem.stages.qa_eval import QAEvalStage
-from grace_mem.agent_filter.corpus import Corpus, load_corpus
+from grace_mem.agent_filter.retrieval.corpus import Corpus, load_corpus
 from grace_mem.services.llm import LLMClient
 
 LOCOMO_DATA = _ROOT / "experiment" / "locomo" / "data" / "locomo10.json"

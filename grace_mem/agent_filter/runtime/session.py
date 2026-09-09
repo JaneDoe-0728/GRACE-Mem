@@ -16,10 +16,10 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-from grace_mem.agent_filter import vector_search
-from grace_mem.agent_filter.corpus import Corpus
-from grace_mem.agent_filter.models import SID_RE, Command
-from grace_mem.agent_filter.protocol import extract_final_sids, parse_response
+from grace_mem.agent_filter.evidence.context import SID_RE
+from grace_mem.agent_filter.retrieval import vector as vector_search
+from grace_mem.agent_filter.retrieval.corpus import Corpus
+from grace_mem.agent_filter.runtime.protocol import Command, extract_final_sids, parse_response
 
 # Written at the failure this model actually makes. gpt-oss-20b ends its turn
 # after the analysis channel, describing the command it wants to run instead of

@@ -14,8 +14,40 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, field
 
-from grace_mem.agent_filter.models import SID_RE, Command, ParsedResponse
+from grace_mem.agent_filter.evidence.context import SID_RE
+
+
+@dataclass(frozen=True)
+class Command:
+    """One agent command: GREP, READ, VECTOR or FINAL, with its argument.
+
+    READ's argument keeps the window size appended ("sid k") because that is the
+    shape the protocol emits and the tool consumes.
+    """
+    kind: str
+    arg: str
+
+
+@dataclass(frozen=True)
+class ParsedResponse:
+    """One model reply, after the protocol has looked in every channel.
+
+    Attributes:
+        raw_reply: The first candidate text, kept for the trace even when
+            nothing parsed out of it.
+        reply: The candidate the command came from, or ``raw_reply`` when no
+            command parsed.
+        command: The parsed command, or None when the reply carried none.
+        source: Which channel the command came from (content/tool_calls/reasoning).
+        diagnostics: Per-response diagnostics for the trace.
+    """
+    raw_reply: str
+    reply: str
+    command: Command | None
+    source: str | None
+    diagnostics: dict = field(default_factory=dict)
 
 # gpt-oss (harmony template) sometimes replies in native tool-call syntax:
 #   <|channel|>commentary to=READ <|constrain|>json<|message|>{"id": "...", "k": 2}
