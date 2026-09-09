@@ -332,7 +332,7 @@ of them set.
 | `KG_RETRIEVAL_STRICT` | `1` raises on a retrieval failure instead of returning an empty context |
 | `KG_KEYWORD_CACHE_DISABLE` / `KG_KEYWORD_CACHE_PATH` | Bypass or relocate the keyword cache |
 | `KG_RERANKER_BATCH_SIZE` | Cross-encoder batch size |
-| `KG_ABLATION_*` | One switch per removed retrieval channel; see `grace_mem/retrieval/ablation.py` |
+| `KG_ABLATION_*` | One switch per removed retrieval channel; see `grace_mem/retrieval/config.py` |
 | `KG_TRACE_PRETTY_LOG_DIR` | Where the human-readable ingest trace is written |
 | `LONGMEM_ARTIFACT_ROOT` | LongMem root holding per-question summary VDBs, for Agent Filter `VECTOR` |
 

@@ -1,5 +1,8 @@
-"""
-Refactored Retriever that uses modular components from retrieval/ folder.
+"""The Retriever: one question in, one answer context out.
+
+This is the sequence. Every stage it drives lives in one of the subpackages
+-- query/, candidates/, ranking/, evidence/, adaptive/ -- and this module
+wires them together, moves results between them, and records what happened.
 """
 import os
 import uuid
@@ -8,31 +11,25 @@ from typing import Any
 import numpy as np
 
 from grace_mem.data_model.extraction import KeywordExtractionResult
-from grace_mem.retrieval.ablation import flag_enabled
-from grace_mem.retrieval.candidates import CandidateSet
-from grace_mem.retrieval.config import RetrieverConfig
-from grace_mem.retrieval.raw_turn_lookup import RawContextLookup
-from grace_mem.retrieval.rendering import render_context_text
-
-# Import modular components
-from grace_mem.retrieval.steps import (
-    EntityRelationshipSearcher,
-    EvidenceBuilder,
-    EvidenceFilter,
-    SAConfig,
-    SpreadingActivationEngine,
-)
-from grace_mem.retrieval.steps.adaptive import additive_merge
-from grace_mem.retrieval.steps.keywords import generate_query_keywords
-from grace_mem.retrieval.steps.narrowing import NarrowingModule
-from grace_mem.retrieval.steps.query_rewrite import maybe_rewrite_retrieval_question
-from grace_mem.retrieval.steps.temporal_relevance import date_within_coarse_range
-from grace_mem.retrieval.trace import (
+from grace_mem.retrieval.adaptive.controller import additive_merge
+from grace_mem.retrieval.candidates.graph_expansion import SAConfig, SpreadingActivationEngine
+from grace_mem.retrieval.candidates.search import EntityRelationshipSearcher
+from grace_mem.retrieval.candidates.temporal import date_within_coarse_range
+from grace_mem.retrieval.config import RetrieverConfig, flag_enabled
+from grace_mem.retrieval.evidence.builder import EvidenceBuilder
+from grace_mem.retrieval.evidence.narrowing import NarrowingModule
+from grace_mem.retrieval.evidence.rendering import render_context_text
+from grace_mem.retrieval.evidence.source import RawContextLookup
+from grace_mem.retrieval.models import CandidateSet
+from grace_mem.retrieval.observability.trace import (
     build_adaptive_trace,
     build_stage_trace_snapshot,
     dedupe_preserve_order,
     format_retrieval_stage_trace_text,
 )
+from grace_mem.retrieval.query.keywords import generate_query_keywords
+from grace_mem.retrieval.query.rewrite import maybe_rewrite_retrieval_question
+from grace_mem.retrieval.ranking.filter import EvidenceFilter
 from grace_mem.services.cache.cache import build_id_to_meta_maps
 from grace_mem.temporal.query_time_parser import parse_query_time
 from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_logger
@@ -1106,10 +1103,10 @@ class Retriever:
 
         LLM used for rewriting: LLM_API / MODEL_NAME (from .env).
         """
-        from grace_mem.retrieval.steps.adaptive import (
+        from grace_mem.retrieval.adaptive.confidence import compute_confidence
+        from grace_mem.retrieval.adaptive.controller import (
             build_adaptive_graph,
             build_adaptive_llm_client,
-            compute_confidence,
             rewrite_query,
         )
         timer_adaptive = _StepTimer()

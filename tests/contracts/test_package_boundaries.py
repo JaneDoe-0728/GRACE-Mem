@@ -11,7 +11,7 @@ one is the same rule the target tree needs, so the move commits update the paths
 here and nothing else:
 
     grace_mem.ingestion.steps    ->  grace_mem/ingestion/
-    grace_mem.retrieval.steps ->  grace_mem/retrieval/
+    grace_mem.retrieval.candidates ->  grace_mem/retrieval/
 """
 
 
@@ -26,7 +26,7 @@ DATA_MODEL_MODULES = (
     "grace_mem.data_model.relationships",
 )
 # The two capabilities. These are whole-package prefixes on purpose: scoped to
-# `.steps` the rule missed `retrieval.steps.search -> ingestion.parsing`, which
+# `.candidates` the rule missed `retrieval.candidates.search -> ingestion.parsing`, which
 # existed for as long as the rule did.
 INGESTION_PREFIX = "grace_mem.ingestion"
 RETRIEVAL_PREFIX = "grace_mem.retrieval"

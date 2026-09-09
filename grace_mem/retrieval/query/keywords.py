@@ -43,7 +43,7 @@ from grace_mem.utils.logger_config import _StepTimer, make_module_jlog, setup_lo
 _jlog = make_module_jlog(name="grace_mem.Retriever", filename="kg_retriever.jsonl")
 logger = setup_logger("grace_mem.Retriever")
 
-# Repo root. This module sits at grace_mem/retrieval/steps/, so the root is four
+# Repo root. This module sits at grace_mem/retrieval/query/, so the root is four
 # levels up -- the count is the module's own depth and has to be corrected
 # whenever the file moves, or the default cache file moves with it and every
 # previously cached question turns into a miss.

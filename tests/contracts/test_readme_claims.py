@@ -256,10 +256,10 @@ DOCUMENTED_PATHS = [
     "grace_mem/bootstrap.py",
     "grace_mem/retrieval/pipeline.py",
     "grace_mem/ingestion/pipeline.py",
-    "grace_mem/retrieval/steps/search.py",
-    "grace_mem/retrieval/steps/filtering.py",
-    "grace_mem/retrieval/steps/temporal_relevance.py",
-    "grace_mem/retrieval/evidence.py",
+    "grace_mem/retrieval/candidates/search.py",
+    "grace_mem/retrieval/ranking/filter.py",
+    "grace_mem/retrieval/candidates/temporal.py",
+    "grace_mem/retrieval/evidence/builder.py",
     "grace_mem/services/graph/falkordb.py",
     "grace_mem/services/llm/client.py",
     "grace_mem/ingestion/prompts",
@@ -275,7 +275,7 @@ DOCUMENTED_PATHS = [
     "grace_mem/data_model/extraction.py",
     "grace_mem/ingestion/parsing.py",
     "grace_mem/lexical.py",
-    "grace_mem/retrieval/steps/filtering.py",
+    "grace_mem/retrieval/ranking/filter.py",
     "grace_mem/temporal/query_time_parser.py",
     "grace_mem/temporal",
     "grace_mem/utils/logger_config.py",
@@ -312,10 +312,10 @@ IMPORTABLE_MODULES = [
     "grace_mem.bootstrap",
     "grace_mem.retrieval.pipeline",
     "grace_mem.ingestion.pipeline",
-    "grace_mem.retrieval.steps.search",
-    "grace_mem.retrieval.steps.filtering",
-    "grace_mem.retrieval.steps.temporal_relevance",
-    "grace_mem.retrieval.evidence",
+    "grace_mem.retrieval.candidates.search",
+    "grace_mem.retrieval.ranking.filter",
+    "grace_mem.retrieval.candidates.temporal",
+    "grace_mem.retrieval.evidence.builder",
     "grace_mem.services.graph.falkordb",
     "grace_mem.services.llm.client",
     "grace_mem.ingestion.managers.entity_manager",
@@ -328,7 +328,7 @@ IMPORTABLE_MODULES = [
     "grace_mem.data_model",
     "grace_mem.ingestion.parsing",
     "grace_mem.lexical",
-    "grace_mem.retrieval.steps.filtering",
+    "grace_mem.retrieval.ranking.reranker",
     "grace_mem.temporal.query_time_parser",
     "grace_mem.utils.logger_config",
 ]
@@ -347,7 +347,7 @@ DOCUMENTED_METHODS = [
     # (file, class, methods)
     ("grace_mem/retrieval/pipeline.py", "Retriever",
      ["assemble_context_from_query", "build_kg_context"]),
-    ("grace_mem/retrieval/evidence.py", "EvidenceBuilder",
+    ("grace_mem/retrieval/evidence/builder.py", "EvidenceBuilder",
      ["build_evidence_block"]),
     ("grace_mem/ingestion/pipeline.py", "Ingestor",
      ["summarize_turn", "extract_entities_only", "extract_relationships_only",
@@ -366,7 +366,7 @@ DOCUMENTED_METHODS = [
     ("grace_mem/services/llm/client.py", "LLMClient",
      ["chat", "generate_llm_extract", "generate_llm_keyword"]),
     ("grace_mem/data_model/provenance.py", "Provenance", ["prov_to_events", "merge_prov"]),
-    ("grace_mem/retrieval/steps/filtering.py", "LLMPointwiseReranker", ["rank_pairs"]),
+    ("grace_mem/retrieval/ranking/reranker.py", "LLMPointwiseReranker", ["rank_pairs"]),
 ]
 
 
@@ -381,7 +381,7 @@ def test_documented_class_methods_exist(rel, cls, methods):
 DOCUMENTED_FUNCTIONS = [
     ("grace_mem/services/graph/falkordb.py", ["graph_from_env"]),
     ("grace_mem/services/cache/cache.py", ["build_id_to_meta_maps"]),
-    ("grace_mem/retrieval/steps/filtering.py", ["get_reranker"]),
+    ("grace_mem/retrieval/ranking/reranker.py", ["get_reranker"]),
     ("grace_mem/temporal/query_time_parser.py", ["parse_query_time", "detect_and_parse_time_expressions"]),
     ("grace_mem/utils/logger_config.py", ["setup_logger", "make_module_jlog", "_StepTimer"]),
     ("grace_mem/data_model/entities.py", ["EntityType", "Entity", "canonical_entity_id"]),
@@ -389,7 +389,7 @@ DOCUMENTED_FUNCTIONS = [
     ("grace_mem/data_model/extraction.py", ["ExtractionResult", "KeywordExtractionResult"]),
     ("grace_mem/lexical.py", ["tokenize_en"]),
     ("grace_mem/bootstrap.py", ["build_pipeline"]),
-    ("grace_mem/retrieval/steps/keywords.py", ["generate_query_keywords"]),
+    ("grace_mem/retrieval/query/keywords.py", ["generate_query_keywords"]),
     ("grace_mem/retrieval/prompts/keyword/extraction.py", ["KEYWORD_EXTRACTION_PROMPT"]),
     ("grace_mem/ingestion/prompts/entity_ops/rules.py", ["ENTITY_OPS_RULES_V2"]),
     ("grace_mem/ingestion/prompts/entity_ops/examples.py", ["ENTITY_OPS_FEW_SHOT"]),
@@ -487,7 +487,7 @@ def test_summary_text_lookup_is_never_called_with_a_full_kwarg():
     params = inspect.signature(SummariesVDB.get_summary_text_by_id).parameters
     assert list(params) == ["self", "summary_id"]
 
-    source = (REPO_ROOT / "grace_mem/retrieval/evidence.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "grace_mem/retrieval/evidence/builder.py").read_text(encoding="utf-8")
     bad = re.findall(r"get_summary_text_by_id\([^)]*full\s*=", source)
     assert not bad, f"caller passes an unsupported kwarg: {bad}"
 

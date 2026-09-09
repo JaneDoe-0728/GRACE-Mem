@@ -16,8 +16,14 @@ load-bearing:
 
 Field names *are* config keys. Renaming a field renames the key used by
 experiment_config.py, every sweep script, and every recorded run metadata file.
+
+The KG_ABLATION_* switches live at the bottom of this module. They are
+configuration too -- each one removes a retrieval channel so a run can be
+compared against the same system without it -- they just arrive through the
+environment rather than through a config dict.
 """
 
+import os
 import warnings
 from dataclasses import dataclass, fields
 
@@ -212,3 +218,34 @@ class RetrieverConfig(SearchConfig, FilterConfig, EvidenceConfig, AdaptiveConfig
             for name in INERT_FIELDS
             if getattr(self, name) != defaults[name]
         }
+
+
+# ===========================================================================
+# Ablation switches
+# ===========================================================================
+#
+# Each flag removes one retrieval channel so a run can be compared against the
+# same system without it. They were read in three modules with three slightly
+# different expressions; the names live here so the set of ablations is
+# something you can look up rather than grep for.
+#
+# The reader deliberately does not `.strip()`. Two of the three call sites it
+# replaces did not, and `grace_mem.temporal.normalizer` -- which does, and also
+# carries a legacy alias -- keeps its own reader rather than have this one
+# quietly start accepting `" 1 "` where it used to reject it.
+
+#: Every ablation switch, and the channel it removes.
+ABLATIONS = {
+    "KG_ABLATION_NO_BM25": "lexical half of hybrid entity search",
+    "KG_ABLATION_NO_DIRECT_VECTOR": "direct summary-vector retrieval",
+    "KG_ABLATION_NO_GRAPH": "the graph channel entirely",
+    "KG_ABLATION_NO_KEYWORDS": "LLM keyword extraction",
+    "KG_ABLATION_NO_KG_TEXT": "entity/relationship text, keeping the graph",
+    "KG_ABLATION_NO_TEMPORAL_BOOST": "temporal containment reranking",
+    "KG_ABLATION_NO_TIME_REWRITE": "query-side temporal rewriting",
+}
+
+
+def flag_enabled(name: str) -> bool:
+    """True when `name` is set to anything other than 0, empty, or false."""
+    return os.getenv(name, "0").lower() not in ("0", "", "false")

@@ -24,7 +24,7 @@ import os
 
 import pytest
 
-from grace_mem.retrieval.evidence import EvidenceBuilder
+from grace_mem.retrieval.evidence.builder import EvidenceBuilder
 from tests.support.evidence_fakes import (
     CallLog,
     FakeRawTurnLookup,

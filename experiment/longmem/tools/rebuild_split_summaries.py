@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from experiment.benchmarking.paths import REPO_ROOT
-from grace_mem.retrieval.raw_turn_lookup import RawContextLookup
+from grace_mem.retrieval.evidence.source import RawContextLookup
 from grace_mem.temporal import build_time_context, rewrite_temporal_text
 from grace_mem.temporal.query_time_parser import parse_query_time
 

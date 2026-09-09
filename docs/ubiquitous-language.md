@@ -67,7 +67,8 @@ graph plus its summaries.
 
 ## Retrieval
 
-`grace_mem/retrieval/`, with its steps in `grace_mem/retrieval/steps/`.
+`grace_mem/retrieval/`, with its stages in `query/`, `candidates/`, `ranking/`,
+`evidence/` and `adaptive/`, and `observability/` alongside them.
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
@@ -181,7 +182,7 @@ Two benchmarks — **LoCoMo** (`experiment/locomo/`) and **LongMem**
 ## Flagged ambiguities
 
 **1. "Context" means two unrelated things.** `ContextFilter`
-([filtering.py:38](../grace_mem/retrieval/steps/filtering.py#L38)) operates on
+([filter.py:52](../grace_mem/retrieval/ranking/filter.py#L52)) operates on
 retrieved entities and relationships; `TimeContext`
 ([types.py:97](../grace_mem/temporal/types.py#L97)) is a temporal reference frame.
 Nothing connects them.
