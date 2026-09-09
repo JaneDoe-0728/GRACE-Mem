@@ -10,7 +10,6 @@ without an argparse namespace.
 values, so downstream aggregation never has to special-case a skipped stage.
 """
 
-import dataclasses
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -32,22 +31,6 @@ def skipped_judge_stats(*, exclude_adversarial: bool) -> dict[str, Any]:
         "exclude_adversarial": exclude_adversarial,
         "skipped_due_to_adversarial_filter": True,
     }
-
-
-def configure_retriever(retriever: Any, *, adaptive: bool, tau: float) -> None:
-    """Apply the run's adaptive-retrieval settings to a retriever instance.
-
-    Args:
-        tau: Confidence threshold below which the adaptive second pass triggers.
-            Only consulted when `adaptive` is on.
-    """
-    if not adaptive:
-        return
-    retriever.cfg = dataclasses.replace(
-        retriever.cfg,
-        enable_adaptive_search=True,
-        tau_confidence=tau,
-    )
 
 
 def build_eval_rows(

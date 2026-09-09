@@ -1,7 +1,7 @@
 """The Retriever: one question in, one answer context out.
 
 This is the sequence. Every stage it drives lives in one of the subpackages
--- query/, candidates/, ranking/, evidence/, adaptive/ -- and this module
+-- query/, candidates/, ranking/, evidence/ -- and this module
 wires them together, moves results between them, and records what happened.
 """
 import os
@@ -11,7 +11,6 @@ from typing import Any
 import numpy as np
 
 from grace_mem.data_model.extraction import KeywordExtractionResult
-from grace_mem.retrieval.adaptive.controller import additive_merge
 from grace_mem.retrieval.candidates.graph_expansion import SAConfig, SpreadingActivationEngine
 from grace_mem.retrieval.candidates.search import EntityRelationshipSearcher
 from grace_mem.retrieval.candidates.temporal import date_within_coarse_range
@@ -22,7 +21,6 @@ from grace_mem.retrieval.evidence.rendering import render_context_text
 from grace_mem.retrieval.evidence.source import RawContextLookup
 from grace_mem.retrieval.models import CandidateSet
 from grace_mem.retrieval.observability.trace import (
-    build_adaptive_trace,
     build_stage_trace_snapshot,
     dedupe_preserve_order,
     format_retrieval_stage_trace_text,
@@ -159,7 +157,6 @@ class Retriever:
         )
         self.last_retrieval_trace: dict[str, Any] = {}
         self._last_stage_trace: dict[str, Any] = {}
-        self._last_adaptive_trace: dict[str, Any] = {}
 
         # Narrowing module: post-evidence narrowing step (auto-filter optimization target)
         # KG_NARROWING_ENABLED=0 turns it into identity passthrough (e.g. LongMem
@@ -797,7 +794,9 @@ class Retriever:
         filter_ent_threshold = filter_ent_threshold if filter_ent_threshold is not None else self.cfg.filter_ent_threshold
         filter_rel_threshold = filter_rel_threshold if filter_rel_threshold is not None else self.cfg.filter_rel_threshold
 
-        # Resolve graph: caller may supply a local graph override for adaptive pass-2
+        # Resolve graph: a caller may override the graph for one call. Nothing in
+        # the tree does since adaptive pass-2 was removed; the parameter and the
+        # graph_override log field are kept so the jsonl schema is unchanged.
         graph = _graph if _graph is not None else self.graph
         local_branch: list[dict[str, Any]] = []
         global_branch: list[dict[str, Any]] = []
@@ -1068,235 +1067,6 @@ class Retriever:
 
 
 
-    # Stays a method rather than joining retrieval_steps/adaptive.py with
-    # additive_merge: it calls self.assemble_context_from_query to run the
-    # second pass. Moving it out would mean passing the Retriever in, which is
-    # a circular dependency wearing a parameter's clothes.
-    def _adaptive_research(
-        self,
-        *,
-        question: str,
-        evidence_entities: list[dict],
-        evidence_rels: list[dict],
-        evidence_text: str,
-        query_vec: np.ndarray,
-        request_id: str | None,
-        ent_topk: int,
-        rel_topk: int,
-        ent_threshold: float,
-        rel_threshold: float,
-        filter_ent_topk: int,
-        filter_rel_topk: int,
-        filter_ent_threshold: float,
-        filter_rel_threshold: float,
-        query_time: str | None,
-    ) -> tuple[list[dict], list[dict], str, Any]:
-        """
-        Post-retrieval adaptive re-search (pass 2 of at most 2 total).
-
-        Computes confidence from pass-1 results.  If conf < tau_confidence, rewrites
-        the query via an LLM and runs a second retrieval pass with relaxed thresholds.
-        Merges pass-1 and pass-2 candidates (deduplicated), re-ranks all of them
-        against the original query_vec, and returns the top-K.  This avoids the
-        winner-take-all bias where pass-2's larger candidate pool inflated its
-        confidence score.
-
-        LLM used for rewriting: LLM_API / MODEL_NAME (from .env).
-        """
-        from grace_mem.retrieval.adaptive.confidence import compute_confidence
-        from grace_mem.retrieval.adaptive.controller import (
-            build_adaptive_graph,
-            build_adaptive_llm_client,
-            rewrite_query,
-        )
-        timer_adaptive = _StepTimer()
-
-        _jlog(
-            "adaptive_research_start",
-            request_id,
-            step="2b",
-            entity_count=len(evidence_entities),
-            relationship_count=len(evidence_rels),
-            tau_confidence=self.cfg.tau_confidence,
-            adaptive_threshold_scale=self.cfg.adaptive_threshold_scale,
-        )
-
-        # --- Pass-1 confidence ---
-        ent_ids_1 = [e["id"] for e in evidence_entities]
-        rel_ids_1 = [r["rel_id"] for r in evidence_rels]
-        conf_1 = compute_confidence(ent_ids_1, rel_ids_1, query_vec, self.MGR)
-
-        _jlog(
-            "adaptive_confidence_pass1",
-            request_id,
-            step="2b",
-            confidence=conf_1,
-            tau=self.cfg.tau_confidence,
-            entity_count=len(ent_ids_1),
-            rel_count=len(rel_ids_1),
-        )
-
-        if conf_1 >= self.cfg.tau_confidence:
-            _jlog("adaptive_skip", request_id, step="2b", reason="confidence_sufficient")
-            _jlog(
-                "adaptive_research_complete",
-                request_id,
-                step="2b",
-                pass2_triggered=False,
-                conf_pass1=conf_1,
-                conf_final=conf_1,
-                elapsed_sec=timer_adaptive.sec(),
-            )
-            self._last_adaptive_trace = build_adaptive_trace(
-            config=self.cfg,
-                pass2_triggered=False,
-                pass1_entity_ids=ent_ids_1,
-                pass1_relation_ids=rel_ids_1,
-                conf_pass1=conf_1,
-                conf_final=conf_1,
-            )
-            return evidence_entities, evidence_rels, evidence_text, query_vec
-
-        # --- Rewrite query ---
-        try:
-            rewrite_llm = build_adaptive_llm_client()
-            rewritten_q, rewrite_latency = rewrite_query(
-                question, evidence_entities, evidence_rels, conf_1, rewrite_llm
-            )
-            _jlog(
-                "adaptive_query_rewrite",
-                request_id,
-                step="2b",
-                original_query=question,
-                rewritten_query=rewritten_q,
-                rewrite_latency_sec=rewrite_latency,
-            )
-        except Exception as exc:
-            _jlog("adaptive_rewrite_error", request_id, step="2b", error=str(exc))
-            rewritten_q = question
-
-        # Skip pass-2 if the rewrite is identical to the original query — no new signal possible
-        if rewritten_q.strip() == question.strip():
-            _jlog("adaptive_skip", request_id, reason="rewrite_identical")
-            print("[Adaptive] Rewrite returned original query — skipping pass-2.")
-            self._last_adaptive_trace = build_adaptive_trace(
-            config=self.cfg,
-                pass2_triggered=False,
-                pass1_entity_ids=ent_ids_1,
-                pass1_relation_ids=rel_ids_1,
-                conf_pass1=conf_1,
-                conf_final=conf_1,
-                rewritten_query=rewritten_q,
-                adaptive_skip_reason="rewrite_identical",
-            )
-            return evidence_entities, evidence_rels, evidence_text, query_vec
-
-        # --- Pass-2 graph ---
-        local_graph = None
-        try:
-            local_graph = build_adaptive_graph()
-            _jlog("adaptive_graph_opened", request_id, step="2b")
-        except OSError as exc:
-            _jlog("adaptive_graph_error", request_id, step="2b", error=str(exc))
-
-        try:
-            # --- Pass-2 keywords ---
-            kw2 = generate_query_keywords(llm=self.llm, question=rewritten_q, request_id=request_id)
-
-            # --- Pass-2 retrieval with relaxed filter thresholds ---
-            scale = self.cfg.adaptive_threshold_scale
-            timer_p2 = _StepTimer()
-            _jlog(
-                "adaptive_pass2_start",
-                request_id,
-                step="2b",
-                rewritten_query=rewritten_q,
-                filter_ent_threshold_scaled=filter_ent_threshold * scale,
-                filter_rel_threshold_scaled=filter_rel_threshold * scale,
-                graph_override=bool(local_graph is not None),
-            )
-            evidence2_entities, evidence2_rels, evidence2_text, query_vec2 = self.assemble_context_from_query(
-                question=rewritten_q,
-                low_level_keywords=kw2.low_level_keywords,
-                high_level_keywords=kw2.high_level_keywords,
-                request_id=request_id,
-                ent_topk=ent_topk,
-                rel_topk=rel_topk,
-                ent_threshold=ent_threshold,
-                rel_threshold=rel_threshold,
-                filter_ent_topk=filter_ent_topk,
-                filter_rel_topk=filter_rel_topk,
-                filter_ent_threshold=filter_ent_threshold * scale,
-                filter_rel_threshold=filter_rel_threshold * scale,
-                query_time=query_time,
-                _graph=local_graph,
-            )
-        finally:
-            if local_graph is not None:
-                local_graph.close()
-
-        ent_ids_2 = [e["id"] for e in evidence2_entities]
-        rel_ids_2 = [r["rel_id"] for r in evidence2_rels]
-        conf_2 = compute_confidence(ent_ids_2, rel_ids_2, query_vec, self.MGR)
-
-        _jlog(
-            "adaptive_confidence_pass2",
-            request_id,
-            step="2b",
-            confidence=conf_2,
-            entity_count=len(ent_ids_2),
-            rel_count=len(rel_ids_2),
-            elapsed_sec=timer_p2.sec(),
-        )
-        _jlog(
-            "adaptive_pass2_retrieval_done",
-            request_id,
-            step="2b",
-            entity_count=len(ent_ids_2),
-            relationship_count=len(rel_ids_2),
-            context_length=len(evidence2_text),
-            query_vec_dim=int(query_vec2.shape[0]) if hasattr(query_vec2, "shape") else None,
-            elapsed_sec=timer_p2.sec(),
-        )
-
-        # --- Additive merge: keep all pass-1 context, append only novel pass-2 items ---
-        merged_entities, merged_rels, merged_text, conf_merged = additive_merge(vdb_manager=self.MGR, cache=self.cache, cfg=self.cfg, 
-            entities_1=evidence_entities,
-            rels_1=evidence_rels,
-            entities_2=evidence2_entities,
-            rels_2=evidence2_rels,
-            request_id=request_id,
-            conf_1=conf_1,
-            conf_2=conf_2,
-            query_vec=query_vec,
-        )
-        _jlog(
-            "adaptive_research_complete",
-            request_id,
-            step="2b",
-            pass2_triggered=True,
-            conf_pass1=conf_1,
-            conf_pass2=conf_2,
-            conf_final=conf_merged,
-            merged_entity_count=len(merged_entities),
-            merged_relationship_count=len(merged_rels),
-            elapsed_sec=timer_adaptive.sec(),
-        )
-        self._last_adaptive_trace = build_adaptive_trace(
-            config=self.cfg,
-            pass2_triggered=True,
-            pass1_entity_ids=ent_ids_1,
-            pass1_relation_ids=rel_ids_1,
-            pass2_entity_ids=ent_ids_2,
-            pass2_relation_ids=rel_ids_2,
-            conf_pass1=conf_1,
-            conf_pass2=conf_2,
-            conf_final=conf_merged,
-            rewritten_query=rewritten_q,
-        )
-        return merged_entities, merged_rels, merged_text, query_vec
-
-
     def build_kg_context(
         self,
         question: str,
@@ -1381,7 +1151,6 @@ class Retriever:
             "question": question,
         }
         self._last_stage_trace = {}
-        self._last_adaptive_trace = {}
         self.evidence_builder.last_evidence_trace = {}
 
         try:
@@ -1441,28 +1210,6 @@ class Retriever:
                 has_context=bool(evidence_text),
                 elapsed_sec=timer_context.sec(),
             )
-
-            # 2b) Adaptive re-search (pass 2) — off by default
-            if self.cfg.enable_adaptive_search:
-                evidence_entities, evidence_rels, evidence_text, query_vec = self._adaptive_research(
-                    question=question,
-                    evidence_entities=evidence_entities,
-                    evidence_rels=evidence_rels,
-                    evidence_text=evidence_text,
-                    query_vec=query_vec,
-                    request_id=request_id,
-                    ent_topk=ent_topk,
-                    rel_topk=rel_topk,
-                    ent_threshold=ent_threshold,
-                    rel_threshold=rel_threshold,
-                    filter_ent_topk=filter_ent_topk,
-                    filter_rel_topk=filter_rel_topk,
-                    filter_ent_threshold=filter_ent_threshold,
-                    filter_rel_threshold=filter_rel_threshold,
-                    query_time=query_time,
-                )
-            else:
-                _jlog("adaptive_research_skipped", request_id, step="2b", reason="disabled")
 
             # 2.9b) Ablation J: KG_ABLATION_NO_KG_TEXT=1 -> remove only the entity/
             # relationship text blocks from the context. evidence_entities/evidence_rels are
@@ -1580,12 +1327,6 @@ class Retriever:
             )
             evidence_trace = getattr(self.evidence_builder, "last_evidence_trace", {}) or {}
             stage_trace = self._last_stage_trace or {}
-            adaptive_trace = self._last_adaptive_trace or {
-                "pass2_triggered": False,
-                "conf_pass1": None,
-                "conf_final": None,
-                "tau_confidence": self.cfg.tau_confidence,
-            }
             self.last_retrieval_trace = {
                 "request_id": request_id,
                 "question": question,
@@ -1593,20 +1334,25 @@ class Retriever:
                 "high_level_keywords": list(kw.high_level_keywords),
                 "stop_reason": stage_trace.get("stop_reason"),
                 "branches": stage_trace.get("branches", {}),
-                "pass2_triggered": adaptive_trace.get("pass2_triggered", False),
-                "rewritten_query": adaptive_trace.get("rewritten_query"),
-                "conf_pass1": adaptive_trace.get("conf_pass1"),
-                "conf_pass2": adaptive_trace.get("conf_pass2"),
-                "conf_final": adaptive_trace.get("conf_final"),
-                "tau_confidence": adaptive_trace.get("tau_confidence", self.cfg.tau_confidence),
-                "pass1_entity_ids": adaptive_trace.get("pass1_entity_ids", [entity["id"] for entity in evidence_entities]),
-                "pass2_entity_ids": adaptive_trace.get("pass2_entity_ids", []),
-                "pass1_relation_ids": adaptive_trace.get("pass1_relation_ids", [relationship["rel_id"] for relationship in evidence_rels]),
-                "pass2_relation_ids": adaptive_trace.get("pass2_relation_ids", []),
-                "entity_overlap_count": adaptive_trace.get("entity_overlap_count", 0),
-                "entity_overlap_pct": adaptive_trace.get("entity_overlap_pct"),
-                "relation_overlap_count": adaptive_trace.get("relation_overlap_count", 0),
-                "relation_overlap_pct": adaptive_trace.get("relation_overlap_pct"),
+                # Adaptive re-search was removed; these keys stay, holding the
+                # values every run already wrote, because they are columns in
+                # the LoCoMo and LongMem answer CSVs and error_analysis reads
+                # three of them. Dropping them would make new runs
+                # uncomparable with every archived one.
+                "pass2_triggered": False,
+                "rewritten_query": None,
+                "conf_pass1": None,
+                "conf_pass2": None,
+                "conf_final": None,
+                "tau_confidence": self.cfg.tau_confidence,
+                "pass1_entity_ids": [entity["id"] for entity in evidence_entities],
+                "pass2_entity_ids": [],
+                "pass1_relation_ids": [relationship["rel_id"] for relationship in evidence_rels],
+                "pass2_relation_ids": [],
+                "entity_overlap_count": 0,
+                "entity_overlap_pct": None,
+                "relation_overlap_count": 0,
+                "relation_overlap_pct": None,
                 "final_entity_ids": [entity["id"] for entity in evidence_entities],
                 "final_entity_names": [entity.get("name") or entity.get("id") for entity in evidence_entities],
                 "final_relationship_ids": [relationship["rel_id"] for relationship in evidence_rels],

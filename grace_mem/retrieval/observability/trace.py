@@ -6,12 +6,10 @@ or decides anything the retrieval acts on. That is what makes them safe to lift
 out of the Retriever, and what makes the stages easier to follow once the
 reporting is no longer interleaved with them.
 
-Two shapes of trace live here:
-
-  * the stage waterfall -- what each narrowing step saw, kept and dropped,
-    rendered as a snapshot record and as a human-readable block
-  * the adaptive-pass comparison -- how pass 2's candidate set overlapped
-    pass 1's, and what the confidence did
+One shape of trace lives here: the stage waterfall -- what each narrowing step
+saw, kept and dropped, rendered as a snapshot record and as a human-readable
+block. (The adaptive-pass comparison lived here too until adaptive re-search
+was removed.)
 
 Two things deliberately stayed behind. Writing traces out needs the module
 loggers and the instance field that remembers the last one. And the
@@ -147,63 +145,3 @@ def format_retrieval_stage_trace_text(*,
     append_branch("global", global_branch)
     append_branch("merged", merged_branch)
     return "\n".join(lines).rstrip()
-def compute_overlap_metrics(
-    pass1_ids: list[str],
-    pass2_ids: list[str],
-) -> tuple[int, float | None]:
-    """Return intersection size and Jaccard overlap for unique IDs."""
-    pass1 = set(pass1_ids)
-    pass2 = set(pass2_ids)
-    union = pass1 | pass2
-    if not union:
-        return 0, None
-    overlap_count = len(pass1 & pass2)
-    return overlap_count, overlap_count / len(union)
-
-def build_adaptive_trace(*,
-    pass2_triggered: bool,
-    pass1_entity_ids: list[str],
-    pass1_relation_ids: list[str],
-    pass2_entity_ids: list[str] | None = None,
-    pass2_relation_ids: list[str] | None = None,
-    conf_pass1: float | None = None,
-    conf_pass2: float | None = None,
-    conf_final: float | None = None,
-    rewritten_query: str | None = None,
-    adaptive_skip_reason: str | None = None,
-    config: Any = None,
-) -> dict[str, Any]:
-    """Build a stable trace from pre-merge pass results."""
-    entity_ids_2 = list(pass2_entity_ids or []) if pass2_triggered else []
-    relation_ids_2 = list(pass2_relation_ids or []) if pass2_triggered else []
-    if pass2_triggered:
-        entity_overlap_count, entity_overlap_pct = compute_overlap_metrics(
-            pass1_entity_ids,
-            entity_ids_2,
-        )
-        relation_overlap_count, relation_overlap_pct = compute_overlap_metrics(
-            pass1_relation_ids,
-            relation_ids_2,
-        )
-    else:
-        entity_overlap_count = relation_overlap_count = 0
-        entity_overlap_pct = relation_overlap_pct = None
-
-    trace = {
-        "pass2_triggered": pass2_triggered,
-        "conf_pass1": conf_pass1,
-        "conf_pass2": conf_pass2,
-        "conf_final": conf_final,
-        "tau_confidence": getattr(config, "tau_confidence", None),
-        "rewritten_query": rewritten_query,
-        "adaptive_skip_reason": adaptive_skip_reason,
-        "pass1_entity_ids": list(pass1_entity_ids),
-        "pass2_entity_ids": entity_ids_2,
-        "pass1_relation_ids": list(pass1_relation_ids),
-        "pass2_relation_ids": relation_ids_2,
-        "entity_overlap_count": entity_overlap_count,
-        "entity_overlap_pct": entity_overlap_pct,
-        "relation_overlap_count": relation_overlap_count,
-        "relation_overlap_pct": relation_overlap_pct,
-    }
-    return trace

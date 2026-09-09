@@ -13,7 +13,6 @@ pipeline it is, and each stage lives in the subpackage named after it:
         |
     answer context
 
-    adaptive/       when pass 1 looks unconvincing, run that again and merge
     observability/  what each stage did, orthogonal to all of it
 
     config.py       every knob, plus the KG_ABLATION_* switches

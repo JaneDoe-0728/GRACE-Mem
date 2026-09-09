@@ -244,7 +244,6 @@ uv run python -m experiment.locomo.pipeline.runner \
 | `--sample-ids` | Sample selector such as `0,2,5-7` |
 | `--chunk-turns` | Turns per ingest chunk; `0` keeps one whole-session summary |
 | `--artifact-dir` | Existing LoCoMo run root used instead of ingest |
-| `--adaptive --tau` | Enable confidence-triggered adaptive re-search |
 | `--adv` | Include adversarial questions; excluded by default |
 | `--out-root` | Output base; defaults to `experiment/locomo/output` |
 | `--retrieval-mode` | Run gold/replay retrieval ablations |
@@ -308,8 +307,8 @@ Edit [`experiment_config.py`](experiment_config.py) for experiment-wide defaults
 | `RERANKER_PARAMS` | Graph filtering, reranking, evidence selection, and SA-RAG |
 | `GREP_AGENT_PARAMS` | Optional post-retrieval evidence-refinement behavior |
 
-CLI overrides exist for run-specific selectors and a small number of ingest or
-adaptive-retrieval settings. Do not duplicate shared defaults in benchmark code.
+CLI overrides exist for run-specific selectors and a small number of ingest
+settings. Do not duplicate shared defaults in benchmark code.
 
 ### Artifact Compatibility
 

@@ -53,7 +53,7 @@ HIGH_LEVEL = ["running", "purchase"]
 def _retriever(**overrides) -> Retriever:
     """A Retriever wired to doubles, bypassing an __init__ that wants real services.
 
-    The same pattern as tests/test_adaptive_trace.py. Only the components
+    Only the components
     assemble_context_from_query actually reaches are populated; anything else
     it touched would raise, which is a useful failure rather than a silent one.
     """

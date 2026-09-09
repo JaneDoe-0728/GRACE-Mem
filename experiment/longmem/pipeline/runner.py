@@ -723,11 +723,11 @@ class DatasetRunner:
         # This overrides the module-level _jlog defined at import time
         import grace_mem.ingestion.pipeline as ingestor_module
         import grace_mem.ingestion.steps.sync as sync_step_module
+        import grace_mem.retrieval.candidates.search as search_module
+        import grace_mem.retrieval.candidates.temporal as temporal_module
         import grace_mem.retrieval.evidence.builder as evidence_module
         import grace_mem.retrieval.pipeline as retriever_module
         import grace_mem.retrieval.ranking.filter as filtering_module
-        import grace_mem.retrieval.candidates.search as search_module
-        import grace_mem.retrieval.candidates.temporal as temporal_module
         import grace_mem.services.graph.falkordb as falkordb_module
         self._bind_module_logger(ingestor_module, ingestor_jlog)
         self._bind_module_logger(sync_step_module, ingestor_jlog)

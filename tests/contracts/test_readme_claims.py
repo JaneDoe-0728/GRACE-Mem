@@ -499,7 +499,7 @@ def test_summary_text_lookup_is_never_called_with_a_full_kwarg():
 LOCOMO_FLAGS = [
     "--sessions-jsonl", "--dataset-json", "--out-root", "--run-tag",
     "--sample-ids", "--artifact-dir", "--adv", "--stage", "--retrieval-mode",
-    "--replay-run-dir", "--baseline-run-dir", "--no-judge", "--adaptive", "--tau",
+    "--replay-run-dir", "--baseline-run-dir", "--no-judge",
     "--prev-k", "--entity-sim-topk", "--entity-sim-threshold",
 ]
 

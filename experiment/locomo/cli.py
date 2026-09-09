@@ -58,17 +58,6 @@ def build_parser() -> argparse.ArgumentParser:
         "artifacts reused via --artifact-dir.",
     )
     parser.add_argument(
-        "--adaptive",
-        action="store_true",
-        help="Enable adaptive re-search retrieval",
-    )
-    parser.add_argument(
-        "--tau",
-        type=float,
-        default=0.70,
-        help="Confidence threshold for adaptive re-search (default 0.70)",
-    )
-    parser.add_argument(
         "--artifact-dir",
         default=None,
         help="(locomo only) Base run directory of a previous run whose artifacts "
@@ -222,8 +211,6 @@ def build_worker_command(*, args, config: RunConfig, plan: SamplePlan) -> list[s
         str(plan.worker_paths.judge_csv),
         "--stats-json",
         str(plan.worker_paths.stats_json),
-        "--tau",
-        str(args.tau),
         "--run-root",
         str(config.run_root),
     ]
@@ -231,8 +218,6 @@ def build_worker_command(*, args, config: RunConfig, plan: SamplePlan) -> list[s
         cmd.extend(["--retrieval-mode", args.retrieval_mode])
     if getattr(args, "stages", None):
         cmd.extend(["--stage", *args.stages])
-    if args.adaptive:
-        cmd.append("--adaptive")
     if args.adv:
         cmd.append("--adv")
     if args.no_judge:

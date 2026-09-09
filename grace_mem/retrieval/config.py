@@ -1,9 +1,10 @@
 """Every knob the Retriever reads, grouped by the stage that reads it.
 
-The four groups are the Retriever's stage boundaries made explicit: search
-decides what enters the candidate pool, filtering decides what survives,
-evidence decides what the LLM sees, adaptive decides whether to go round again.
-A knob that fits none of them means a boundary has drifted.
+The groups are the Retriever's stage boundaries made explicit: search decides
+what enters the candidate pool, filtering decides what survives, evidence
+decides what the LLM sees. A knob that fits none of them means a boundary has
+drifted. `AdaptiveConfig` is the exception and says so: its stage is gone and
+its fields are kept only so old configs still load.
 
 `RetrieverConfig` inherits from all four instead of nesting them, which is
 load-bearing:
@@ -46,6 +47,9 @@ INERT_FIELDS = {
     "reranker_threshold": "superseded by rrk_threshold",
     "reranker_topk": "superseded by rrk_ent_topk / rrk_rel_topk",
     "sa_max_activated": "spreading activation no longer caps its result set",
+    "enable_adaptive_search": "adaptive re-search was removed; there is no pass 2",
+    "adaptive_threshold_scale": "adaptive re-search was removed; there is no pass 2",
+    "novel_ent_threshold": "adaptive re-search was removed; there is no pass 2",
 }
 
 _warned: set[tuple[str, ...]] = set()
@@ -166,17 +170,22 @@ class EvidenceConfig:
 
 @dataclass(frozen=True)
 class AdaptiveConfig:
-    """Pass-2 re-search: ask again when the first pass looks unconvincing.
+    """What is left of pass-2 re-search, which no longer exists.
 
-    Off by default. `tau_confidence` is the trigger; the other three shape what
-    pass 2 may do differently from pass 1.
+    The capability was removed: nothing reads these and no second pass runs.
+    The fields stay because deleting a field turns every archived run's metadata
+    and every sweep script that names it into a TypeError -- the same reason
+    INERT_FIELDS exists, which is where three of them now are.
+
+    `tau_confidence` is not inert-flagged for a different reason: it is still
+    written to the `tau_confidence` column of both benchmarks' answer CSVs, so
+    its default has to keep producing 0.70.
     """
 
-    # adaptive re-search (off by default — enable per call or via custom config)
     enable_adaptive_search: bool = False
-    tau_confidence: float = 0.70           # trigger threshold
-    adaptive_threshold_scale: float = 0.8  # filter threshold multiplier for pass-2
-    novel_ent_threshold: float = 0.35      # min similarity to the original query_vec to admit a novel entity
+    tau_confidence: float = 0.70
+    adaptive_threshold_scale: float = 0.8
+    novel_ent_threshold: float = 0.35
 
 
 @dataclass(frozen=True)

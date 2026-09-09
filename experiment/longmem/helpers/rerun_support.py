@@ -116,11 +116,11 @@ def output_csv_needs_rerun(csv_path: Path) -> bool:
 
 def setup_retrieval_loggers(dataset_name: str, log_dir: Path) -> None:
     """Point retrieval logging at this dataset's directory for the rerun."""
+    import grace_mem.retrieval.candidates.search as search_module
+    import grace_mem.retrieval.candidates.temporal as temporal_module
     import grace_mem.retrieval.evidence.builder as evidence_module
     import grace_mem.retrieval.pipeline as retriever_module
     import grace_mem.retrieval.ranking.filter as filtering_module
-    import grace_mem.retrieval.candidates.search as search_module
-    import grace_mem.retrieval.candidates.temporal as temporal_module
     from grace_mem.utils.logger_config import make_module_jlog
 
     retriever_module._jlog = make_module_jlog(

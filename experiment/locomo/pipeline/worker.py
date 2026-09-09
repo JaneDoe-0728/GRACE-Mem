@@ -43,7 +43,6 @@ from experiment.locomo.helpers.sample_hooks import (
 )
 from experiment.locomo.pipeline.stage_adapter import (
     build_eval_rows,
-    configure_retriever,
     run_judge_stage,
     skipped_judge_stats,
 )
@@ -931,8 +930,6 @@ def run_locomo_worker(args) -> None:
             qa_eval.agent_filter_artifact_dir = sample_dir / "artifacts"
 
         try:
-            configure_retriever(retriever, adaptive=args.adaptive, tau=args.tau)
-
             if run_ingest:
                 log_event("1/3", "Ingest", sample=sample_index)
                 token_tracker.set_context(
