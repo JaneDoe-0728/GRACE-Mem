@@ -89,7 +89,7 @@ def build_pipeline(*, retriever_config=None, ingestor_config=None) -> PipelineRu
     from grace_mem.services.embedding.embeddings import embedder
     from grace_mem.services.graph.falkordb import graph_from_env
     from grace_mem.services.llm import LLMClient
-    from grace_mem.services.vector_store import MGR
+    from grace_mem.services.dense_index import MGR
 
     global_cache = MGR.cache
     llm = LLMClient()

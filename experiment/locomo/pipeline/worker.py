@@ -902,7 +902,7 @@ def run_locomo_worker(args) -> None:
         if artifact_dir is not None:
             restore_artifacts_from_dir(artifact_dir)
 
-        from grace_mem.services.vector_store import MGR
+        from grace_mem.services.dense_index import MGR
         if artifact_dir is not None:
             reload_mgr_state_from_artifacts(MGR)
 

@@ -24,7 +24,7 @@ from pathlib import Path
 
 from grace_mem.services.cache.cache import CacheStore
 from grace_mem.services.sparse_index.bm25 import EntitiesBM25
-from grace_mem.services.vector_store.chroma_vdb import EntitiesVDB, RelationshipsVDB, SummariesVDB
+from grace_mem.services.dense_index.chroma_vdb import EntitiesVDB, RelationshipsVDB, SummariesVDB
 from grace_mem.utils.paths import resolve_artifacts_dir
 
 logger = logging.getLogger(__name__)

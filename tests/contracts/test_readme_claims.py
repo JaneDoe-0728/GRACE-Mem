@@ -266,8 +266,8 @@ DOCUMENTED_PATHS = [
     "grace_mem/ingestion/managers/entity_manager.py",
     "grace_mem/ingestion/managers/relationship_manager.py",
     "grace_mem/data_model/provenance.py",
-    "grace_mem/services/vector_store/chroma_manager.py",
-    "grace_mem/services/vector_store/chroma_vdb.py",
+    "grace_mem/services/dense_index/chroma_manager.py",
+    "grace_mem/services/dense_index/chroma_vdb.py",
     "grace_mem/services/sparse_index/bm25.py",
     "grace_mem/services/cache/cache.py",
     "grace_mem/data_model/entities.py",
@@ -321,8 +321,8 @@ IMPORTABLE_MODULES = [
     "grace_mem.ingestion.managers.entity_manager",
     "grace_mem.ingestion.managers.relationship_manager",
     "grace_mem.data_model.provenance",
-    "grace_mem.services.vector_store.chroma_manager",
-    "grace_mem.services.vector_store.chroma_vdb",
+    "grace_mem.services.dense_index.chroma_manager",
+    "grace_mem.services.dense_index.chroma_vdb",
     "grace_mem.services.sparse_index.bm25",
     "grace_mem.services.cache.cache",
     "grace_mem.data_model",
@@ -356,10 +356,10 @@ DOCUMENTED_METHODS = [
      ["normalize_entities", "find_similar_for_hybrid", "apply_ops"]),
     ("grace_mem/ingestion/managers/relationship_manager.py", "RelationshipManager",
      ["upsert_from_extraction"]),
-    ("grace_mem/services/vector_store/chroma_manager.py", "VDBManager",
+    ("grace_mem/services/dense_index/chroma_manager.py", "VDBManager",
      ["get_entities_vdb", "get_relationships_vdb", "get_summaries_vdb",
       "get_entities_bm25", "persist_async", "reset_all"]),
-    ("grace_mem/services/vector_store/chroma_vdb.py", "SimpleChromaVDB",
+    ("grace_mem/services/dense_index/chroma_vdb.py", "SimpleChromaVDB",
      ["add", "upsert", "search", "delete", "update", "save", "load"]),
     ("grace_mem/services/sparse_index/bm25.py", "EntitiesBM25", ["add", "get_scores"]),
     ("grace_mem/services/cache/cache.py", "CacheStore", ["load", "save", "clear"]),
@@ -482,7 +482,7 @@ def test_summary_text_lookup_is_never_called_with_a_full_kwarg():
     """SummariesVDB.get_summary_text_by_id takes only summary_id."""
     import inspect
 
-    from grace_mem.services.vector_store.chroma_vdb import SummariesVDB
+    from grace_mem.services.dense_index.chroma_vdb import SummariesVDB
 
     params = inspect.signature(SummariesVDB.get_summary_text_by_id).parameters
     assert list(params) == ["self", "summary_id"]

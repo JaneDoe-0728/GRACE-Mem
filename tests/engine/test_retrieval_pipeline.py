@@ -178,7 +178,7 @@ def test_agent_filter_closes_vdb_when_switching_question_artifacts(
 ) -> None:
     """LongMem replay keeps at most one summaries client per worker thread."""
     from grace_mem.agent_filter import vector_search
-    from grace_mem.services.vector_store import chroma_vdb
+    from grace_mem.services.dense_index import chroma_vdb
 
     clients = []
 

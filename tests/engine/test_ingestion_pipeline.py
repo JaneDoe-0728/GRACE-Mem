@@ -34,7 +34,7 @@ import pytest
 from grace_mem.data_model.extraction import ExtractionResult
 from grace_mem.ingestion.pipeline import IngestionFailedError, Ingestor, IngestorConfig
 from grace_mem.ingestion.steps.sync import ExtractionSyncer
-from grace_mem.services.vector_store.chroma_manager import VDBManager
+from grace_mem.services.dense_index.chroma_manager import VDBManager
 from grace_mem.utils.paths import resolve_project_root
 from tests.support.ingestion_fakes import (
     ASSISTANT_TEXT,
@@ -201,7 +201,7 @@ def test_persist_requests_never_write_the_same_store_concurrently(
             pass
 
     monkeypatch.setattr(
-        "grace_mem.services.vector_store.chroma_manager.CacheStore.save",
+        "grace_mem.services.dense_index.chroma_manager.CacheStore.save",
         lambda *_args, **_kwargs: None,
     )
     manager = VDBManager(tmp_path / "artifacts")

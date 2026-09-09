@@ -87,7 +87,7 @@ from grace_mem.retrieval.pipeline import Retriever
 from grace_mem.services.embedding.embeddings import embedder
 from grace_mem.services.graph.falkordb import graph_from_env
 from grace_mem.services.llm import LLMClient, token_tracker
-from grace_mem.services.vector_store import VDBManager
+from grace_mem.services.dense_index import VDBManager
 from grace_mem.utils.logger_config import make_module_jlog
 
 logger = logging.getLogger(__name__)

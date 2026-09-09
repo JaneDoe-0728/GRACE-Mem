@@ -29,7 +29,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from grace_mem.services.graph.falkordb import graph_from_env
-from grace_mem.services.vector_store import MGR
+from grace_mem.services.dense_index import MGR
 from grace_mem.utils.paths import resolve_artifacts_dir
 
 

@@ -38,7 +38,7 @@ def _get_vdb(artifact_dir: Path):
         return _vdb_local.client
 
     close_vector_search_vdb()
-    from grace_mem.services.vector_store.chroma_vdb import SummariesVDB
+    from grace_mem.services.dense_index.chroma_vdb import SummariesVDB
     client = SummariesVDB(
         dim=1024,
         path=str(artifact_dir / "summaries_chroma"),
