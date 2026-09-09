@@ -1,5 +1,5 @@
 """Re-run the 8 split-embed retrieval experiments with the *current* reranker
-code (grace_mem/retrieval/reranker.py), reproducing each run's original config.
+code (grace_mem/retrieval/steps/filtering.py), reproducing each run's original config.
 
 Config source of truth is experiment/experiment_config.py. Only the 5 swept
 knobs differ between experiments; this driver edits ONLY those lines (regex,

@@ -11,8 +11,6 @@ from grace_mem.data_model.extraction import KeywordExtractionResult
 from grace_mem.retrieval.ablation import flag_enabled
 from grace_mem.retrieval.candidates import CandidateSet
 from grace_mem.retrieval.config import RetrieverConfig
-from grace_mem.retrieval.keywords import generate_query_keywords
-from grace_mem.retrieval.query_rewrite import maybe_rewrite_retrieval_question
 from grace_mem.retrieval.raw_turn_lookup import RawContextLookup
 from grace_mem.retrieval.rendering import render_context_text
 
@@ -25,7 +23,9 @@ from grace_mem.retrieval.steps import (
     SpreadingActivationEngine,
 )
 from grace_mem.retrieval.steps.adaptive import additive_merge
+from grace_mem.retrieval.steps.keywords import generate_query_keywords
 from grace_mem.retrieval.steps.narrowing import NarrowingModule
+from grace_mem.retrieval.steps.query_rewrite import maybe_rewrite_retrieval_question
 from grace_mem.retrieval.steps.temporal_relevance import date_within_coarse_range
 from grace_mem.retrieval.trace import (
     build_adaptive_trace,

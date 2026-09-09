@@ -275,7 +275,7 @@ DOCUMENTED_PATHS = [
     "grace_mem/data_model/extraction.py",
     "grace_mem/ingestion/parsing.py",
     "grace_mem/lexical.py",
-    "grace_mem/retrieval/reranker.py",
+    "grace_mem/retrieval/steps/filtering.py",
     "grace_mem/temporal/query_time_parser.py",
     "grace_mem/temporal",
     "grace_mem/utils/logger_config.py",
@@ -328,7 +328,7 @@ IMPORTABLE_MODULES = [
     "grace_mem.data_model",
     "grace_mem.ingestion.parsing",
     "grace_mem.lexical",
-    "grace_mem.retrieval.reranker",
+    "grace_mem.retrieval.steps.filtering",
     "grace_mem.temporal.query_time_parser",
     "grace_mem.utils.logger_config",
 ]
@@ -366,7 +366,7 @@ DOCUMENTED_METHODS = [
     ("grace_mem/services/llm/client.py", "LLMClient",
      ["chat", "generate_llm_extract", "generate_llm_keyword"]),
     ("grace_mem/data_model/provenance.py", "Provenance", ["prov_to_events", "merge_prov"]),
-    ("grace_mem/retrieval/reranker.py", "LLMPointwiseReranker", ["rank_pairs"]),
+    ("grace_mem/retrieval/steps/filtering.py", "LLMPointwiseReranker", ["rank_pairs"]),
 ]
 
 
@@ -381,7 +381,7 @@ def test_documented_class_methods_exist(rel, cls, methods):
 DOCUMENTED_FUNCTIONS = [
     ("grace_mem/services/graph/falkordb.py", ["graph_from_env"]),
     ("grace_mem/services/cache/cache.py", ["build_id_to_meta_maps"]),
-    ("grace_mem/retrieval/reranker.py", ["get_reranker"]),
+    ("grace_mem/retrieval/steps/filtering.py", ["get_reranker"]),
     ("grace_mem/temporal/query_time_parser.py", ["parse_query_time", "detect_and_parse_time_expressions"]),
     ("grace_mem/utils/logger_config.py", ["setup_logger", "make_module_jlog", "_StepTimer"]),
     ("grace_mem/data_model/entities.py", ["EntityType", "Entity", "canonical_entity_id"]),
@@ -389,7 +389,7 @@ DOCUMENTED_FUNCTIONS = [
     ("grace_mem/data_model/extraction.py", ["ExtractionResult", "KeywordExtractionResult"]),
     ("grace_mem/lexical.py", ["tokenize_en"]),
     ("grace_mem/bootstrap.py", ["build_pipeline"]),
-    ("grace_mem/retrieval/keywords.py", ["generate_query_keywords"]),
+    ("grace_mem/retrieval/steps/keywords.py", ["generate_query_keywords"]),
     ("grace_mem/retrieval/prompts/keyword/extraction.py", ["KEYWORD_EXTRACTION_PROMPT"]),
     ("grace_mem/ingestion/prompts/entity_ops/rules.py", ["ENTITY_OPS_RULES_V2"]),
     ("grace_mem/ingestion/prompts/entity_ops/examples.py", ["ENTITY_OPS_FEW_SHOT"]),
