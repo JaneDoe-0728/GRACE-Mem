@@ -1,10 +1,22 @@
+"""LongMemEval judge stage: binary correct/incorrect scoring.
+
+Binary rather than graded, for the same reason as the LoCoMo judge -- a scale
+requires a rubric the judge applies consistently across thousands of questions,
+and in practice it does not.
+
+`parse_binary_judge` is exposed at module level as well as on the stage because
+the reanalysis tooling re-parses stored judge replies without instantiating a
+stage.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pandas as pd
 
-from experiment.longmem.prompts import build_judge_messages
+from experiment.benchmarking.evaluation.judge import JudgeEngine
+from experiment.benchmarking.evaluation.judge import parse_binary_judge as _parse_binary_judge
 from experiment.longmem.utils.io import read_csv_dict_rows, write_csv_frame
 
 
@@ -15,26 +27,25 @@ class JudgeStage:
     DEFAULT_OUTPUT_CSV = "./experiment/longmem/output/default/temporal_reasoning/all_answers_judged_0316.csv"
 
     def parse_binary_judge(self, text: str) -> int:
-        value = (text or "").strip().lower()
-        if "yes" in value and "no" not in value:
-            return 1
-        if "no" in value and "yes" not in value:
-            return 0
-        if "1" in value and "0" not in value:
-            return 1
-        if "correct" in value and "incorrect" not in value:
-            return 1
-        return 0
+        return _parse_binary_judge(text)
 
-    def judge_single(self, llm, *, question: str, gold: str, generated: str) -> int:
-        messages = build_judge_messages(
+    def judge_single(
+        self,
+        llm,
+        *,
+        question: str,
+        gold: str,
+        generated: str,
+        category: str | None = None,
+        is_abstention: bool | None = None,
+    ) -> int:
+        return JudgeEngine(llm, "longmem").judge(
             question=question,
             gold=gold,
             generated=generated,
+            category=category,
+            is_abstention=is_abstention,
         )
-        resp = llm.chat(messages=messages, temperature=0.0, max_tokens=124)
-        text = resp.choices[0].message.content or ""
-        return self.parse_binary_judge(text)
 
     def llm_as_judge_singlemode(
         self,
@@ -56,10 +67,13 @@ class JudgeStage:
         gen_col = next((c for c in df.columns if c.lower() in ["generated_answer", "model_answer"]), None)
 
         if not all([q_col, g_col, gen_col]):
-            raise ValueError("找不到必要欄位 (question, answer/gold_answer, generated_answer/model_answer)")
+            raise ValueError("required columns not found (question, answer/gold_answer, generated_answer/model_answer)")
 
         if "correctness" not in df.columns:
             df["correctness"] = ""
+
+        category = input_path.parent.name.replace("_", "-")
+        is_abstention = input_path.stem.endswith("_abs")
 
         for i, row in df.iterrows():
             question = str(row[q_col]).strip()
@@ -80,6 +94,8 @@ class JudgeStage:
                 question=question,
                 gold=gold,
                 generated=generated,
+                category=category,
+                is_abstention=is_abstention,
             )
             df.at[i, "correctness"] = value
 
@@ -91,12 +107,22 @@ def parse_binary_judge(text: str) -> int:
     return JudgeStage().parse_binary_judge(text)
 
 
-def judge_single(llm, *, question: str, gold: str, generated: str) -> int:
+def judge_single(
+    llm,
+    *,
+    question: str,
+    gold: str,
+    generated: str,
+    category: str | None = None,
+    is_abstention: bool | None = None,
+) -> int:
     return JudgeStage().judge_single(
         llm,
         question=question,
         gold=gold,
         generated=generated,
+        category=category,
+        is_abstention=is_abstention,
     )
 
 
@@ -105,6 +131,6 @@ if __name__ == "__main__":
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
-    from KG.llm import LLMClient
+    from grace_mem.services.llm import LLMClient
 
     JudgeStage().llm_as_judge_singlemode(llm=LLMClient())

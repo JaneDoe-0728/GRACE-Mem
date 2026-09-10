@@ -1,3 +1,15 @@
+"""LongMemEval QA stage: retrieve, then answer, then record how.
+
+Per question: rewrite relative temporal expressions against the question's own
+date, retrieve, render a context, and ask the model. The temporal rewrite comes
+first because the retriever matches against absolute dates stored at ingest
+time -- a question asking about "last summer" retrieves nothing until that is
+resolved.
+
+`retriever` is injected rather than constructed so the stage can be driven by
+the runner, by the rerun tool, and by tests without each building a pipeline.
+"""
+
 from __future__ import annotations
 
 import json
@@ -6,8 +18,12 @@ from pathlib import Path
 import pandas as pd
 
 from experiment.longmem.utils.io import read_csv_frame
-from KG.utils.query_time_parser import parse_query_time
-from KG.utils.temporal import build_time_context, rewrite_temporal_text, time_rewrite_ablation_enabled
+from grace_mem.temporal import (
+    build_time_context,
+    rewrite_temporal_text,
+    time_rewrite_ablation_enabled,
+)
+from grace_mem.temporal.query_time_parser import parse_query_time
 
 
 class QAEvalStage:
@@ -23,28 +39,43 @@ class QAEvalStage:
         self.retriever = retriever
 
     def load_question_from_csv(self, path: str | Path) -> tuple[str, str | None]:
+        """Read one question CSV into its question text, turns, and gold markers."""
         df = read_csv_frame(Path(path))
         if "question" not in df.columns:
-            raise ValueError("CSV 缺少 question 欄位")
+            raise ValueError("the CSV has no question column")
 
         question = next((str(x) for x in df["question"].dropna().tolist() if str(x).strip()), None)
         if not question:
-            raise ValueError("question 欄位全為空")
+            raise ValueError("the question column is entirely empty")
 
         question_date = None
         if "question_date" in df.columns:
             for _, row in df.iterrows():
-                if pd.notna(row.get("question")) and str(row["question"]).strip() == question:
-                    if pd.notna(row.get("question_date")):
-                        question_date = str(row["question_date"]).strip()
-                        break
+                if (
+                    pd.notna(row.get("question"))
+                    and str(row["question"]).strip() == question
+                    and pd.notna(row.get("question_date"))
+                ):
+                    question_date = str(row["question_date"]).strip()
+                    break
 
         return question.strip(), question_date
 
     def rewrite_temporal_question(self, question: str, query_time: str | None = None) -> str:
-        # Ablation G: query 端時間改寫全關(ingest 端已烙進 artifacts,不在範圍)
+        # Ablation G: disable query-side time rewriting entirely (the ingest side is
+        # already baked into the artifacts and is out of scope here)
+        """Resolve relative time expressions in a question to absolute dates.
+
+        Must run before retrieval. Dates are resolved to absolute values at ingest
+        time, so a question about "last summer" matches nothing until it is anchored
+        the same way -- retrieval simply comes back empty, with no error saying why.
+
+        The question's own date is the reference point. Without one the question is
+        returned unchanged, since guessing a reference resolves it to a confidently
+        wrong range, which is worse than leaving it unanchored.
+        """
         if time_rewrite_ablation_enabled():
-            print("⏰ [ablation] time rewrite skipped (KG_ABLATION_NO_TIME_REWRITE=1)")
+            print("[ablation] time rewrite skipped (KG_ABLATION_NO_TIME_REWRITE=1)")
             return question
 
         if not query_time:
@@ -69,7 +100,7 @@ class QAEvalStage:
             if ((constraint.get("resolution") or {}).get("status") == "resolved")
         ]
         if resolved_constraints:
-            print("⏰ Time expressions detected and rewritten:")
+            print("Time expressions detected and rewritten:")
             print(f"   Original:  {question}")
             print(f"   Rewritten: {rewritten_question}")
             for constraint in resolved_constraints:
@@ -86,6 +117,7 @@ class QAEvalStage:
         retrieval_params: dict,
         query_time: str | None = None,
     ) -> str:
+        """Retrieve for one question and render the context handed to the model."""
         resolved_retriever = retriever or self.retriever
         if resolved_retriever is None:
             raise ValueError("Retriever is required for QAEvalStage.build_context")
@@ -130,6 +162,7 @@ class QAEvalStage:
         gold: str,
         correctness: str = "",
     ) -> pd.DataFrame:
+        """Wrap one question's result as a single-row frame.\n\nA frame rather than a dict so aggregation takes the same path whether it is\nhanded one result or a whole dataset.\n"""
         return pd.DataFrame(
             [
                 {
@@ -151,6 +184,12 @@ class QAEvalStage:
         retriever=None,
         retrieval_params: dict,
     ) -> tuple[str, str, str | None]:
+        """Evaluate one question end to end and return its result row.
+
+        The per-question unit of work: rewrite the question temporally, retrieve,
+        ask, and record. Questions are independent, which is what allows the runner
+        to process them in parallel.
+        """
         question, question_date = self.load_question_from_csv(csv_path)
         rewritten = self.rewrite_temporal_question(question, query_time=question_date)
         context = self.build_context(
@@ -172,10 +211,12 @@ class QAEvalStage:
 
 
 def rewrite_temporal_question(question: str, query_time: str | None = None) -> str:
+    """Module-level forwarder to `QAEvalStage.rewrite_temporal_question`."""
     return QAEvalStage().rewrite_temporal_question(question, query_time=query_time)
 
 
 def build_context(retriever, *, question: str, retrieval_params: dict, query_time: str | None = None) -> str:
+    """Module-level forwarder to `QAEvalStage.build_context`."""
     return QAEvalStage(retriever=retriever).build_context(
         question=question,
         retrieval_params=retrieval_params,
@@ -201,6 +242,7 @@ def single_result_frame(
     gold: str,
     correctness: str = "",
 ) -> pd.DataFrame:
+    """Module-level forwarder to `QAEvalStage.single_result_frame`."""
     return QAEvalStage().single_result_frame(
         question=question,
         question_date=question_date,
@@ -215,16 +257,16 @@ if __name__ == "__main__":
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
-    from KG.llm import LLMClient
-    from KG.pipeline.factory import build_pipeline as _build_pipeline
-    from experiment_config import RETRIEVAL_PARAMS
+    from experiment.experiment_config import RETRIEVAL_PARAMS
+    from grace_mem.bootstrap import build_pipeline as _build_pipeline
+    from grace_mem.services.llm import LLMClient
 
     CSV_PATH = "./experiment/longmem/script_data/temporal_reasoning/2ebe6c92.csv"
-    retriever = _build_pipeline()["retriever"]
-    stage = QAEvalStage(retriever=retriever)
-    answer, _, _ = stage.run_single_csv(
-        csv_path=CSV_PATH,
-        llm=LLMClient(),
-        retrieval_params=RETRIEVAL_PARAMS,
-    )
+    with _build_pipeline() as runtime:
+        stage = QAEvalStage(retriever=runtime.retriever)
+        answer, _, _ = stage.run_single_csv(
+            csv_path=CSV_PATH,
+            llm=LLMClient(),
+            retrieval_params=RETRIEVAL_PARAMS,
+        )
     print("answer:", answer)

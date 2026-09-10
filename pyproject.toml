@@ -1,8 +1,9 @@
 [project]
-name = "ai"
+name = "grace-mem"
 version = "0.1.0"
-description = "Add your description here"
+description = "Graph-based long-term conversational memory research framework"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10,<3.14"
 dependencies = [
     "accelerate>=1.10.0",
@@ -15,18 +16,28 @@ dependencies = [
     "httpx>=0.28.1",
     "huggingface-hub>=0.23.0",
     "llmlingua>=0.2.2",
-    "neo4j>=6.0.3",
     "nltk>=3.9.2",
+    "numpy>=2.2.6",
     "openai>=1.100.1",
     "pandas>=2.3.3",
-    "pytest>=9.0.2",
+    "pydantic>=2.11.7",
+    "python-dotenv>=1.1.1",
     "rank-bm25>=0.2.2",
+    "redis>=7.4.0",
+    "requests>=2.32.5",
     "sentence-transformers>=2.7.0",
     "torch>=2.8.0",
     "torchaudio>=2.8.0",
     "torchvision>=0.23.0",
     "tqdm>=4.67.1",
     "transformers>=4.41.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.0.2",
+    "ruff>=0.16.4",
 ]
 
 [[tool.uv.index]]
@@ -40,5 +51,59 @@ torchaudio = { index = "pytorch-cu128" }
 torchvision = { index = "pytorch-cu128" }
 
 [tool.pytest.ini_options]
+addopts = ["--strict-config", "--strict-markers"]
 pythonpath = ["."]
-testpaths = ["test"]
+testpaths = ["tests"]
+markers = [
+    "integration: needs a live FalkorDB, an LLM endpoint and the downloaded models; skips itself when they are absent",
+    "slow: spawns a subprocess (e.g. a pipeline --help) and takes seconds rather than milliseconds",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+# Keep the initial CI gate on rule families that have a clean repository-wide
+# baseline. The remaining families can be enabled as the existing findings are
+# paid down without making every main-branch build fail on day one.
+select = [
+    "E9",
+    "F",
+    "I",
+    "N",
+    "PLE",
+]
+ignore = [
+    # Pipeline boundaries deliberately catch third-party/runtime failures so a
+    # single backend or cleanup error does not abort an experiment batch.
+    "BLE001",
+    "S110",
+    "S112",
+    # Dataset timestamps are intentionally timezone-naive for compatibility
+    # with the source CSV/JSON formats and existing experiment artifacts.
+    "DTZ001",
+    "DTZ003",
+    "DTZ005",
+    "DTZ007",
+    # Keep payload-validation exception types and Python 3.10-compatible
+    # context-manager annotations stable as part of the existing API.
+    "PYI034",
+    "PYI036",
+    "TRY004",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["grace_mem"]
+check_untyped_defs = true
+no_implicit_optional = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = false
+disallow_any_generics = false
+disable_error_code = ["import-untyped"]

@@ -1,4 +1,8 @@
-from .judge import SYSTEM_PROMPT as JUDGE_SYSTEM_PROMPT, build_messages as build_judge_messages
+"""LongMemEval judge prompt and its message builder."""
 
-__all__ = ["JUDGE_SYSTEM_PROMPT", "build_judge_messages"]
+from .judge import SYSTEM_PROMPT as JUDGE_SYSTEM_PROMPT
+from .judge import build_messages as build_judge_messages
+from .judge import is_abstention_gold
+
+__all__ = ["JUDGE_SYSTEM_PROMPT", "build_judge_messages", "is_abstention_gold"]
 

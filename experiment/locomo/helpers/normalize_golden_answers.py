@@ -4,11 +4,11 @@ Applies the project temporal parser to all QA answers, with lightweight
 pre-processing for LoCoMo-specific formatting quirks (comma separators,
 weekday-before-date expressions) that the main parser does not handle.
 
-The original temporal parser (KG/utils/temporal) is unchanged.
+The original temporal parser (grace_mem/utils/temporal) is unchanged.
 
 Usage
 -----
-    python experiment/locomo/helpers/normalize_golden_answers.py \
+    python -m experiment.locomo.helpers.normalize_golden_answers \
         [--input  experiment/locomo/data/locomo10.json] \
         [--output experiment/locomo/data/locomo10_temporal_normalized.json]
 
@@ -31,14 +31,11 @@ import re
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
-
-from KG.utils.temporal.normalizer import build_time_context
-from KG.utils.temporal.classifier import classify_single_expression
-from KG.utils.temporal.resolver import resolve_match
-from KG.utils.temporal.types import ResolutionStatus
+from grace_mem.temporal.classifier import classify_single_expression
+from grace_mem.temporal.normalizer import build_time_context
+from grace_mem.temporal.resolver import resolve_match
+from grace_mem.temporal.types import ResolutionStatus
 
 # ---------------------------------------------------------------------------
 # constants (local copies – do not touch the project parser)
@@ -111,7 +108,13 @@ def _preprocess(text: str) -> str:
 # weekday-before-date (not in the main parser)
 # ---------------------------------------------------------------------------
 
-def _parse_date_parts(day: str, month: str, year: str) -> Optional[date]:
+def _parse_date_parts(day: str, month: str, year: str) -> date | None:
+    """Extract (day, month, year) from a date written either day- or month-first.
+
+    Both orders are present in the corpus, so which capture groups matched is
+    what disambiguates them -- the numbers alone cannot, since 3/4 is valid
+    either way.
+    """
     m = _MONTHS.get(month.strip().lower())
     if not m:
         return None
@@ -121,7 +124,12 @@ def _parse_date_parts(day: str, month: str, year: str) -> Optional[date]:
         return None
 
 
-def _weekday_before(anchor: date, weekday_name: str) -> Optional[date]:
+def _weekday_before(anchor: date, weekday_name: str) -> date | None:
+    """Resolve "the <weekday> before <date>" to an absolute date.
+
+    Strictly before: when the anchor date is itself that weekday, the previous
+    week is meant, not the anchor itself.
+    """
     wd = _WEEKDAYS.get(weekday_name.lower())
     if wd is None:
         return None
@@ -133,7 +141,7 @@ def _weekday_before(anchor: date, weekday_name: str) -> Optional[date]:
     return None
 
 
-def _try_weekday_before(raw: str) -> Optional[dict]:
+def _try_weekday_before(raw: str) -> dict | None:
     """Return a norm dict if raw matches '[weekday] before [date]', else None."""
     m = _WD_BEFORE_RE.search(raw)
     if not m:
@@ -161,7 +169,7 @@ def _try_weekday_before(raw: str) -> Optional[dict]:
 # delegate to the project temporal parser
 # ---------------------------------------------------------------------------
 
-def _try_parser(text: str) -> Optional[dict]:
+def _try_parser(text: str) -> dict | None:
     """Try the project temporal parser; return norm dict on success."""
     m = classify_single_expression(text)
     res = resolve_match(m.text, m.span, m.category, _CTX)
@@ -181,6 +189,13 @@ def _try_parser(text: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 def normalize_answer(text: str) -> dict:
+    """Rewrite a gold answer's dates into a canonical form.
+
+    Gold answers write dates as prose ("15 July 2023", "July 15 2023"), and a
+    judge comparing those against a model's ISO output can mark a correct answer
+    wrong on formatting alone. Normalizing both sides removes that from the
+    measurement.
+    """
     raw = _preprocess(text)
 
     # 1. Weekday-before-date (not handled by parser)
@@ -207,6 +222,7 @@ def normalize_answer(text: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def normalize_locomo_file(input_path: Path, output_path: Path) -> None:
+    """Rewrite a dataset file's gold answers in place, reporting how many changed."""
     with open(input_path) as f:
         data = json.load(f)
 

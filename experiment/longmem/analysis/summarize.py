@@ -1,13 +1,28 @@
+"""CLI: collapse LongMem per-case analysis JSON into one summary CSV.
+
+Reads the case files written during a run and emits a row per case, which is
+the form the comparison notebooks and spreadsheets consume.
+
+Paths are conventional: given --run-tag and --type it locates the analysis
+directory itself. --input and --output override that for one-off inspection of
+files sitting outside the usual layout.
+"""
+
 from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+_ROOT = Path(__file__).resolve().parents[3]
+if __package__ in (None, "") and str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
-from experiment.longmem.helpers.analysis_cases import DEFAULT_ANALYSIS_ROOT, analysis_dir_for, scenario_alias
+from experiment.longmem.helpers.analysis_cases import (
+    DEFAULT_ANALYSIS_ROOT,
+    analysis_dir_for,
+    scenario_alias,
+)
 from experiment.longmem.helpers.analysis_summary import summarize_cases
 
 

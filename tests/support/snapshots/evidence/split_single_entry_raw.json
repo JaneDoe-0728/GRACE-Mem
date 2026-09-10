@@ -1,0 +1,59 @@
+{
+  "calls": [
+    {
+      "args": {
+        "mid": "s1"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s2"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s3"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s4"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s5"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "mid": "s6"
+      },
+      "call": "vdb.compare_by_id_raw"
+    },
+    {
+      "args": {
+        "summary_id": "s1"
+      },
+      "call": "vdb.get_raw_turn_text_by_id"
+    },
+    {
+      "args": {
+        "summary_id": "s2"
+      },
+      "call": "vdb.get_raw_turn_text_by_id"
+    },
+    {
+      "args": {
+        "summary_id": "s3"
+      },
+      "call": "vdb.get_raw_turn_text_by_id"
+    }
+  ],
+  "evidence_text": "### Evidence Summary\n  \u2022 [sid=s1][score=0.930] raw turn text for s1, longer than the summary \n  \u2022 [sid=s2][score=0.850] raw turn text for s2, longer than the summary \n  \u2022 [sid=s3][score=0.710] raw turn text for s3, longer than the summary "
+}

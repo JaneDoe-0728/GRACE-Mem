@@ -1,53 +1,75 @@
-# locamal_ingest.py
-# -*- coding: utf-8 -*-
+"""Ingest stage: turn LoCoMo conversation sessions into knowledge-graph writes.
+
+Sits between the dataset loaders and `grace_mem`'s Ingestor, reshaping sessions
+into the per-turn records ingestion expects.
+
+The `chunk_turns` setting splits a long session into several ingestion units,
+which bounds how much context one extraction call sees.
+"""
+
+import argparse
+import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-import os
-import sys
-import argparse
+from typing import Any
 
 import pandas as pd
 
-# ======= project import (keep consistent with your repo layout) =======
-sys.path.append(str(Path(__file__).resolve().parents[2]))
-from locomo.helpers.dataset import build_session_records_from_json, normalize_dataset_name, resolve_dataset_path  # noqa: E402
-from locomo.utils.io import load_jsonl_records  # noqa: E402
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[3]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
+from experiment.experiment_config import INGEST_PARAMS
+from experiment.locomo.helpers.dataset import (
+    build_session_records_from_json,
+    resolve_dataset_path,
+)
+from experiment.locomo.utils.io import load_jsonl_records
 
-# ========= Config: edit here =========
-INPUT_JSONL = "data/locomo_by_session.jsonl"   # one session per line (a session dict)
-MAKE_SESSION_UID = True             # session_id = f"{sample_index}__{session_id}"
-PREV_K = 2
-ENTITY_SIM_TOPK = 4
-ENTITY_SIM_THRESHOLD = 0.5
-
+# ========= Rendering options, local to this module =========
+# The ingestion parameters are NOT here: prev_k, entity_sim_topk and
+# entity_sim_threshold are read from INGEST_PARAMS at the argument defaults below,
+# the same way locomo/cli.py reads them. A second copy of those values living here
+# only ever went stale -- this module had entity_sim_topk=4 and
+# entity_sim_threshold=0.5 against the configured 3 and 0.6, so running it directly
+# ingested at a different granularity than every orchestrated path.
 DIALOGUE_JOINER = "\n"              # keep each utterance on its own line
 PUT_SPEAKER_PREFIX = True           # keep "Caroline: ..." in text if present
 
-# Turns per summary chunk. 0 (default) = original behaviour: one summary per whole
-# session. When >0, each session is split into consecutive windows of this many
-# turns, each becoming its own summary/ingest unit (message_id = chunk index). This
-# gives a finer summary-retrieval pool so direct-vector + rerank have room to work.
-CHUNK_TURNS = int(os.environ.get("LOCOMO_CHUNK_TURNS", "0") or 0)
+# Turns per summary chunk. Single source of truth is INGEST_PARAMS["chunk_turns"] in
+# experiment/experiment_config.py; it is threaded down as an explicit argument (never
+# read from the environment) so the orchestrator, each worker subprocess and the
+# snapshot builder cannot silently disagree about the chunk size.
+CHUNK_TURNS = int(INGEST_PARAMS["chunk_turns"] or 0)
 
 
-def _iter_dialogue_chunks(dialogue: List[str]):
-    """Yield (message_id, chunk_lines). CHUNK_TURNS<=0 → whole session as one chunk."""
-    if CHUNK_TURNS and CHUNK_TURNS > 0:
-        for start in range(0, len(dialogue), CHUNK_TURNS):
-            yield start // CHUNK_TURNS, dialogue[start:start + CHUNK_TURNS]
+def _iter_dialogue_chunks(dialogue: list[str], chunk_turns: int | None = None):
+    """Yield (message_id, chunk_lines).
+
+    chunk_turns > 0 → consecutive windows of that many turns, message_id = chunk index.
+    chunk_turns <= 0 → the whole session as one chunk (message_id = 0), i.e. the
+    pre-chunking behaviour. None falls back to the configured default.
+
+    Empty dialogue is the one place the two modes differ: chunked mode yields nothing
+    (no summary is written for a session with no turns), while chunk_turns<=0 yields a
+    single empty chunk. That asymmetry is deliberate — chunk_turns<=0 exists to
+    reproduce pre-chunking runs byte for byte, so its behaviour is frozen.
+    """
+    n = CHUNK_TURNS if chunk_turns is None else int(chunk_turns)
+    if n > 0:
+        for start in range(0, len(dialogue), n):
+            yield start // n, dialogue[start:start + n]
     else:
         yield 0, dialogue
 
 def load_sessions(
     *,
-    dataset: str,
     sessions_jsonl: str | Path | None = None,
     dataset_json: str | Path | None = None,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
+    """Load session records from JSONL or from the dataset JSON."""
     sessions_path = resolve_dataset_path(
-        dataset=dataset,
         kind="sessions_jsonl",
         explicit_path=sessions_jsonl,
         required=False,
@@ -56,7 +78,6 @@ def load_sessions(
         return load_jsonl_records(sessions_path)
 
     dataset_path = resolve_dataset_path(
-        dataset=dataset,
         kind="qa_json",
         explicit_path=dataset_json,
     )
@@ -67,7 +88,7 @@ def _session_uid(sample_index: Any, session_id: Any, make_uid: bool) -> str:
     return f"{sample_index}__{session_id}" if make_uid else str(session_id)
 
 
-def _build_dialogue_text(dialogue: List[str]) -> str:
+def _build_dialogue_text(dialogue: list[str]) -> str:
     """Join dialogue lines, optionally stripping speaker prefixes per PUT_SPEAKER_PREFIX."""
     if PUT_SPEAKER_PREFIX:
         return DIALOGUE_JOINER.join(dialogue)
@@ -81,27 +102,29 @@ def _build_dialogue_text(dialogue: List[str]) -> str:
 
 
 def sessions_to_one_turn_df(
-    sessions: List[Dict[str, Any]],
+    sessions: list[dict[str, Any]],
     *,
     make_session_uid: bool = True,
-    sample_filter: Optional[int] = None,
+    sample_filter: int | None = None,
+    chunk_turns: int | None = None,
 ) -> pd.DataFrame:
     """
-    每個 session -> 一個 turn：
-      - session_id: 唯一（建議 sample_index__session_id）
-      - message_id: 固定 0
+    Each session becomes one or more chunks, and each chunk one turn:
+      - session_id: unique (sample_index__session_id is the suggested form)
+      - message_id: the chunk index (fixed at 0 when chunk_turns <= 0, i.e. the
+        whole session is a single chunk)
       - dialogue_datetime: date_time
-      - user_text: 整段 dialogue (A/B 兩人對話原樣串起來)
-      - assistant_text: 空字串
+      - user_text: that chunk's dialogue, with the A/B exchange concatenated as is
+      - assistant_text: an empty string
     """
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for s in sessions:
         sample_index = s.get("sample_index")
         if sample_filter is not None and int(sample_index) != sample_filter:
             continue
         sess_id = s.get("session_id")
         dialogue = ["" if x is None else str(x) for x in (s.get("dialogue", []) or [])]
-        for message_id, chunk in _iter_dialogue_chunks(dialogue):
+        for message_id, chunk in _iter_dialogue_chunks(dialogue, chunk_turns):
             rows.append(
                 {
                     "session_id": _session_uid(sample_index, sess_id, make_session_uid),
@@ -120,20 +143,23 @@ def sessions_to_one_turn_df(
 
 
 def session_records_to_df(
-    records: List[Dict[str, Any]],
+    records: list[dict[str, Any]],
     *,
     conv_id: str,
+    chunk_turns: int | None = None,
 ) -> pd.DataFrame:
-    """Build a one-turn-per-session DataFrame from a list of session record dicts.
+    """Build a one-turn-per-chunk DataFrame from a list of session record dicts.
 
     Session UIDs are ``<conv_id>__<session_id>`` so they are unique per conversation
-    and do not collide across different source conversations.
+    and do not collide across different source conversations. ``chunk_turns`` must
+    match the value used by the run that produced the artifacts being restored,
+    otherwise the resulting summary_ids will not line up.
     """
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for rec in records:
         sess_id = rec.get("session_id")
         dialogue = ["" if x is None else str(x) for x in (rec.get("dialogue", []) or [])]
-        for message_id, chunk in _iter_dialogue_chunks(dialogue):
+        for message_id, chunk in _iter_dialogue_chunks(dialogue, chunk_turns):
             rows.append(
                 {
                     "session_id": f"{conv_id}__{sess_id}",
@@ -154,14 +180,19 @@ def ingest_by_session_one_turn(
     ingestor,
     df: pd.DataFrame,
     *,
-    prev_k: Optional[int] = None,
-    entity_sim_topk: Optional[int] = None,
-    entity_sim_threshold: Optional[float] = None,
+    prev_k: int | None = None,
+    entity_sim_topk: int | None = None,
+    entity_sim_threshold: float | None = None,
 ) -> dict:
+    """Ingest each session as a single turn.
+
+    The coarse granularity: extraction sees a whole session at once, which gives
+    it more context but leaves provenance session-level rather than turn-level.
+    """
     need_cols = {"session_id", "message_id", "user_text", "assistant_text", "dialogue_datetime"}
     miss = need_cols - set(df.columns)
     if miss:
-        raise ValueError(f"缺少欄位: {sorted(miss)}")
+        raise ValueError(f"missing columns: {sorted(miss)}")
 
     report = defaultdict(list)
 
@@ -193,17 +224,16 @@ class IngestStage:
         self,
         *,
         ingestor,
-        dataset: str,
         dataset_json=None,
         sessions_jsonl=None,
-        sample_index: Optional[int] = None,
-        prev_k: Optional[int] = None,
-        entity_sim_topk: Optional[int] = None,
-        entity_sim_threshold: Optional[float] = None,
+        sample_index: int | None = None,
+        prev_k: int | None = None,
+        entity_sim_topk: int | None = None,
+        entity_sim_threshold: float | None = None,
         make_session_uid: bool = True,
+        chunk_turns: int | None = None,
     ) -> None:
         self.ingestor = ingestor
-        self.dataset = dataset
         self.dataset_json = dataset_json
         self.sessions_jsonl = sessions_jsonl
         self.sample_index = sample_index
@@ -211,10 +241,10 @@ class IngestStage:
         self.entity_sim_topk = entity_sim_topk
         self.entity_sim_threshold = entity_sim_threshold
         self.make_session_uid = make_session_uid
+        self.chunk_turns = chunk_turns
 
     def run(self) -> dict:
         sessions = load_sessions(
-            dataset=self.dataset,
             sessions_jsonl=self.sessions_jsonl,
             dataset_json=self.dataset_json,
         )
@@ -222,6 +252,7 @@ class IngestStage:
             sessions,
             make_session_uid=self.make_session_uid,
             sample_filter=self.sample_index,
+            chunk_turns=self.chunk_turns,
         )
         if df.empty:
             raise RuntimeError(f"No sessions found for sample_index={self.sample_index}")
@@ -236,23 +267,19 @@ class IngestStage:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest by-session conversational JSONL into KG/VDB")
-    parser.add_argument("--dataset", choices=["locomo", "locomo-plus"], default="locomo")
-    parser.add_argument("--sessions-jsonl", default=None, help="Defaults are resolved from --dataset when available")
+    parser.add_argument("--sessions-jsonl", default=None, help="Defaults to the standard LoCoMo session file")
     parser.add_argument("--dataset-json", default=None, help="Fallback source used to derive sessions when JSONL is absent")
     parser.add_argument("--sample-index", type=int, default=3)
-    parser.add_argument("--prev-k", type=int, default=PREV_K)
-    parser.add_argument("--entity-sim-topk", type=int, default=ENTITY_SIM_TOPK)
-    parser.add_argument("--entity-sim-threshold", type=float, default=ENTITY_SIM_THRESHOLD)
+    parser.add_argument("--prev-k", type=int, default=INGEST_PARAMS["prev_k"])
+    parser.add_argument("--entity-sim-topk", type=int, default=INGEST_PARAMS["entity_sim_topk"])
+    parser.add_argument("--entity-sim-threshold", type=float,
+                        default=INGEST_PARAMS["entity_sim_threshold"])
+    parser.add_argument("--chunk-turns", type=int, default=CHUNK_TURNS,
+                        help="Turns per ingest chunk (0 = whole session as one chunk)")
     parser.add_argument("--no-session-uid", action="store_true")
     args = parser.parse_args()
 
-    from KG.pipeline.factory import build_pipeline
-    _pipeline = build_pipeline()
-    ingestor = _pipeline["ingestor"]
-
-    dataset = normalize_dataset_name(args.dataset)
     sessions = load_sessions(
-        dataset=dataset,
         sessions_jsonl=args.sessions_jsonl,
         dataset_json=args.dataset_json,
     )
@@ -260,20 +287,24 @@ def main() -> None:
         sessions,
         make_session_uid=not args.no_session_uid,
         sample_filter=args.sample_index,
+        chunk_turns=args.chunk_turns,
     )
     if df.empty:
         raise SystemExit(f"No sessions found for sample_index={args.sample_index}")
 
-    print(f"[INFO] dataset={dataset} sessions(lines)={len(sessions)}")
+    print(f"[INFO] dataset=locomo sessions(lines)={len(sessions)}")
     print(df[["session_id", "dialogue_datetime"]].head(10).to_string(index=False))
 
-    report = ingest_by_session_one_turn(
-        ingestor,
-        df,
-        prev_k=args.prev_k,
-        entity_sim_topk=args.entity_sim_topk,
-        entity_sim_threshold=args.entity_sim_threshold,
-    )
+    from grace_mem.bootstrap import build_pipeline
+
+    with build_pipeline() as runtime:
+        report = ingest_by_session_one_turn(
+            runtime.ingestor,
+            df,
+            prev_k=args.prev_k,
+            entity_sim_topk=args.entity_sim_topk,
+            entity_sim_threshold=args.entity_sim_threshold,
+        )
     print(f"[DONE] sessions_ingested={len(report)}")
 
 

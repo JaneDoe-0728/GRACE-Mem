@@ -1,13 +1,21 @@
+"""Filesystem helpers shared by the LoCoMo runner and its stages.
+
+Everything here is append-only or create-if-absent. Samples run concurrently
+and write into the same run root, so a helper that truncated or rewrote a
+shared file would let one worker discard another's output. `EVAL_COLUMNS`
+fixes the evaluation CSV's column order, which is what allows per-sample CSVs
+to be concatenated later without reconciling headers.
+"""
+
 import csv
 import json
 import shutil
-from datetime import datetime
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Sequence
+from typing import Any
 
-from KG.storage.paths import resolve_artifacts_dir
-from experiment.reproducibility import attach_reproducibility_metadata
-
+from experiment.benchmarking.reproducibility import attach_reproducibility_metadata
+from grace_mem.utils.paths import resolve_artifacts_dir
 
 EVAL_COLUMNS = [
     "question",
@@ -62,6 +70,7 @@ def remove_if_exists(path: str | Path) -> None:
 
 
 def load_json_records(path: str | Path) -> list[dict[str, Any]]:
+    """Load a JSON file expected to hold a list of records."""
     target = Path(path)
     with target.open("r", encoding="utf-8") as fh:
         data = json.load(fh)
@@ -76,15 +85,6 @@ def load_json_records(path: str | Path) -> list[dict[str, Any]]:
     return records
 
 
-def load_json_object(path: str | Path) -> dict[str, Any]:
-    target = Path(path)
-    with target.open("r", encoding="utf-8") as fh:
-        data = json.load(fh)
-    if not isinstance(data, dict):
-        raise ValueError(f"{target} must contain a JSON object")
-    return data
-
-
 def load_csv_rows(path: str | Path, *, encoding: str = "utf-8-sig") -> list[dict[str, Any]]:
     target = Path(path)
     with target.open("r", encoding=encoding, newline="") as fh:
@@ -92,6 +92,11 @@ def load_csv_rows(path: str | Path, *, encoding: str = "utf-8-sig") -> list[dict
 
 
 def load_jsonl_records(path: str | Path) -> list[dict[str, Any]]:
+    """Read a JSONL file, skipping unparseable lines.
+
+    Tolerant for the same reason as the LongMem equivalent: trace files are
+    appended to during a run, so the last line is frequently incomplete.
+    """
     target = Path(path)
     records: list[dict[str, Any]] = []
     with target.open("r", encoding="utf-8") as fh:
@@ -121,42 +126,10 @@ def append_text(path: str | Path, text: str) -> None:
         fh.write(text)
 
 
-def append_csv_with_sample(src_csv: Path, dst_csv: Path, *, sample_index: int) -> None:
-    if not src_csv.exists():
-        return
-    with src_csv.open("r", encoding="utf-8", newline="") as src_fh:
-        reader = csv.DictReader(src_fh)
-        fieldnames = reader.fieldnames or []
-        out_fieldnames = ["sample"] + [name for name in fieldnames if name != "sample"]
-        write_header = not dst_csv.exists()
-        dst_csv.parent.mkdir(parents=True, exist_ok=True)
-        with dst_csv.open("a", encoding="utf-8", newline="") as dst_fh:
-            writer = csv.DictWriter(dst_fh, fieldnames=out_fieldnames, quoting=csv.QUOTE_ALL)
-            if write_header:
-                writer.writeheader()
-            for row in reader:
-                merged = {"sample": f"sample_{sample_index}"}
-                merged.update(row)
-                writer.writerow(merged)
-
-
-def sync_logs(run_root: Path) -> None:
-    copy_dir(Path("./logs"), run_root / "logs")
-
-
 def token_usage_log_path(run_root: Path, sample_index: int) -> Path:
     path = run_root / "logs" / "tokens_usages" / f"tokens_usage{sample_index}.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def write_summary_map(path: Path, per_sample_stats: Dict[str, dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "per_sample": per_sample_stats,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def backup_artifacts_and_logs(
@@ -165,6 +138,12 @@ def backup_artifacts_and_logs(
     also_copy: Sequence[Path],
     include_artifacts: bool = True,
 ) -> None:
+    """Copy a sample's artifacts and logs aside before the next sample overwrites them.
+
+    Samples reuse one working artifacts directory, so without this each sample
+    destroys the previous one's evidence -- and a failure is usually only
+    diagnosable from the state of the run that produced it.
+    """
     if include_artifacts:
         copy_dir(resolve_artifacts_dir(), sample_dir / "artifacts")
     copy_dir(Path("./logs"), sample_dir / "logs")
@@ -192,6 +171,11 @@ def write_eval_csv(
     eval_csv: str | Path,
     rows: Sequence[dict[str, Any]],
 ) -> None:
+    """Write evaluation rows with the canonical column order.
+
+    EVAL_COLUMNS fixes the order so per-sample CSVs concatenate later without
+    reconciling headers.
+    """
     output_path = Path(eval_csv)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pandas_module.DataFrame(list(rows), columns=EVAL_COLUMNS).to_csv(

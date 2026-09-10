@@ -1,7 +1,18 @@
+"""LongMemEval ingest stage: sessions in, knowledge graph out.
+
+Offers two granularities, and the choice changes what the graph can answer.
+`ingest_by_turn_pairs` treats each user/assistant exchange as one unit, which
+keeps provenance precise enough to cite a specific turn. `ingest_by_session`
+ingests a whole session at once, which is cheaper and gives extraction more
+context but makes provenance session-level.
+
+A trailing user turn with no reply is dropped by default: extraction on a
+question nobody answered yields entities with no facts attached to them.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Optional
 
 import pandas as pd
 
@@ -28,9 +39,9 @@ class IngestStage:
         ingestor,
         df: pd.DataFrame,
         *,
-        prev_k: Optional[int] = None,
-        entity_sim_topk: Optional[int] = None,
-        entity_sim_threshold: Optional[float] = None,
+        prev_k: int | None = None,
+        entity_sim_topk: int | None = None,
+        entity_sim_threshold: float | None = None,
         ignore_trailing_user_without_reply: bool = True,
     ) -> dict:
         data = self.normalize_sessions(df)
@@ -106,9 +117,9 @@ class IngestStage:
         ingestor,
         df: pd.DataFrame,
         *,
-        prev_k: Optional[int] = None,
-        entity_sim_topk: Optional[int] = None,
-        entity_sim_threshold: Optional[float] = None,
+        prev_k: int | None = None,
+        entity_sim_topk: int | None = None,
+        entity_sim_threshold: float | None = None,
     ) -> dict:
         data = self.normalize_sessions(df)
         results = {}

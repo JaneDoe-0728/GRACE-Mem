@@ -4,11 +4,12 @@ __pycache__/
 *.pyc
 *.pyo
 models
-KG/storage/artifacts
+grace_mem/storage/artifacts
 .claude/skills
 .codex/skills
 experiment/locomo/output
 experiment/longmem/script_data
+experiment/longmem/data
 experiment/longmem/output
 experiment/locomo/data
 experiment/longmem/sample
@@ -24,7 +25,7 @@ experiment/docs/
 experiment/temp
 logs/
 assets/
-KG/artifacts
+grace_mem/artifacts
 .pytest_cache
 .venv
 .claude
@@ -32,12 +33,25 @@ KG/artifacts
 *.log
 *.jsonl
 *.json
+# Generated documentation kept on the local workstation only.
+/docs/architecture/deps.drawio
+/docs/architecture/deps.mmd
+/docs/architecture/img/
+/docs/architecture/pydeps/
+/docs/comment-case-study.html
+/docs/drawing_spec_recommendation.md
+/docs/superpowers/
 .codex/
 experiment/sample
 experiment/old longmem result
 experiment/sample_question
 logs/
 test/logs/
+# Local regression and live-probe suite; not part of the public release.
+tests/
+docs/REFACTOR_INSTRUCTIONS.md
+docs/REFACTOR_REPORT.zh-TW.md
+
 # AutoResearch evolve state (run-time, not architecture)
 experiment/locomo/autoresearch/findings.md
 experiment/locomo/autoresearch/progress.md
@@ -55,9 +69,16 @@ experiment/locomo/autoresearch/oss-20b-0515/
 experiment/longmem/ablation/results
 test/fixed_output/results/
 
-# 實驗資料產物(勿入版控)
+# Experiment data artefacts (keep out of version control)
 experiment/locomo/_iterlogs/
 experiment/locomo/autoresearch/experiment/
 
 # Local secrets — never commit
 .env
+
+# Internal refactor working documents: kept locally, not published. They describe
+# how the package layout and the retriever were taken apart, which is history for
+# the people who did it rather than anything a user of the repository needs.
+docs/package-structure.md
+docs/retriever-refactor.md
+docs/refactor_todo.md

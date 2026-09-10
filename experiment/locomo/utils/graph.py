@@ -1,11 +1,29 @@
+"""Export and restore the knowledge graph as a JSON snapshot.
+
+A run evaluates many samples against the same conversation, and rebuilding the
+graph per sample is the dominant cost. Exporting once and restoring per sample
+removes it.
+
+The exported file is therefore load-bearing rather than a convenience, and it
+is validated on both sides: `validate_graph_export` before restoring, and
+`validate_vdb_artifacts` on the vector stores that accompany it. A truncated
+export restored without checking produces a partial graph, which does not fail
+-- it quietly lowers recall for every question in the sample and looks like a
+retrieval regression.
+
+ARTIFACTS_SRC resolves KG_ARTIFACTS_DIR at import time, so each worker process
+must set that variable before importing this module or they will share one
+artifacts directory and overwrite each other.
+"""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from KG.storage.paths import resolve_artifacts_dir
-from locomo.utils.log import log_event
+from experiment.locomo.utils.log import log_event
+from grace_mem.utils.paths import resolve_artifacts_dir
 
 # Working VDB dir, honoring KG_ARTIFACTS_DIR for per-process isolation. Resolved
 # at import time; each process must set the env var before it starts.
@@ -33,7 +51,7 @@ def validate_graph_export(path: Path) -> None:
         )
 
 
-def write_graph_export(path: Path, graph, *, validate: bool = False) -> Optional[dict[str, Any]]:
+def write_graph_export(path: Path, graph, *, validate: bool = False) -> dict[str, Any] | None:
     """Export graph state to path. Returns the export payload, or None if export failed."""
     export_data = export_graph(graph)
     if export_data is None:
@@ -90,12 +108,12 @@ def validate_vdb_artifacts(base_dir: Path) -> None:
         )
 
 
-def export_graph(graph) -> Optional[dict[str, Any]]:
+def export_graph(graph) -> dict[str, Any] | None:
     """Export FalkorDB graph state. Returns None if FalkorDB is unreachable."""
     return _export_graph(graph)
 
 
-def _export_graph(graph) -> Optional[dict[str, Any]]:
+def _export_graph(graph) -> dict[str, Any] | None:
     """Export all Entity nodes and KG_REL relationships as plain dicts."""
     label = graph.cfg.entity_label
     rel = graph.cfg.rel_type

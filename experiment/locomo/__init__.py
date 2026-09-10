@@ -1,1 +1,1 @@
-__all__ = ["stages"]
+"""LoCoMo benchmark pipeline and analysis package."""

@@ -1,17 +1,29 @@
+"""File IO for the LongMemEval runner, including the cross-process lock.
+
+`fcntl`-based `file_lock` is the reason this module exists in its own right.
+Several worker processes append to the same progress table, and without an
+advisory lock a read-modify-write from two of them loses one worker's update
+outright -- and the run then looks like it simply never did that work.
+
+Being fcntl, the lock is POSIX-only and advisory: it holds because every writer
+here goes through this helper, not because the OS enforces it.
+"""
+
 from __future__ import annotations
 
 import csv
 import fcntl
 import json
 import os
-import shutil
 import tempfile
-from datetime import datetime
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+from experiment.benchmarking.run_metadata import to_jsonable
 
 
 def ensure_dir(path: Path) -> Path:
@@ -19,46 +31,8 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
-def remove_tree(path: Path, *, missing_ok: bool = True) -> None:
-    if path.exists():
-        shutil.rmtree(path)
-    elif not missing_ok:
-        raise FileNotFoundError(path)
-
-
-def remove_file(path: Path, *, missing_ok: bool = True) -> None:
-    if path.exists():
-        path.unlink()
-    elif not missing_ok:
-        raise FileNotFoundError(path)
-
-
-def move_file(src: Path, dst: Path, *, ensure_parent: bool = True) -> Path:
-    if ensure_parent:
-        ensure_dir(dst.parent)
-    return Path(shutil.move(str(src), str(dst)))
-
-
 def glob_sorted(folder: Path, pattern: str) -> list[Path]:
     return sorted(folder.glob(pattern))
-
-
-def latest_glob_match(folder: Path, pattern: str) -> Path | None:
-    matches = glob_sorted(folder, pattern)
-    return matches[-1] if matches else None
-
-
-def read_text_file(path: Path, *, encoding: str = "utf-8", default: str | None = None) -> str | None:
-    try:
-        return path.read_text(encoding=encoding)
-    except Exception:
-        return default
-
-
-def write_text_file(path: Path, text: str, *, ensure_parent: bool = True, encoding: str = "utf-8") -> None:
-    if ensure_parent:
-        ensure_dir(path.parent)
-    path.write_text(text, encoding=encoding)
 
 
 def read_json_file(path: Path, *, default: Any = None) -> Any:
@@ -69,10 +43,20 @@ def read_json_file(path: Path, *, default: Any = None) -> Any:
 
 
 def write_json_file(path: Path, data: Any, *, ensure_parent: bool = True, indent: int = 2) -> None:
+    """Write `data` as JSON, coercing anything json cannot encode.
+
+    Total by construction, for the same reason run metadata is: these files are
+    written *after* the work they describe. A LongMem run once ingested 50
+    sessions, answered its question and was judged correct, then died on the
+    final summary write because a payload in it held a domain object -- and the
+    watchdog, which reads completion markers rather than exit codes, reported
+    success. A summary that renders an object as its repr is worth more than a
+    run that ends in a TypeError.
+    """
     if ensure_parent:
         ensure_dir(path.parent)
     path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=indent),
+        json.dumps(data, ensure_ascii=False, indent=indent, default=to_jsonable),
         encoding="utf-8",
     )
 
@@ -85,6 +69,12 @@ def append_jsonl(path: Path, record: dict, *, ensure_parent: bool = True) -> Non
 
 
 def read_jsonl_file(path: Path, *, encoding: str = "utf-8") -> list[dict]:
+    """Read a JSONL file, skipping lines that do not parse.
+
+    These files are appended to while a run is in progress, so the final line is
+    routinely a partial write. Failing the whole read for it would make live
+    inspection impossible.
+    """
     if not path.exists():
         return []
     lines: list[dict] = []
@@ -106,6 +96,15 @@ def read_csv_frame(path: Path, **kwargs) -> pd.DataFrame:
 
 @contextmanager
 def file_lock(path: Path):
+    """Hold an exclusive advisory lock on `path` for the duration of the block.
+
+    The cross-process mutex behind every shared-file update in a LongMem run.
+    Being fcntl-based it is POSIX-only and advisory: it protects only against
+    writers that also take it, so a direct write to a locked file is not
+    blocked.
+
+    Blocks until the lock is available.
+    """
     ensure_dir(path.parent)
     with open(path, "a+", encoding="utf-8") as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
@@ -122,6 +121,12 @@ def _atomic_replace(temp_path: Path, target_path: Path) -> None:
 
 
 def write_csv_frame(df: pd.DataFrame, path: Path, **kwargs) -> None:
+    """Write a dataframe to CSV via a temp file, then move it into place.
+
+    Written atomically because readers -- the watchdog, a live progress check --
+    run concurrently with writers, and a direct write exposes a truncated file
+    for the duration of the write.
+    """
     ensure_dir(path.parent)
     options = {"index": False, "encoding": "utf-8-sig"}
     options.update(kwargs)
@@ -137,36 +142,6 @@ def write_csv_frame(df: pd.DataFrame, path: Path, **kwargs) -> None:
         temp_path = Path(handle.name)
         df.to_csv(handle, **options)
     _atomic_replace(temp_path, path)
-
-
-def upsert_csv_row(
-    path: Path,
-    row: dict[str, Any],
-    *,
-    key_columns: list[str],
-    read_kwargs: dict[str, Any] | None = None,
-    write_kwargs: dict[str, Any] | None = None,
-) -> None:
-    row_str = {key: str(value) for key, value in row.items()}
-    if path.exists():
-        df = read_csv_frame(path, **(read_kwargs or {"dtype": str}))
-    else:
-        df = pd.DataFrame()
-
-    if all(column in df.columns for column in key_columns) and key_columns:
-        mask = pd.Series(True, index=df.index)
-        for column in key_columns:
-            mask = mask & (df[column].astype(str) == row_str.get(column, ""))
-    else:
-        mask = pd.Series([], dtype=bool)
-
-    if mask.any():
-        for key, value in row_str.items():
-            df.loc[mask, key] = value
-    else:
-        df = pd.concat([df, pd.DataFrame([row_str])], ignore_index=True)
-
-    write_csv_frame(df, path, **(write_kwargs or {}))
 
 
 def read_csv_dict_rows(path: Path, *, encoding: str = "utf-8-sig", newline: str = "") -> tuple[list[str], list[dict[str, str]]]:
@@ -234,14 +209,3 @@ def append_type_subdir(base_dir: Path, type_name: str | None) -> Path:
     if not type_name:
         return base_dir
     return base_dir / type_name
-
-
-def append_progress_stuck_history(output_dir: Path, dataset_name: str, stuck_entry: str) -> None:
-    from experiment.longmem.helpers.progress import append_stuck_history_entry
-
-    append_stuck_history_entry(
-        output_dir,
-        dataset=dataset_name,
-        entry=stuck_entry,
-        filename="progress.csv",
-    )

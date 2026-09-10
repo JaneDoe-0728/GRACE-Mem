@@ -10,15 +10,12 @@
 # Options:
 #   --artifact-dir DIR  Reuse ingest artifacts from a previous run's output dir
 #                       (skips re-ingest; resolves per-sample as DIR/sample_<n>/artifacts/)
-#   --adaptive          Enable adaptive two-pass retrieval
-#   --tau FLOAT         Confidence threshold for adaptive re-search (default: 0.70)
 #   --sample-ids RANGE  Override sample range (default: 0-9, e.g. "0,2,5-7")
 #   --adv               Include adversarial questions (excluded by default)
 #
 # Examples:
 #   bash experiment/locomo/run_one_experiment.sh oss-20b-0430
 #   bash experiment/locomo/run_one_experiment.sh oss-20b-0430 --artifact-dir experiment/locomo/output/standard/oss-20b-0429
-#   bash experiment/locomo/run_one_experiment.sh oss-20b-ada-0430 --adaptive --tau 0.70
 #
 # Output:
 #   experiment/locomo/output/standard/<run-tag>/
@@ -70,13 +67,13 @@ preflight() {
 
     # Embedding model
     if [[ ! -f "${REPO_ROOT}/models/embedding_models/qwen3-0.6b/config.json" ]]; then
-        echo "PREFLIGHT FAIL: embedding model missing. Run: bash setup_env.sh" >&2
+        echo "PREFLIGHT FAIL: embedding model missing. Run: bash scripts/setup_env.sh" >&2
         fail=1
     fi
 
     # Reranker model
     if [[ ! -f "${REPO_ROOT}/models/reranker/qwen3-reranker-0.6b/config.json" ]]; then
-        echo "PREFLIGHT FAIL: reranker model missing. Run: bash setup_env.sh" >&2
+        echo "PREFLIGHT FAIL: reranker model missing. Run: bash scripts/setup_env.sh" >&2
         fail=1
     fi
 
@@ -91,16 +88,12 @@ RUN_TAG="$1"
 shift
 
 ARTIFACT_DIR=""
-ADAPTIVE=0
-TAU="0.70"
 SAMPLE_IDS="0-9"
 ADV=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --artifact-dir)  ARTIFACT_DIR="$2"; shift 2 ;;
-        --adaptive)      ADAPTIVE=1; shift ;;
-        --tau)           TAU="$2"; shift 2 ;;
         --sample-ids)    SAMPLE_IDS="$2"; shift 2 ;;
         --adv)           ADV=1; shift ;;
         *)
@@ -113,14 +106,12 @@ done
 # ── build command ────────────────────────────────────────────────────────────
 
 CMD=(
-    uv run python experiment/locomo/pipeline.py
-    --dataset locomo
+    uv run python -m experiment.locomo.pipeline.runner
     --sample-ids "${SAMPLE_IDS}"
     --run-tag "${RUN_TAG}"
 )
 
 [[ -n "${ARTIFACT_DIR}" ]] && CMD+=(--artifact-dir "${ARTIFACT_DIR}")
-[[ "${ADAPTIVE}" -eq 1 ]]  && CMD+=(--adaptive --tau "${TAU}")
 [[ "${ADV}"      -eq 1 ]]  && CMD+=(--adv)
 
 OUT_DIR="experiment/locomo/output/standard/${RUN_TAG}"
@@ -130,7 +121,6 @@ OUT_DIR="experiment/locomo/output/standard/${RUN_TAG}"
 echo "========================================"
 echo "run-tag:      ${RUN_TAG}"
 echo "sample-ids:   ${SAMPLE_IDS}"
-echo "adaptive:     ${ADAPTIVE}$([[ "${ADAPTIVE}" -eq 1 ]] && echo "  tau=${TAU}")"
 echo "artifact-dir: ${ARTIFACT_DIR:-<fresh ingest>}"
 echo "output:       ${OUT_DIR}"
 echo "========================================"

@@ -1,11 +1,20 @@
+"""Gather one run's scattered outputs into a single place for analysis.
+
+A run writes per-category CSVs, traces, and judge outputs into separate
+directories. Comparing runs means first collecting each into one location, and
+that is all this does -- no interpretation, so the collected copy stays a
+faithful record of what the run produced.
+"""
+
 from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+_ROOT = Path(__file__).resolve().parents[3]
+if __package__ in (None, "") and str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from experiment.longmem.helpers.analysis_cases import (
     DEFAULT_ANALYSIS_ROOT,

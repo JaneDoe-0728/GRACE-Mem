@@ -1,10 +1,26 @@
+"""Assemble per-question analysis cases from a completed LongMemEval run.
+
+A "case" is one question's full story in a single JSON file: what was asked,
+what was retrieved, what was answered, what the gold was, and how the judge
+scored it. Traces are spread across several artifacts during a run, and
+diagnosing a failure means reading all of them together -- this joins them so
+that is one file open instead of five.
+
+`scenario_alias` exists because the categories have been named differently over
+time; normalizing here keeps old run directories readable by current tooling.
+"""
+
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from experiment.longmem.utils.io import ensure_dir, read_csv_frame, read_jsonl_file, write_json_file
-
+from experiment.longmem.utils.io import (
+    ensure_dir,
+    read_csv_frame,
+    read_jsonl_file,
+    write_json_file,
+)
 
 LONGMEM_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCRIPT_DATA_ROOT = LONGMEM_ROOT / "script_data"
@@ -13,6 +29,12 @@ DEFAULT_ANALYSIS_ROOT = LONGMEM_ROOT / "error_analysis"
 
 
 def scenario_alias(name: str) -> str:
+    """Normalize a category name to its current spelling.
+
+    The LongMemEval categories have been written several ways across dataset
+    revisions and run directories. Normalizing here is what lets current tooling
+    read an older run's output without every call site knowing the history.
+    """
     mapping = {
         "temporal": "temporal_reasoning",
         "temporal_reasoning": "temporal_reasoning",
@@ -45,6 +67,7 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def events_by_type(records: list[dict]) -> dict[str, list[dict]]:
+    """Group a trace's events by type, for the per-step analysis below."""
     result: dict[str, list[dict]] = {}
     for record in records:
         event = record.get("event", "")
@@ -52,7 +75,13 @@ def events_by_type(records: list[dict]) -> dict[str, list[dict]]:
     return result
 
 
-def step3_has_answer(data_folder: Path, dataset_id: str) -> dict:
+def probe_has_answer(data_folder: Path, dataset_id: str) -> dict:
+    """Which turns the dataset marks as holding the answer, and how many.
+
+    Ground truth for every recall figure downstream. A count of zero means the
+    question has no gold annotation at all, so its retrieval cannot be scored --
+    distinct from retrieval having missed the gold.
+    """
     csv_path = data_folder / f"{dataset_id}.csv"
     if not csv_path.exists():
         return {"turns": [], "summary_ids": []}
@@ -84,7 +113,13 @@ def step3_has_answer(data_folder: Path, dataset_id: str) -> dict:
     return {"turns": turns, "summary_ids": summary_ids}
 
 
-def step2_ingest(log_dir: Path, target_turns: list[dict]) -> dict:
+def probe_ingest(log_dir: Path, target_turns: list[dict]) -> dict:
+    """Did ingestion produce anything for this question's sessions?
+
+    Step 2 of the per-question trace. Every later step is conditional on this:
+    with no ingested sessions there are no summaries, entities, or evidence, and
+    reporting one of those as the failure points at the wrong stage.
+    """
     path = log_dir / "kg_ingestor.jsonl"
     records = load_jsonl(path)
     if not records:
@@ -103,9 +138,7 @@ def step2_ingest(log_dir: Path, target_turns: list[dict]) -> dict:
         if record.get("request_id") not in request_ids:
             continue
         event = record.get("event", "")
-        if any(token in event.lower() for token in ("fail", "error", "exception")):
-            fail_events.append(event)
-        elif record.get("success") is False:
+        if any(token in event.lower() for token in ("fail", "error", "exception")) or record.get("success") is False:
             fail_events.append(event)
 
     return {
@@ -115,7 +148,12 @@ def step2_ingest(log_dir: Path, target_turns: list[dict]) -> dict:
     }
 
 
-def step4_summaries(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
+def probe_summaries(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
+    """Which summaries were written for the gold sessions.
+
+    A gold session with no summary cannot be retrieved by summary search, which
+    locates the failure in ingestion rather than in retrieval.
+    """
     records = load_jsonl(artifacts_dir / "summaries_meta.jsonl")
     target_set = set(target_summary_ids)
     summaries = [
@@ -126,7 +164,16 @@ def step4_summaries(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
     return {"summaries": summaries, "count": len(summaries)}
 
 
-def step5_entities(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
+def probe_entities(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
+    """Which entities were extracted from the gold summaries.
+
+    Entities are matched to summaries through their provenance events rather
+    than by re-extracting, so this reports what the graph actually holds.
+
+    When one entity id appears several times the copy with the latest
+    provenance timestamp wins -- entities are merged across turns, and the
+    latest record is the merged state the retriever would see.
+    """
     records = load_jsonl(artifacts_dir / "entities_meta.jsonl")
     target_set = set(target_summary_ids)
     entity_map: dict[str, dict] = {}
@@ -176,7 +223,14 @@ def step5_entities(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
     }
 
 
-def step6_relationships(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
+def probe_relationships(artifacts_dir: Path, target_summary_ids: list[str]) -> dict:
+    """Which relationships were extracted from the gold summaries.
+
+    Matched through provenance like step 5. Entities present with no
+    relationships between them usually means the sync step dropped edges whose
+    endpoints failed to resolve, rather than that the conversation had no
+    relations in it.
+    """
     records = load_jsonl(artifacts_dir / "relationships_meta.jsonl")
     target_set = set(target_summary_ids)
     seen_ids: set[str] = set()
@@ -201,7 +255,14 @@ def step6_relationships(artifacts_dir: Path, target_summary_ids: list[str]) -> d
     return {"relationships": relationships, "count": len(relationships), "rel_ids": [row["id"] for row in relationships]}
 
 
-def step7_search(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
+def probe_search(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
+    """Did the target reach the candidate pool, and by which search path?
+
+    Vector and BM25 are reported separately because they fail differently: a
+    target found by BM25 but not vectors is an embedding problem, the reverse is
+    a tokenization or rare-term problem, and missing from both means it never
+    entered retrieval at all.
+    """
     records = load_jsonl(log_dir / "kg_retrieval_search.jsonl")
     grouped = events_by_type(records)
     target_entities = set(target_entity_ids)
@@ -230,7 +291,14 @@ def step7_search(log_dir: Path, target_entity_ids: list[str], target_rel_ids: li
     }
 
 
-def step8_filtering(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
+def probe_filtering(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
+    """If the target reached the pool but not the evidence, where was it cut?
+
+    Threshold and top-k are distinguished because they call for different fixes:
+    a threshold cut means the score was too low, a top-k cut means it was fine
+    but others scored higher. Reranker recovery is tracked alongside, since a
+    recovered target was cut and then restored.
+    """
     records = load_jsonl(log_dir / "kg_retrieval_filtering.jsonl")
     grouped = events_by_type(records)
     target_entities = set(target_entity_ids)
@@ -279,7 +347,12 @@ def step8_filtering(log_dir: Path, target_entity_ids: list[str], target_rel_ids:
     }
 
 
-def step9_evidence(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
+def probe_evidence(log_dir: Path, target_entity_ids: list[str], target_rel_ids: list[str]) -> dict:
+    """Did the target reach the final evidence handed to the generator?
+
+    The last retrieval step. A target present here alongside a wrong answer
+    localises the failure to answer generation rather than retrieval.
+    """
     records = load_jsonl(log_dir / "kg_retrieval_evidence.jsonl")
     grouped = events_by_type(records)
 
@@ -315,6 +388,13 @@ CUT_ITEMS_JUDGE_SYSTEM = (
 
 
 def llm_judge_cut_items(llm, question: str, gold_answer: str, cut_entities: list[str], cut_rels: list[str], entity_meta: dict, rel_meta: dict) -> str:
+    """Ask an LLM whether the text a filter cut actually held the answer.
+
+    The distinction that makes a filtering cut interpretable. Losing the gold
+    turn is only a real failure if that turn carried answer information -- gold
+    annotation marks turns, not sentences, so a cut gold turn may have contained
+    nothing useful. Without this check every cut looks equally bad.
+    """
     lines = []
     for entity_id in cut_entities:
         meta = entity_meta.get(entity_id, {})
@@ -346,6 +426,7 @@ def llm_judge_cut_items(llm, question: str, gold_answer: str, cut_entities: list
 
 
 def build_error_analysis_llm():
+    """Construct the client used for the analysis pass's judgement calls, if enabled."""
     from dotenv import load_dotenv
     from openai import OpenAI
 
@@ -357,6 +438,12 @@ def build_error_analysis_llm():
         raise ValueError("ERROR_ANALYSIS_LLM_API / ERROR_ANALYSIS_MODEL_NAME not set in .env")
 
     class _SimpleClient:
+        """Minimal LLM client for the analysis pass's one-off judgement calls.
+
+        Local rather than reusing the pipeline's client so that analysis of a run
+        cannot perturb that run's token accounting, and so this module stays
+        importable without the pipeline's dependencies.
+        """
         def __init__(self, base_url: str, model_name: str):
             self._client = OpenAI(base_url=base_url, api_key="lm-studio")
             self.model = model_name
@@ -383,17 +470,23 @@ def analyze_one(
     output_dir: Path,
     llm=None,
 ) -> dict:
+    """Run all nine trace steps for one question and assemble its case file.
+
+    Steps run in pipeline order so the first failure is attributable: every
+    later step depends on the earlier ones, and a question that failed at ingest
+    will also show empty entities, empty evidence, and a wrong answer.
+    """
     log_dir = output_dir / f"logs_{dataset_id}"
     artifacts_dir = output_dir / f"artifacts_{dataset_id}"
 
-    s3 = step3_has_answer(data_folder, dataset_id)
-    s2 = step2_ingest(log_dir, target_turns=s3["turns"])
-    s4 = step4_summaries(artifacts_dir, target_summary_ids=s3["summary_ids"])
-    s5 = step5_entities(artifacts_dir, target_summary_ids=s3["summary_ids"])
-    s6 = step6_relationships(artifacts_dir, target_summary_ids=s3["summary_ids"])
-    s7 = step7_search(log_dir, s5["entity_ids"], s6["rel_ids"])
-    s8 = step8_filtering(log_dir, s5["entity_ids"], s6["rel_ids"])
-    s9 = step9_evidence(log_dir, s5["entity_ids"], s6["rel_ids"])
+    s3 = probe_has_answer(data_folder, dataset_id)
+    s2 = probe_ingest(log_dir, target_turns=s3["turns"])
+    s4 = probe_summaries(artifacts_dir, target_summary_ids=s3["summary_ids"])
+    s5 = probe_entities(artifacts_dir, target_summary_ids=s3["summary_ids"])
+    s6 = probe_relationships(artifacts_dir, target_summary_ids=s3["summary_ids"])
+    s7 = probe_search(log_dir, s5["entity_ids"], s6["rel_ids"])
+    s8 = probe_filtering(log_dir, s5["entity_ids"], s6["rel_ids"])
+    s9 = probe_evidence(log_dir, s5["entity_ids"], s6["rel_ids"])
 
     passed_thresh_ent = {row["id"] for row in s8.get("target_entity_results", []) if row.get("passed") is True}
     passed_thresh_rel = {row["id"] for row in s8.get("target_rel_results", []) if row.get("passed") is True}
@@ -425,6 +518,10 @@ def analyze_one(
             "gold_answer": gold_answer,
             "generated_answer": generated_answer,
         },
+        # These keys are the case-file schema: analyze_one's result is written
+        # to cases/<id>.json and read back by the summary tooling. The probes
+        # above were renamed; these names cannot be, without making every
+        # existing case file unreadable.
         "step2_ingest": s2,
         "step3_turns": s3["turns"],
         "step3_summary_ids": s3["summary_ids"],
@@ -447,6 +544,7 @@ def collect_cases(
     no_llm: bool = False,
     no_overwrite: bool = False,
 ) -> int:
+    """Analyze every question in a run and write one case file each."""
     cases_dir = analysis_dir / "cases"
     ensure_dir(cases_dir)
 

@@ -6,25 +6,32 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[3]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
-from locomo.helpers.dataset import (
+from experiment.locomo.helpers.dataset import (
     get_sample_conversation,
     get_sample_speakers,
     load_raw_samples,
-    normalize_dataset_name,
     resolve_dataset_path,
 )
-from locomo.utils.io import append_jsonl_record, append_text, ensure_dir, remove_if_exists
+from experiment.locomo.utils.io import (
+    append_jsonl_record,
+    append_text,
+    ensure_dir,
+    remove_if_exists,
+)
 
 SESSION_KEY_RE = re.compile(r"^session_(\d+)$")
 SESSION_DT_RE = re.compile(r"^session_(\d+)_date_time$")
 
 
-def extract_sessions(conv: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    sessions: Dict[str, Dict[str, Any]] = {}
+def extract_sessions(conv: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    sessions: dict[str, dict[str, Any]] = {}
     for key, value in conv.items():
         match = SESSION_KEY_RE.match(key)
         if match and isinstance(value, list):
@@ -37,8 +44,8 @@ def extract_sessions(conv: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     return sessions
 
 
-def build_lines(turns: List[Dict[str, Any]]) -> List[str]:
-    lines: List[str] = []
+def build_lines(turns: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
     for turn in turns:
         speaker = str(turn.get("speaker", "")).strip()
         text = str(turn.get("text", "")).strip().replace("\n", " ")
@@ -91,18 +98,15 @@ def convert(in_path: Path, out_jsonl: Path, out_txt: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Convert dataset JSON to by-session conversational records")
-    parser.add_argument("--dataset", choices=["locomo", "locomo-plus"], default="locomo")
-    parser.add_argument("-i", "--input", type=Path, default=None, help="Defaults are resolved from --dataset")
+    parser.add_argument("-i", "--input", type=Path, default=None, help="Defaults to locomo10.json")
     parser.add_argument("--out-jsonl", type=Path, default=None)
     parser.add_argument("--out-txt", type=Path, default=None)
     args = parser.parse_args()
 
     try:
-        dataset = normalize_dataset_name(args.dataset)
-        input_path = resolve_dataset_path(dataset=dataset, kind="qa_json", explicit_path=args.input)
-        output_stem = dataset.replace("-", "_")
-        out_jsonl = args.out_jsonl or (input_path.parent / f"{output_stem}_by_session.jsonl")
-        out_txt = args.out_txt or (input_path.parent / f"{output_stem}_by_session.txt")
+        input_path = resolve_dataset_path(kind="qa_json", explicit_path=args.input)
+        out_jsonl = args.out_jsonl or (input_path.parent / "locomo_by_session.jsonl")
+        out_txt = args.out_txt or (input_path.parent / "locomo_by_session.txt")
         convert(input_path, out_jsonl, out_txt)
     except Exception as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)

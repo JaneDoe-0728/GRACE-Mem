@@ -1,32 +1,68 @@
-import re
+"""QA evaluation stage: ask each question and record how the answer was reached.
+
+Produces one row per question -- the answer, the retrieved context, latency,
+and the trace of what retrieval did -- which is the input to both judging and
+error analysis.
+
+The module holds mutable global state (`retriever`, `retrieval_mode`, the
+`_gold_*` and `_replay_*` maps) that workers set before calling
+`evaluate_items`. That is unusual and worth knowing about: it exists because
+this file doubles as a standalone script and as a stage the worker drives, and
+the ablation modes below need to reach deep into evaluation without threading a
+config through every call. It also means one process can only be in one
+retrieval mode at a time.
+
+The retrieval modes are the ablation surface, each isolating one contribution:
+
+    gold_summary_only                 skip retrieval, feed the gold session
+                                      summaries -- an upper bound on what
+                                      perfect summary retrieval could achieve
+    gold_raw_text_only                same, but raw text, which separates the
+                                      summarizer's contribution from retrieval's
+    replay_summary_raw_text_from_run  reuse a prior run's retrieved summary_ids
+                                      but substitute raw text, holding retrieval
+                                      fixed while varying what it returns
+    replay_summary_fact_from_run      same, with facts extracted from that text
+
+The replay modes are what make comparisons fair: they hold the retrieved set
+constant across variants, so a difference in accuracy cannot be attributed to
+retrieval having found different things.
+"""
+
+import argparse
 import csv
 import json
-import time
-import argparse
-import pandas as pd
-import sys
 import os
+import re
+import sys
+import time
 from pathlib import Path
 from typing import Any
 
-sys.path.append(str(Path(__file__).resolve().parents[2]))
-sys.path.append(str(Path(__file__).resolve().parents[3]))
+import pandas as pd
+
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[3]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
 try:
-    from KG.storage import MGR
-    from KG.graph.falkordb import graph_from_env
-    from KG.pipeline.retrieval_steps import TemporalRelevanceCalculator
-    from KG.utils.query_time_parser import detect_and_parse_time_expressions
-    from KG.utils.temporal import time_rewrite_ablation_enabled
-    # from KG.graph.neo4j import graph_from_env
+    from grace_mem.retrieval.candidates.temporal import TemporalRelevanceCalculator
+    from grace_mem.services.dense_index import MGR
+    from grace_mem.temporal import time_rewrite_ablation_enabled
+    from grace_mem.temporal.query_time_parser import detect_and_parse_time_expressions
 except Exception as e:
     raise RuntimeError(
-        "Failed to import your KG/LLM modules. Ensure PYTHONPATH includes your project root. Original error: %r" % (e,)
+        f"Failed to import GRACE-Mem modules. Ensure PYTHONPATH includes your project root. Original error: {e!r}"
     )
 
-from locomo.helpers.llm import llm_post, llm_post_json
-from locomo.utils.error_analysis import append_analysis_record, compact_json, derive_drop_reasons
-from locomo.utils.io import EVAL_COLUMNS
+from experiment.benchmarking.error_analysis import (
+    append_analysis_record,
+    compact_json,
+    derive_drop_reasons,
+)
+from experiment.locomo.helpers.llm import llm_post
+from experiment.locomo.utils.io import EVAL_COLUMNS
 
 # retriever is set by the caller (e.g. locomo_pipeline.py) after build_pipeline().
 # When running qa_eval.py as a standalone script, set it via build_pipeline() in main().
@@ -44,10 +80,34 @@ _replay_question_context: dict[str, dict[str, Any]] = {}
 _replay_entity_meta_by_name: dict[str, dict[str, Any]] = {}
 _replay_relationship_meta_by_label: dict[str, dict[str, Any]] = {}
 
+# Agent Filter state: set by the worker before evaluate_items(), alongside
+# `retriever`. LoCoMo has no per-question script_data CSV, so the corpus is built
+# from the raw sample and handed over directly -- see
+# helpers/agent_filter_corpus.py. Left None, the mount is simply skipped, which
+# is what every ablation mode above does.
+agent_filter_corpus = None
+agent_filter_artifact_dir = None
+_agent_filter_llm = None
+
+
+def _agent_filter_client():
+    """An LLMClient for the agent loop.
+
+    `llm_post` in helpers/llm.py is a raw requests helper, not a client object,
+    and Agent Filter's loop needs `.chat(...)`. Built once and cached, the way
+    the replay entry point does it.
+    """
+    global _agent_filter_llm
+    if _agent_filter_llm is None:
+        from grace_mem.services.llm import LLMClient
+
+        _agent_filter_llm = LLMClient(timeout=300.0)
+    return _agent_filter_llm
+
 _TEMPORAL_TYPES = {"Date", "Event", "Activity"}
 
 # ---------------------------------------------------------------------------
-# Fact extraction prompt (copied from fact_extraction.py — concise mode)
+# Fact extraction prompt used by concise replay modes.
 # ---------------------------------------------------------------------------
 
 _FACT_EXTRACTION_SYSTEM_PROMPT = """
@@ -64,14 +124,14 @@ WHAT TO EXTRACT
 
 Extract facts worth remembering long-term, including:
 
-✅ Personal info: names, relationships, roles, background
-✅ Long-term preferences, habits, interests, favorites
-✅ Significant events, milestones, decisions, achievements, changes
-✅ Plans, goals, deadlines, commitments
-✅ Expertise, skills, certifications, experience
-✅ Important context: projects, problems, constraints
-✅ Reasons, motivations, lessons learned, takeaways, emotional significance
-✅ QA-critical details: exact names, titles, authors, pet names, organizations, programs, dates, places, and event names
+Personal info: names, relationships, roles, background
+Long-term preferences, habits, interests, favorites
+Significant events, milestones, decisions, achievements, changes
+Plans, goals, deadlines, commitments
+Expertise, skills, certifications, experience
+Important context: projects, problems, constraints
+Reasons, motivations, lessons learned, takeaways, emotional significance
+QA-critical details: exact names, titles, authors, pet names, organizations, programs, dates, places, and event names
 
 Do NOT extract greetings, filler, process chatter, repeated info, or trivial one-off details.
 
@@ -300,6 +360,11 @@ def _split_at_sentence(text: str, max_chars: int) -> list[str]:
 
     def find_cut(remaining: str, ideal: int) -> int:
         # Search in a window around the ideal cut point, never exceeding max_chars
+        """Find the sentence boundary nearest a target offset.
+
+        Cuts are snapped to a boundary so a chunk never ends mid-sentence, which
+        would leave the fact extractor working on a fragment.
+        """
         lo = max(ideal - ideal // 4, 1)
         hi = min(ideal + ideal // 4, max_chars, len(remaining) - 1)
         window = remaining[lo:hi]
@@ -330,6 +395,16 @@ def _split_at_sentence(text: str, max_chars: int) -> list[str]:
 
 def _extract_facts_from_chunk(chunk: str, chunk_idx: int, total_chunks: int,
                                event_date_str: str, event_date_iso: str) -> list[str]:
+    """Extract salient facts from one chunk of raw session text.
+
+    Used by the concise replay ablations, which substitute extracted facts for
+    raw text while holding the retrieved set fixed -- isolating how much the
+    verbosity of the evidence costs, separately from what was retrieved.
+
+    Falls back to returning the chunk unchanged on any failure, so an
+    extraction problem degrades the ablation to the raw-text condition rather
+    than losing the question.
+    """
     import json as _json
     user_message = (
         f"Extract facts from the following text chunk.\n\n"
@@ -406,28 +481,10 @@ def _extract_facts_for_evidence(raw_text: str, date_time: str | None) -> list[st
     except Exception:
         return [raw_text]
 
-from locomo.helpers.dataset import default_output_stem, load_qa_items, normalize_dataset_name, resolve_dataset_path
+from experiment.experiment_config import RERANKER_PARAMS, RETRIEVAL_PARAMS
+from experiment.locomo.helpers.dataset import load_qa_items, resolve_dataset_path
+from grace_mem.retrieval.pipeline import RetrievalFailedError
 
-try:
-    from experiment_config import RETRIEVAL_PARAMS, RERANKER_PARAMS
-except Exception:
-    RETRIEVAL_PARAMS = {
-        "ent_topk": 20,
-        "rel_topk": 10,
-        "ent_threshold": 0.2,
-        "rel_threshold": 0.2,
-        "filter_ent_topk": 10,
-        "filter_rel_topk": 10,
-        "filter_ent_threshold": 0.4,
-        "filter_rel_threshold": 0.4,
-        "summary_topk_per_item": 6,
-        "summary_vec_threshold": 0.4,
-    }
-    RERANKER_PARAMS = {
-        "use_reranker": True,
-        "reranker_threshold": -3.0,
-        "reranker_topk": 3,
-    }
 
 def scrub(piece: str) -> str:
     """Remove provider-specific tags/noise if any."""
@@ -435,11 +492,11 @@ def scrub(piece: str) -> str:
         return ""
     s = str(piece)
     import re
-    _TAG_RE = re.compile(r"<\|\s*[^>|]+\|>")
-    _END_TOKENS = ("<|end|>", "<|stop|>", "<|im_end|>")
-    s = _TAG_RE.sub("", s)
+    _tag_re = re.compile(r"<\|\s*[^>|]+\|>")
+    _end_tokens = ("<|end|>", "<|stop|>", "<|im_end|>")
+    s = _tag_re.sub("", s)
     s = s.replace("<think>", "").replace("</think>", "")
-    for t in _END_TOKENS:
+    for t in _end_tokens:
         s = s.replace(t, "")
     toks = s.strip()
     if toks in {"analysis", "final", "message"}:
@@ -451,7 +508,7 @@ def gold_summary_answer(item: dict) -> dict:
     """Answer using only gold session summaries — no KG retrieval (ablation mode).
 
     Session IDs are parsed from D{N}: patterns in the evidence list (locomo style).
-    When no D-patterns are found (locomo-plus), all available summaries are concatenated.
+    When evidence has no D-patterns, all available summaries are concatenated.
     """
     evidence_list = item.get("evidence", [])
     session_ids: set[int] = set()
@@ -472,7 +529,7 @@ def gold_summary_answer(item: dict) -> dict:
         if len(summaries) > 1:
             warnings.append("multi_gold_session_summary_concat")
     else:
-        # locomo-plus: evidence is raw text with no D{N}: markers — use all summaries.
+        # Unstructured evidence has no D{N}: markers, so use all summaries.
         all_texts = [_gold_session_summaries[k] for k in sorted(_gold_session_summaries) if _gold_session_summaries.get(k)]
         if all_texts:
             summaries = all_texts
@@ -552,7 +609,7 @@ def gold_raw_text_answer(item: dict) -> dict:
     """Answer using only gold session raw conversation turns — no KG retrieval (ablation mode).
 
     Session IDs are parsed from D{N}: patterns in the evidence list (locomo style).
-    When no D-patterns are found (locomo-plus), all available session texts are concatenated.
+    When evidence has no D-patterns, all available session texts are concatenated.
     """
     evidence_list = item.get("evidence", [])
     session_ids: set[int] = set()
@@ -574,7 +631,7 @@ def gold_raw_text_answer(item: dict) -> dict:
         if len(texts) > 1:
             warnings.append("multi_gold_session_raw_text_concat")
     else:
-        # locomo-plus: no D{N}: markers — use all sessions.
+        # Unstructured evidence has no D{N}: markers, so use all sessions.
         all_keys = sorted(k for k in _gold_session_raw_texts if not k.endswith("_date_time"))
         for key in all_keys:
             turns = _gold_session_raw_texts.get(key, [])
@@ -664,6 +721,11 @@ def _parse_replay_summary_id(summary_id: str) -> tuple[str | None, str | None]:
 
 
 def _render_session_raw_text(session_id: str) -> tuple[str | None, str | None]:
+    """Render a session's turns as the speaker-prefixed text the model sees.
+
+    Speaker prefixes are kept because many LoCoMo questions turn on who said
+    something, and stripped of them the evidence cannot answer those.
+    """
     key = f"session_{session_id}"
     turns = _gold_session_raw_texts.get(key, [])
     if not isinstance(turns, list) or not turns:
@@ -671,7 +733,7 @@ def _render_session_raw_text(session_id: str) -> tuple[str | None, str | None]:
     date_time = _gold_session_raw_texts.get(f"{key}_date_time")
     date_time_str = str(date_time or "").strip() or None
     lines = []
-    # Ablation G: query 端時間改寫全關
+    # Ablation G: disable query-side time rewriting entirely
     rewrite_enabled = not time_rewrite_ablation_enabled()
     for t in turns:
         text = t.get("text", "")
@@ -689,6 +751,12 @@ def _render_session_raw_text(session_id: str) -> tuple[str | None, str | None]:
 
 
 def _parse_replay_relationship_label(label: str) -> tuple[str, str, str]:
+    """Parse a "source -> target" relationship label back into its endpoints.
+
+    The inverse of the evidence-block renderer. Replay depends on the pair
+    round-tripping, so a change to either side breaks replay against artifacts
+    already on disk.
+    """
     text = str(label or "").strip()
     if not text:
         return "", "", ""
@@ -705,6 +773,7 @@ def _render_replay_temporal_tag(item_type: str, prov: Any, request_id: str | Non
 
 
 def _build_replay_entities(entity_names: list[Any]) -> list[dict[str, Any]]:
+    """Reconstruct entity metadata from a previous run's recorded names."""
     entities: list[dict[str, Any]] = []
     seen_names: set[str] = set()
     for entity_name in entity_names:
@@ -723,6 +792,7 @@ def _build_replay_entities(entity_names: list[Any]) -> list[dict[str, Any]]:
 
 
 def _build_replay_relationships(relationship_names: list[Any]) -> list[dict[str, Any]]:
+    """Reconstruct relationship metadata from a previous run's recorded labels."""
     relationships: list[dict[str, Any]] = []
     seen_labels: set[str] = set()
     for relationship_name in relationship_names:
@@ -748,6 +818,12 @@ def _render_replay_context_text(
     *,
     request_id: str | None,
 ) -> str:
+    """Render a replayed context so it is byte-comparable with the original run.
+
+    Replay ablations only mean something if the two contexts differ in exactly
+    the intended way, so the surrounding formatting -- markers, ordering,
+    separators -- has to match the live path's rendering exactly.
+    """
     lines: list[str] = []
 
     if entities:
@@ -1025,7 +1101,7 @@ def replay_summary_fact_from_run_answer(item: dict) -> dict:
 
 def _extract_latest_t_tag(kg_context: str) -> str | None:
     """Return the most recent date string found in [t:...] tags in the KG context."""
-    from KG.utils.query_time_parser import parse_query_time
+    from grace_mem.temporal.query_time_parser import parse_query_time
     dates = []
     for m in re.finditer(r'\[t:([^\]]+)\]', kg_context):
         dt = parse_query_time(m.group(1).strip())
@@ -1040,16 +1116,16 @@ def _extract_latest_t_tag(kg_context: str) -> str | None:
 def rag_answer(
     query: str,
     *,
-    ent_topk: int = RETRIEVAL_PARAMS.get("ent_topk", 20),
-    rel_topk: int = RETRIEVAL_PARAMS.get("rel_topk", 10),
-    ent_threshold: float = RETRIEVAL_PARAMS.get("ent_threshold", 0.2),
-    rel_threshold: float = RETRIEVAL_PARAMS.get("rel_threshold", 0.2),
-    filter_ent_topk: int = RETRIEVAL_PARAMS.get("filter_ent_topk", 10),
-    filter_rel_topk: int = RETRIEVAL_PARAMS.get("filter_rel_topk", 10),
-    filter_ent_threshold: float = RETRIEVAL_PARAMS.get("filter_ent_threshold", 0.4),
-    filter_rel_threshold: float = RETRIEVAL_PARAMS.get("filter_rel_threshold", 0.4),
-    summary_topk_per_item: int = RETRIEVAL_PARAMS.get("summary_topk_per_item", 6),
-    summary_vec_threshold: float = RETRIEVAL_PARAMS.get("summary_vec_threshold", 0.4),
+    ent_topk: int = RETRIEVAL_PARAMS["ent_topk"],
+    rel_topk: int = RETRIEVAL_PARAMS["rel_topk"],
+    ent_threshold: float = RETRIEVAL_PARAMS["ent_threshold"],
+    rel_threshold: float = RETRIEVAL_PARAMS["rel_threshold"],
+    filter_ent_topk: int = RETRIEVAL_PARAMS["filter_ent_topk"],
+    filter_rel_topk: int = RETRIEVAL_PARAMS["filter_rel_topk"],
+    filter_ent_threshold: float = RETRIEVAL_PARAMS["filter_ent_threshold"],
+    filter_rel_threshold: float = RETRIEVAL_PARAMS["filter_rel_threshold"],
+    summary_topk_per_item: int = RETRIEVAL_PARAMS["summary_topk_per_item"],
+    summary_vec_threshold: float = RETRIEVAL_PARAMS["summary_vec_threshold"],
 ):
     """
     Pure retrieval + answer (no writes).
@@ -1081,7 +1157,25 @@ def rag_answer(
     trace = getattr(retriever, "last_retrieval_trace", None) or {}
     log_dir = Path(os.environ.get("KG_TRACE_PRETTY_LOG_DIR", "logs"))
 
-    # 2) Call LLM
+    # 2) Hand the retrieved context to Agent Filter, if it is enabled and the
+    # worker supplied a corpus. It re-reads the conversation and revises the
+    # evidence set; on any failure the context comes back untouched. The date
+    # note below is derived afterwards, so it reflects the context that is
+    # actually sent.
+    if agent_filter_corpus is not None:
+        from experiment.benchmarking.agent_filter import maybe_refine_context
+
+        kg_context = maybe_refine_context(
+            question=query,
+            context=kg_context,
+            csv_path=None,
+            corpus=agent_filter_corpus,
+            llm=_agent_filter_client(),
+            log_dir=log_dir,
+            artifact_dir=agent_filter_artifact_dir,
+        )
+
+    # 3) Call LLM
     conversation_date = _extract_latest_t_tag(kg_context)
     date_note = (
         f"\nNote: These conversations took place around {conversation_date}. "
@@ -1096,37 +1190,6 @@ def rag_answer(
             f"Question: {query}\n\nAnswer:"
         )},
     ]
-    # messages = [
-    #     {
-    #         "role": "system",
-    #         "content": (
-    #             "You must ground your answer in the retrieved KG context.\n\n"
-    #             "Grounding constraint:\n"
-    #             "- Treat the KG/evidence as the only source of factual information.\n"
-    #             "- Do not introduce new entities, numbers, dates, events, or details that are not supported by the KG.\n\n"
-    #             "Allowed reasoning (general, non-specific):\n"
-    #             "- You may perform ONLY semantic normalization to produce a better short answer.\n"
-    #             "  Semantic normalization means mapping what is already implied or referenced in the KG into a more standard, canonical, "
-    #             "or directly requested form, WITHOUT adding any new factual content.\n"
-    #             "  This can include resolving a reference to its canonical label, converting to a more general label explicitly asked by the question, "
-    #             "or compressing a description into a well-known name when strongly supported by the KG description.\n\n"
-    #             "Safety checks:\n"
-    #             "- If multiple normalized answers are plausible, output 'Likely <answer>' (or 'Unknown' if too ambiguous).\n"
-    #             "- If the KG does not contain enough evidence to support even a normalized answer, output 'Unknown'.\n"
-    #             "- Output must be minimal: ideally a single name/label, otherwise one short sentence.\n\n"
-    #             "Do NOT explain your reasoning."
-    #         ),
-    #     },
-    #     {"role": "system", "content": f"---Retrieved Context---\n{kg_context}\n------------------"},
-    #     {
-    #         "role": "user",
-    #         "content": (
-    #             "Please answer based on the retrieved knowledge graph context above. "
-    #             "Be concise and accurate.\n\n"
-    #             f"Question: {query}\n\nAnswer:"
-    #         ),
-    #     },
-    # ]
     t0 = time.time()
     answer_raw = llm_post(messages, temperature=0.0, max_tokens=1024)
     elapsed = time.time() - t0
@@ -1197,6 +1260,7 @@ def load_questions(
     sample_index: int = 7,
     include_adversarial: bool = True,
 ):
+    """Load one sample's questions, normalized, honouring the adversarial filter."""
     qa_list = load_qa_items(
         dataset_json_path,
         sample_index=sample_index,
@@ -1210,6 +1274,7 @@ def load_questions(
 
 def pick_gold_answer(item: dict) -> str:
     # Prefer 'answer'; fallback to 'adversarial_answer' for category 5 items
+    """Choose the gold answer to score against, honouring the adversarial variant."""
     if "answer" in item and item["answer"] not in (None, "", []):
         return str(item["answer"])
     if "adversarial_answer" in item and item["adversarial_answer"] not in (None, "", []):
@@ -1218,6 +1283,12 @@ def pick_gold_answer(item: dict) -> str:
 
 
 def prediction_fallback(error: Exception) -> dict:
+    """Produce an answer when generation returned nothing usable.
+
+    An empty prediction would be judged wrong, which is the correct outcome but
+    the wrong diagnosis -- it looks like a retrieval failure rather than a
+    generation one. The fallback makes that distinction visible in the results.
+    """
     return {
         "answer": f"(ERROR: {error})",
         "retrieved_context": "",
@@ -1250,6 +1321,11 @@ def evaluate_item(
     *,
     simplify_evidence: bool = False,
 ) -> dict | None:
+    """Evaluate one question: retrieve, answer, and record the trace.
+
+    The retrieval path is selected by the module-level `retrieval_mode` -- see
+    the module docstring for what each ablation isolates.
+    """
     question = str(item.get("question", "")).strip()
     if not question:
         return None
@@ -1267,6 +1343,11 @@ def evaluate_item(
             prediction = replay_summary_fact_from_run_answer(item)
         else:
             prediction = rag_answer(question)
+    except RetrievalFailedError:
+        # Strict mode (KG_RETRIEVAL_STRICT): a technical retrieval failure must
+        # not be written out as an answered question, so it propagates and the
+        # sample is recorded as failed instead of scored.
+        raise
     except Exception as exc:
         prediction = prediction_fallback(exc)
 
@@ -1309,6 +1390,7 @@ def evaluate_items(
     simplify_evidence: bool = False,
 ) -> list[dict]:
     # Optional filter: KG_QUESTION_FILTER env var (newline-separated substrings)
+    """Evaluate every question in a sample and return the result rows."""
     _filter_raw = os.environ.get("KG_QUESTION_FILTER", "").strip()
     _filter_strs = [s.strip().lower() for s in _filter_raw.splitlines() if s.strip()] if _filter_raw else []
 
@@ -1380,8 +1462,8 @@ class QAEvalStage:
         self.simplify_evidence = simplify_evidence
 
     def run(self) -> list[dict]:
-        import locomo.stages.qa_eval as _self
-        _self.retriever = self.retriever
+        global retriever
+        retriever = self.retriever
         qa_items = load_questions(
             self.dataset_json,
             sample_index=self.sample_index,
@@ -1391,44 +1473,29 @@ class QAEvalStage:
 
 
 def main():
+    global retriever
     parser = argparse.ArgumentParser(description="Run RAG evaluation for a conversational QA dataset sample")
-    parser.add_argument("--dataset", choices=["locomo", "locomo-plus"], default="locomo")
-    parser.add_argument("--dataset-json", default=None, help="Defaults are resolved from --dataset")
+    parser.add_argument("--dataset-json", default=None, help="Defaults to locomo10.json")
     parser.add_argument("--sample-index", type=int, default=3)
     parser.add_argument("--output-csv", default=None)
     parser.add_argument("--adv", action="store_true", help="Include adversarial questions")
     args = parser.parse_args()
 
-    dataset = normalize_dataset_name(args.dataset)
     dataset_json_path = resolve_dataset_path(
-        dataset=dataset,
         kind="qa_json",
         explicit_path=args.dataset_json,
     )
     if args.output_csv:
         output_csv = Path(args.output_csv)
-    elif dataset == "locomo":
-        output_csv = Path(__file__).resolve().parent / "data" / f"sample{args.sample_index}_eval.csv"
     else:
-        output_csv = Path(__file__).resolve().parent / "data" / f"{default_output_stem(dataset)}_sample{args.sample_index}_eval.csv"
+        output_csv = Path(__file__).resolve().parent / "data" / f"sample{args.sample_index}_eval.csv"
 
-    # Initialize retriever via build_pipeline() when running as a standalone script
-    import locomo.stages.qa_eval as _self
-    if _self.retriever is None:
-        from KG.pipeline.factory import build_pipeline
-        _p = build_pipeline(retriever_config=RERANKER_PARAMS)
-        _self.retriever = _p["retriever"]
+    # Standalone mode owns one pipeline runtime for retrieval and graph access.
+    from grace_mem.bootstrap import build_pipeline
 
-    # Initialize graph/VDB in read-only mode (your manager should avoid writes by default here)
-    graph = graph_from_env().open()
-    try:
-        MGR.initialize()  # <-- do not reset, just init / load existing
-    except Exception as e:
-        if graph:
-            graph.close()
-        raise
-
-    try:
+    with build_pipeline(retriever_config=RERANKER_PARAMS) as runtime:
+        retriever = runtime.retriever
+        MGR.initialize()
         qa_items = load_questions(
             dataset_json_path,
             sample_index=args.sample_index,
@@ -1438,12 +1505,6 @@ def main():
         rows = evaluate_items(qa_items, simplify_evidence=False)
 
         df = pd.DataFrame(rows, columns=EVAL_COLUMNS)
-
-        # Derive default output prefix
-        # out_prefix = args.out_prefix or f"qa_eval_sample{args.sample_index}"
-        # raw_csv_path = f"{out_prefix}.csv"
-        # df.to_csv(raw_csv_path, index=False, encoding="utf-8", quoting=csv.QUOTE_ALL)
-        # print(f"[DONE] Wrote RAW CSV:  {raw_csv_path}")
 
         # === Cleaning + coverage ===
         df_clean = df.copy()
@@ -1457,10 +1518,6 @@ def main():
         df_clean.to_csv(output_csv, index=False, encoding="utf-8", quoting=csv.QUOTE_ALL)
 
         print(f"[DONE] Wrote CLEAN CSV: {output_csv}")
-
-    finally:
-        if graph:
-            graph.close()
 
 if __name__ == "__main__":
     main()

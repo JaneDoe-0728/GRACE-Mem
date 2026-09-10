@@ -1,12 +1,23 @@
+"""Re-run a subset of a completed LongMemEval run without redoing the rest.
+
+Iterating on a judge prompt or a retrieval parameter should not cost a full
+sweep. This finds a previous run's outputs, works out what actually needs
+recomputing, and merges the new results back into the existing tables so the
+comparison stays apples-to-apples.
+
+The merge is an upsert keyed by dataset, so re-running one category replaces
+its row rather than appending a second and quietly double-counting it in the
+aggregate.
+"""
+
 from __future__ import annotations
 
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from experiment.longmem.decision import retrieval_context_needs_rerun
-from experiment.longmem.utils.io import glob_sorted, read_csv_frame, read_json_file, upsert_csv_row
-
+from experiment.longmem.pipeline.decision import retrieval_context_needs_rerun
+from experiment.longmem.utils.io import glob_sorted, read_csv_frame
 
 ARTIFACT_MARKERS = (
     "entities_cache.pkl",
@@ -35,19 +46,6 @@ def resolve_artifact_dir(root: Path, dataset_name: str) -> Path | None:
     return None
 
 
-def failed_datasets(output_dir: Path, specified: list[str] | None) -> list[str]:
-    if specified:
-        return specified
-
-    progress_path = output_dir / "progress.csv"
-    if not progress_path.exists():
-        raise FileNotFoundError(f"progress.csv not found: {progress_path}")
-
-    df = read_csv_frame(progress_path, dtype=str)
-    failed = df[df["correctness"].astype(str).str.strip() == "0"]
-    return list(failed["dataset"].astype(str).str.strip())
-
-
 def retrieval_datasets(
     output_dir: Path,
     specified: list[str] | None,
@@ -70,9 +68,11 @@ def retrieval_datasets(
 
     selected: list[str] = []
     for csv_path in candidates:
-        if force or output_csv_needs_rerun(csv_path):
-            if resolve_artifact_dir(scan_dir, csv_path.stem) is not None:
-                selected.append(csv_path.stem)
+        if (
+            (force or output_csv_needs_rerun(csv_path))
+            and resolve_artifact_dir(scan_dir, csv_path.stem) is not None
+        ):
+            selected.append(csv_path.stem)
     return selected
 
 
@@ -99,6 +99,11 @@ def retrieval_datasets_from_artifacts(
 
 
 def output_csv_needs_rerun(csv_path: Path) -> bool:
+    """Whether an existing output is too incomplete to keep.
+
+    Checks contents rather than existence: the file is created when work starts,
+    so existence alone would accept a truncated result as final.
+    """
     try:
         df = read_csv_frame(csv_path)
         if "Retrieved_Context" not in df.columns or len(df) == 0:
@@ -110,36 +115,36 @@ def output_csv_needs_rerun(csv_path: Path) -> bool:
 
 
 def setup_retrieval_loggers(dataset_name: str, log_dir: Path) -> None:
-    from KG.utils.logger_config import make_module_jlog
-
-    import KG.pipeline.retrieval_steps.evidence as evidence_module
-    import KG.pipeline.retrieval_steps.filtering as filtering_module
-    import KG.pipeline.retrieval_steps.search as search_module
-    import KG.pipeline.retrieval_steps.temporal as temporal_module
-    import KG.pipeline.retriever as retriever_module
+    """Point retrieval logging at this dataset's directory for the rerun."""
+    import grace_mem.retrieval.candidates.search as search_module
+    import grace_mem.retrieval.candidates.temporal as temporal_module
+    import grace_mem.retrieval.evidence.builder as evidence_module
+    import grace_mem.retrieval.pipeline as retriever_module
+    import grace_mem.retrieval.ranking.filter as filtering_module
+    from grace_mem.utils.logger_config import make_module_jlog
 
     retriever_module._jlog = make_module_jlog(
-        name=f"KG.Retriever.{dataset_name}",
+        name=f"grace_mem.Retriever.{dataset_name}",
         filename="kg_retriever.jsonl",
         log_dir=str(log_dir),
     )
     search_module._jlog = make_module_jlog(
-        name=f"KG.Retrieval.Search.{dataset_name}",
+        name=f"grace_mem.Retrieval.Search.{dataset_name}",
         filename="kg_retrieval_search.jsonl",
         log_dir=str(log_dir),
     )
     filtering_module._jlog = make_module_jlog(
-        name=f"KG.Retrieval.Filtering.{dataset_name}",
+        name=f"grace_mem.Retrieval.Filtering.{dataset_name}",
         filename="kg_retrieval_filtering.jsonl",
         log_dir=str(log_dir),
     )
     temporal_module._jlog = make_module_jlog(
-        name=f"KG.Retrieval.Temporal.{dataset_name}",
+        name=f"grace_mem.Retrieval.Temporal.{dataset_name}",
         filename="kg_retrieval_temporal.jsonl",
         log_dir=str(log_dir),
     )
     evidence_module._jlog = make_module_jlog(
-        name=f"KG.Retrieval.Evidence.{dataset_name}",
+        name=f"grace_mem.Retrieval.Evidence.{dataset_name}",
         filename="kg_retrieval_evidence.jsonl",
         log_dir=str(log_dir),
     )
@@ -171,7 +176,13 @@ def setup_retrieval_loggers(dataset_name: str, log_dir: Path) -> None:
 
 
 def cleanup_retrieval_loggers(log_dir: Path) -> None:
-    from KG.utils.logger_config import close_event_loggers
+    """Close this dataset's retrieval loggers before moving to the next.
+
+    A rerun walks many datasets in one process, and each leaves open file
+    handles behind. Without this the process eventually exhausts its descriptor
+    limit, partway through a long sweep and far from the cause.
+    """
+    from grace_mem.utils.logger_config import close_event_loggers
 
     close_event_loggers(log_dir=str(log_dir))
 
@@ -188,12 +199,3 @@ def rerun_accuracy(results: list[dict]) -> tuple[int, int]:
     judged = [row for row in results if str(row.get("correctness", "")).strip() in ("0", "1")]
     correct = sum(1 for row in judged if str(row.get("correctness", "")).strip() == "1")
     return correct, len(judged)
-
-
-def read_summary_accuracy(summary_path: Path) -> tuple[int, int]:
-    data = read_json_file(summary_path, default=[]) or []
-    return rerun_accuracy(data)
-
-
-def upsert_result_csv(path: Path, row: dict) -> None:
-    upsert_csv_row(path, row, key_columns=["variant"])
